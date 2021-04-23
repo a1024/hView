@@ -1,0 +1,172 @@
+#ifndef HVIEW_H
+#define HVIEW_H
+#include		<vector>
+#include		<string>
+#include		<math.h>//abs
+typedef unsigned char byte;
+
+extern int		w, h, *rgb, rgbn,
+				iw, ih, image_size;
+extern float	*image;
+enum			ImageType
+{
+	IM_GRAYSCALE,
+	IM_RGBA,//4 floats per pixel (quad width)
+	IM_BAYER,
+	IM_BAYER_SEPARATE,
+};
+extern ImageType imagetype;
+extern char		bayer[4];
+extern int		idepth;
+
+extern double	wpx, wpy,//window position in image coordinates
+				zoom,//image pixel size in screen pixels
+				invzoom;
+
+extern std::wstring workfolder,//ends with slash
+				filetitle;
+
+inline int		minimum(int a, int b){return (a+b-abs(a-b))>>1;}
+inline int		maximum(int a, int b){return (a+b+abs(a-b))>>1;}
+inline double	minimum(double a, double b){return (a+b-abs(a-b))*0.5;}
+inline double	maximum(double a, double b){return (a+b+abs(a-b))*0.5;}
+
+#define			screen2image_x(SX)				(wpx+(SX)*invzoom)
+#define			screen2image_y(SY)				(wpy+(SY)*invzoom)
+#define			screen2image_x_int(SX)			(int)floor(screen2image_x(SX))
+#define			screen2image_y_int(SY)			(int)floor(screen2image_y(SY))
+#define			screen2image_x_int_rounded(SX)	(int)floor(screen2image_x(SX)+0.5)
+#define			screen2image_y_int_rounded(SY)	(int)floor(screen2image_y(SY)+0.5)
+#define			image2screen_x(IX)				((IX-wpx)*zoom)
+#define			image2screen_y(IY)				((IY-wpy)*zoom)
+#define			image2screen_x_int(IX)			(int)floor(image2screen_x(IX))
+#define			image2screen_y_int(IY)			(int)floor(image2screen_y(IY))
+/*inline void		screen2image_x(int sx, int &ix)
+{
+	ix=wpx+(int)floor(sx/zoom);
+}
+inline void		screen2image_y(int sy, int &iy)
+{
+	iy=wpy+(int)floor(sy/zoom);
+}
+
+inline void		screen2image_x_rounded(int sx, int &ix)
+{
+	ix=wpx+(int)floor(sx/zoom+0.5);
+}
+inline void		screen2image_y_rounded(int sy, int &iy)
+{
+	iy=wpy+(int)floor(sy/zoom+0.5);
+}
+
+inline void		screen2image_x(int sx, double &ix)
+{
+	ix=wpx+sx/zoom;
+}
+inline void		screen2image_y(int sy, double &iy)
+{
+	iy=wpy+sy/zoom;
+}
+
+inline void		image2screen_x(int ix, int &sx)
+{
+	sx=int((ix-wpx)*zoom);
+}
+inline void		image2screen_y(int iy, int &sy)
+{
+	sy=int((iy-wpy)*zoom);
+}//*/
+
+/*inline void		screen2image(int sx, int sy, int &ix, int &iy)
+{
+	ix=wpx+(int)floor(sx/zoom);
+	iy=wpy+(int)floor(sy/zoom);
+}
+inline void		screen2image_rounded(int sx, int sy, int &ix, int &iy)
+{
+	ix=wpx+(int)floor(sx/zoom+0.5);
+	iy=wpy+(int)floor(sy/zoom+0.5);
+}
+inline void		screen2image(int sx, int sy, double &ix, double &iy)
+{
+	ix=wpx+sx/zoom;
+	iy=wpy+sy/zoom;
+}
+inline void		image2screen(int ix, int iy, int &sx, int &sy)
+{
+	sx=int((ix-wpx)*zoom);
+	sy=int((iy-wpy)*zoom);
+}//*/
+struct			Point2d//for bezier curve
+{
+	double x, y;
+	Point2d():x(0), y(0){}
+	Point2d(double x, double y):x(x), y(y){}
+	void set(double x, double y){this->x=x, this->y=y;}
+	void setzero(){x=y=0;}
+	Point2d& operator+=(Point2d const &b){x+=b.x, y+=b.y;return *this;}
+	void rotate(double cth, double sth)
+	{
+		double x2=x*cth+y*sth, y2=-x*sth+y*cth;
+		set(x2, y2);
+	}
+	void transform(double A, double B, double C, double D)
+	{
+		double x2=x*A+y*B, y2=x*C+y*D;
+		set(x2, y2);
+	}
+	void image2screen()
+	{
+		x=(x-wpx)*zoom;
+		y=(y-wpy)*zoom;
+	}
+	void screen2image()
+	{
+		x=wpx+x/zoom;
+		y=wpy+y/zoom;
+	}
+	void clampImage()
+	{
+		if(x<0)
+			x=0;
+		if(x>=iw)
+			x=iw;
+		if(y<0)
+			y=0;
+		if(y>=ih)
+			y=ih;
+	}
+};
+inline Point2d	operator+(Point2d const &a, Point2d const &b){return Point2d(a.x+b.x, a.y+b.y);}
+inline Point2d	operator-(Point2d const &a, Point2d const &b){return Point2d(a.x-b.x, a.y-b.y);}
+inline Point2d	operator*(double s, Point2d const &b){return Point2d(s*b.x, s*b.y);}
+inline bool	operator!=(Point2d const &a, Point2d const &b){return a.x!=b.x||a.y!=b.y;}
+inline double abs(Point2d const &a){return sqrt(a.x*a.x+a.y*a.y);}
+inline double dot(Point2d const &a, Point2d const &b){return a.x*b.x+a.y*b.y;}
+inline bool collinear(Point2d const &a, Point2d const &b, Point2d const &c)
+{
+	const double tolerance=1e-6;
+	return abs((c.x-b.x)*(b.y-a.y)-(b.x-a.x)*(c.y-b.y))<tolerance;
+}
+
+//files
+void			open_media();
+//void			open_mediaa(const char *filename);
+bool			open_mediaw(const wchar_t *filename);//sets workfolder, updates title
+void			open_next();
+void			open_prev();
+
+//exposed archiver
+//int			compress_huff(const short *buffer, int bw, int bh, int depth, int bayer, std::vector<int> &data);
+//bool			decompress_huff(const byte *data, int bytesize, RequestedFormat format, void **buffer, int &bw, int &bh, int &depth, char *bayer_sh);
+void			archiver_test();
+void			archiver_test2();
+
+//image operations
+void			separate_bayer();
+void			regroup_bayer();
+void			debayer();
+
+//application
+void			render();
+#endif
