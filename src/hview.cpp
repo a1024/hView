@@ -1,6 +1,9 @@
 #include		"generic.h"
 #include		"hview.h"
 #include		<string>
+#ifdef FFTW3_H
+#pragma			comment(lib, "libfftw3-3.lib")
+#endif
 static const char file[]=__FILE__;
 
 int				w=0, h=0, *rgb=nullptr, rgbn=0,
@@ -9,6 +12,12 @@ float			*image=nullptr;
 ImageType		imagetype=IM_RGBA;
 char			bayer[4]={};//shift ammounts for the 4 Bayer mosaic components, -1 for grayscale
 int				idepth=0;
+
+bool			FourierDomain=false;
+int				fft_w=0, fft_h=0;//if not equal to image parameters then plans are uninitialized
+ImageType		fft_type=IM_UNINITIALIZED;//grayscale: fft_planes[0] only, otherwise use all 4 planes
+fftw_plan		fft_p[4]={}, ifft_p[4]={};
+fftw_complex	*fft_in_planes[4]={}, *fft_out_planes[4]={};
 
 double			wpx=0, wpy=0,//window position (top-left corner) in image coordinates
 				zoom=1,//image pixel size in screen pixels
@@ -21,7 +30,7 @@ double			contrast_gain=1, contrast_offset=0,//gain*(color-offset)+offset
 
 char			g_buf[g_buf_size]={};
 wchar_t			g_wbuf[g_buf_size]={};
-const char		default_title[]="hView";
+const char		default_title[]="hView - Press F1 for shortcut keys";
 bool			fullscreen=false;
 RECT			oldWindowSize;
 
@@ -58,6 +67,40 @@ inline float	clamp01(float x)
 	if(x>1)
 		return 1;
 	return x;
+}
+inline double	clamp01(double x)
+{
+	if(x<0)
+		return 0;
+	if(x>1)
+		return 1;
+	return x;
+}
+const double
+	c_pi2_3=-0.5, s_pi2_3=sqrt(3)*0.5,
+	c_pi4_3=-0.5, s_pi4_3=-s_pi2_3;
+inline int		polar2rgb(double mag, double angle)
+{
+	double ca=cos(angle), sa=sin(angle);
+	double
+		red		=mag*0.5*(1+ca),
+		green	=mag*0.5*(1+ca*c_pi2_3+sa*s_pi2_3),
+		blue	=mag*0.5*(1+ca*c_pi4_3+sa*s_pi4_3);
+
+	red		=contrast_gain*(red-contrast_offset)+contrast_offset;
+	green	=contrast_gain*(red-contrast_offset)+contrast_offset;
+	blue	=contrast_gain*(red-contrast_offset)+contrast_offset;
+
+	red		=clamp01(red);
+	green	=clamp01(green);
+	blue	=clamp01(blue);
+
+	int color=0;
+	auto p=(unsigned char*)&color;
+	p[0]=(int)floor(255*blue	+0.5);
+	p[1]=(int)floor(255*green	+0.5);
+	p[2]=(int)floor(255*red		+0.5);
+	return color;
 }
 void			label_pixels_raw(Point2d const &istart, Point2d const &iend)
 {
@@ -185,6 +228,11 @@ void			render()
 	if(image)
 	{
 		Point2d start(0, 0), end(w, h);
+#ifdef FFTW3_H
+		bool doubledim=FourierDomain&&imagetype==IM_RGBA;
+		if(doubledim)
+			iw<<=1, ih<<=1;
+#endif
 		start.screen2image();
 		end.screen2image();
 		start.clampImage();
@@ -192,6 +240,91 @@ void			render()
 		Point2d istart=start, iend=end;
 		start.image2screen();
 		end.image2screen();
+#ifdef FFTW3_H
+		if(doubledim)
+			iw>>=1, ih>>=1;
+		if(FourierDomain)
+		{
+			if(imagetype==IM_GRAYSCALE)//1 plane
+			{
+				for(int ky=maximum((int)floor(start.y), 0), yend=minimum((int)floor(end.y), h);ky<yend;++ky)
+				{
+					int iy=screen2image_y_int(ky);
+					if(iy<0||iy>=ih)
+						continue;
+					for(int kx=maximum((int)floor(start.x), 0), xend=minimum((int)floor(end.x), w);kx<xend;++kx)
+					{
+						int ix=screen2image_x_int(kx);
+						if(ix<0||ix>=iw)
+							continue;
+						int idx=iw*iy+ix;
+						rgb[w*ky+kx]=polar2rgb(fft_in_planes[0][idx][0], fft_in_planes[0][idx][1]);
+					}
+				}
+				//label_pixels_raw(istart, iend);
+			}
+			else if(imagetype==IM_BAYER)//4 planes shown interleaved
+			{
+				for(int ky=maximum((int)floor(start.y), 0), yend=minimum((int)floor(end.y), h);ky<yend;++ky)
+				{
+					int iy=screen2image_y_int(ky);
+					if(iy<0||iy>=ih)
+						continue;
+					for(int kx=maximum((int)floor(start.x), 0), xend=minimum((int)floor(end.x), w);kx<xend;++kx)
+					{
+						int ix=screen2image_x_int(kx);
+						if(ix<0||ix>=iw)
+							continue;
+						int plane=(iy&1)<<1|ix&1, idx=iw*(iy>>1)+(ix>>1);
+						rgb[w*ky+kx]=polar2rgb(fft_in_planes[plane][idx][0], fft_in_planes[plane][idx][1]);
+					}
+				}
+			}
+			else if(imagetype==IM_BAYER_SEPARATE)//4 planes shown separately at half dimensions
+			{
+				int w2=iw>>1, h2=ih>>1;
+				for(int ky=maximum((int)floor(start.y), 0), yend=minimum((int)floor(end.y), h);ky<yend;++ky)
+				{
+					int iy=screen2image_y_int(ky);
+					if(iy<0||iy>=ih)
+						continue;
+					for(int kx=maximum((int)floor(start.x), 0), xend=minimum((int)floor(end.x), w);kx<xend;++kx)
+					{
+						int ix=screen2image_x_int(kx);
+						if(ix<0||ix>=iw)
+							continue;
+						int plane=(iy>=h2)<<1|(ix>=w2);
+						ix-=w2&-(ix>=w2);
+						iy-=h2&-(iy>=h2);
+						int idx=iw*iy+ix;
+						rgb[w*ky+kx]=polar2rgb(fft_in_planes[plane][idx][0], fft_in_planes[plane][idx][1]);
+					}
+				}
+			}
+			else if(imagetype==IM_RGBA)//4 planes shown separately at image dimensions
+			{
+				int w2=iw<<1, h2=ih<<1;
+				for(int ky=maximum((int)floor(start.y), 0), yend=minimum((int)floor(end.y), h);ky<yend;++ky)
+				{
+					int iy=screen2image_y_int(ky);
+					if(iy<0||iy>=h2)
+						continue;
+					for(int kx=maximum((int)floor(start.x), 0), xend=minimum((int)floor(end.x), w);kx<xend;++kx)
+					{
+						int ix=screen2image_x_int(kx);
+						if(ix<0||ix>=w2)
+							continue;
+						int plane=(iy>=ih)<<1|(ix>=iw);
+						ix-=iw&-(ix>=iw);
+						iy-=ih&-(iy>=ih);
+						int idx=iw*iy+ix;
+						rgb[w*ky+kx]=polar2rgb(fft_in_planes[plane][idx][0], fft_in_planes[plane][idx][1]);
+					}
+				}
+			}
+		}//end Fourier domain
+		else
+#endif
 		if(imagetype==IM_GRAYSCALE)
 		{
 			for(int ky=maximum((int)floor(start.y), 0), yend=minimum((int)floor(end.y), h);ky<yend;++ky)
@@ -248,6 +381,8 @@ void			render()
 					int ix=screen2image_x_int(kx);
 					if(ix<0||ix>=iw)
 						continue;
+					ix=ix<<1|(ix>w2);
+					iy=iy<<1|(iy>h2);
 					float lum=float(contrast_gain*(image[iw*iy+ix]-contrast_offset)+contrast_offset);
 					lum=clamp01(lum);
 					int pixel=(int)(255*lum+0.5);//no filter
@@ -359,11 +494,6 @@ long			__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long l
 			wpy+=my*invzoom*(1-invfactor);
 			zoom*=factor;
 
-		//	double imx=screen2image_x(mx), imy=screen2image_y(my);
-		//	wpx=(wpx+imx)*factor-imx;
-		//	wpy=(wpy+imy)*factor-imy;
-		//	zoom*=factor;
-
 			const double tolerance=1e-2;
 			if(zoom>1-tolerance&&zoom<1+tolerance)
 				zoom=1;
@@ -376,7 +506,9 @@ long			__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long l
 		switch(wParam)
 		{
 		case VK_F1://show key shortcuts
-			messageboxa(ghWnd, "Key shortcuts",
+			messageboxa(ghWnd, "Shortcut keys",
+				"F1: Shortcut keys\n"
+				"F2: File properties\n"
 				"O: Open file\n"
 				"Left/Right: prev./next file\n"
 				"R: Reset scale & brightness\n"
@@ -385,10 +517,29 @@ long			__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long l
 				"B: Split/join Bayer mosaic\n"
 				"Ctrl B: Debayer\n"
 				"F/F11: Toggle fullscreen\n"
+#ifdef FFTW3_H
+				"1: Fourier transform\n"
+#endif
 				"X: Quit\n"
 				"\n"
 				"Built on: %s, %s\n",
 				__DATE__, __TIME__);
+			break;
+		case VK_F2://file properties
+			{
+				long filesize=file_sizew((workfolder+filetitle).c_str());
+				long long bitsize=iw*ih*idepth;
+				double MBsize=(double)bitsize/(8*1024*1024);
+				messageboxa(ghWnd, "Properties",
+					"Width: %d\n"
+					"Height: %d\n"
+					"Depth: %d bit/channel\n"
+					"File size: %d bytes = %.2lf KB\n"
+					"Uncompressed size: %lld bits = %.2lf MB\n",
+					iw, ih, idepth,
+					filesize, (double)filesize/1024,
+					bitsize, MBsize);
+			}
 			break;
 		case VK_SPACE:
 			archiver_test2();
@@ -417,6 +568,10 @@ long			__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long l
 			wpy=(ih-h*invzoom)*0.5;
 			render();
 			break;
+		case '1':
+			applyFFT();
+			render();
+			break;
 		case VK_OEM_PLUS:case VK_ADD:
 			contrast_gain*=contrast_delta;
 			render();
@@ -436,13 +591,13 @@ long			__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long l
 			{
 				if(imagetype==IM_BAYER)//separate Bayer mosaic
 				{
-					separate_bayer();
+					//separate_bayer();
 					imagetype=IM_BAYER_SEPARATE;
 					render();
 				}
 				else if(imagetype==IM_BAYER_SEPARATE)//regroup bayer mosaic
 				{
-					regroup_bayer();
+					//regroup_bayer();
 					imagetype=IM_BAYER;
 					render();
 				}
@@ -489,6 +644,11 @@ long			__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long l
 			int maxlum=(1<<idepth)-1;
 			if(imagetype==IM_GRAYSCALE||imagetype==IM_BAYER||imagetype==IM_BAYER_SEPARATE)
 			{
+				if(imagetype==IM_BAYER_SEPARATE)
+				{
+					imx=imx<<1|(imx>(iw>>1));
+					imy=imy<<1|(imy>(ih>>1));
+				}
 				float lum=image[iw*imy+imx];
 				GUIPrint(ghDC, xpos, ypos, "%dx%d, x%g, (%d, %d): Lum=%.6f = %d/%d, contr=%.2lf", iw, ih, zoom, imx, imy, lum, (int)(maxlum*lum), maxlum, contrast_gain);
 
@@ -547,8 +707,8 @@ int				__stdcall WinMain(HINSTANCE__ *hInstance, HINSTANCE__ *hPrevInstance, cha
 		wchar_t **args=CommandLineToArgvW(GetCommandLineW(), &nArgs);
 		if(nArgs>1)
 			open_mediaw(args[1]);
-		else
-			SetWindowTextA(ghWnd, "hView - Press F1 for key shortcuts");
+		//else
+		//	SetWindowTextA(ghWnd, "hView - Press F1 for key shortcuts");
 
 	tagMSG msg;
 	int ret=0;

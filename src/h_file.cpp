@@ -121,6 +121,14 @@ int				file_is_readablew(const wchar_t *filename)//0: not readable, 1: regular f
 		return 1+!S_ISREG(info.st_mode);
 	return 0;
 }
+long			file_sizew(const wchar_t *filename)
+{
+	struct _stat32 info;
+	int error=_wstat32(filename, &info);
+	if(!error)
+		return info.st_size;
+	return -1;
+}
 void			read_binary(const wchar_t *filename, std::vector<byte> &binary_data)
 {
 	std::ifstream input(filename, std::ios::binary);
@@ -177,9 +185,11 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 			image[kd+3]=p[3]*inv255;
 		}
 		imagetype=IM_RGBA;
+		free(original_image);
 	}
 
 	//on success
+	reset_FFTW_state();
 	workfolder=std::move(folder), filetitle=std::move(title);
 	SetWindowTextW(ghWnd, (wfn+L" - hView").c_str());
 	render();

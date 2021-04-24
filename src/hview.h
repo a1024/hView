@@ -1,23 +1,34 @@
 #ifndef HVIEW_H
 #define HVIEW_H
+#include		"fftw3.h"
 #include		<vector>
 #include		<string>
+#define _USE_MATH_DEFINES
 #include		<math.h>//abs
 typedef unsigned char byte;
 
 extern int		w, h, *rgb, rgbn,
 				iw, ih, image_size;
-extern float	*image;
+extern float	*image;//the image
 enum			ImageType
 {
+	IM_UNINITIALIZED,
 	IM_GRAYSCALE,
 	IM_RGBA,//4 floats per pixel (quad width)
 	IM_BAYER,
-	IM_BAYER_SEPARATE,
+	IM_BAYER_SEPARATE,//stored same as bayer, channels are shown separately
 };
 extern ImageType imagetype;
 extern char		bayer[4];
 extern int		idepth;
+
+#ifdef FFTW3_H
+extern bool		FourierDomain;//if true, show the image in fft_in_planes, otherwise ordinary image
+extern int		fft_w, fft_h;//if not equal to image parameters then plans are uninitialized
+extern ImageType fft_type;//grayscale: fft_planes[0] only, otherwise use all 4 planes
+extern fftw_plan fft_p[4], ifft_p[4];
+extern fftw_complex *fft_in_planes[4], *fft_out_planes[4];
+#endif
 
 extern double	wpx, wpy,//window position in image coordinates
 				zoom,//image pixel size in screen pixels
@@ -150,6 +161,7 @@ inline bool collinear(Point2d const &a, Point2d const &b, Point2d const &c)
 }
 
 //files
+long			file_sizew(const wchar_t *filename);
 void			open_media();
 //void			open_mediaa(const char *filename);
 bool			open_mediaw(const wchar_t *filename);//sets workfolder, updates title
@@ -166,6 +178,8 @@ void			archiver_test2();
 void			separate_bayer();
 void			regroup_bayer();
 void			debayer();
+void			applyFFT();
+void			reset_FFTW_state();
 
 //application
 void			render();
