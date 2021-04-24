@@ -22,7 +22,7 @@ static void		print_bin(const byte *data, int bytesize)
 			printf("-");
 	}
 }
-static void		print_histogram(int *histogram, int nlevels, int scanned_size)
+void			print_histogram(int *histogram, int nlevels, int scanned_size)
 {
 	int histmax=0;
 	for(int k=0;k<nlevels;++k)

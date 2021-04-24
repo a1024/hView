@@ -22,6 +22,9 @@ extern ImageType imagetype;
 extern char		bayer[4];
 extern int		idepth;
 
+extern bool		histOn;
+extern int		*histogram, histmax;//size of 1<<idepth
+
 #ifdef FFTW3_H
 extern bool		FourierDomain;//if true, show the image in fft_in_planes, otherwise ordinary image
 extern int		fft_w, fft_h;//if not equal to image parameters then plans are uninitialized
@@ -173,13 +176,19 @@ void			open_prev();
 //bool			decompress_huff(const byte *data, int bytesize, RequestedFormat format, void **buffer, int &bw, int &bh, int &depth, char *bayer_sh);
 void			archiver_test();
 void			archiver_test2();
+void			print_histogram(int *histogram, int nlevels, int scanned_size);
 
 //image operations
 void			separate_bayer();
 void			regroup_bayer();
 void			debayer();
+
 void			applyFFT();
 void			reset_FFTW_state();
+
+void			toggle_histogram();
+void			reset_histogram();
+void			cmd_histogram();
 
 //application
 void			render();

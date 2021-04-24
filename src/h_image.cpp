@@ -1,52 +1,14 @@
 #include		"hview.h"
-/*void			separate_bayer()
-{
-	float *buffer=(float*)malloc(image_size<<2);
-	int w2=iw>>1, h2=ih>>1;
-	for(int ky=0;ky<h2;++ky)
-	{
-		int iy=ky<<1;
-		for(int kx=0;kx<w2;++kx)
-		{
-			int ix=kx<<1;
-			buffer[iw*ky+kx]=image[iw*iy+ix];
-			buffer[iw*ky+kx+w2]=image[iw*iy+ix+1];
-			buffer[iw*(ky+h2)+kx]=image[iw*(iy+1)+ix];
-			buffer[iw*(ky+h2)+kx+w2]=image[iw*(iy+1)+ix+1];
-		}
-	}
-	free(image);
-	image=buffer;
-}
-void			regroup_bayer()
-{
-	float *buffer=(float*)malloc(image_size<<2);
-	int w2=iw>>1, h2=ih>>1;
-	for(int ky=0;ky<h2;++ky)
-	{
-		int iy=ky<<1;
-		for(int kx=0;kx<w2;++kx)
-		{
-			int ix=kx<<1;
-			buffer[iw*iy+ix]=image[iw*ky+kx];
-			buffer[iw*iy+ix+1]=image[iw*ky+kx+w2];
-			buffer[iw*(iy+1)+ix]=image[iw*(ky+h2)+kx];
-			buffer[iw*(iy+1)+ix+1]=image[iw*(ky+h2)+kx+w2];
-		}
-	}
-	free(image);
-	image=buffer;
-}//*/
+#include		"generic.h"
 void			debayer()
 {
-	char bayer_idx[]={bayer[0]>>3, bayer[1]>>3, bayer[2]>>3, bayer[3]>>3};
-	int w2=iw;
-	iw>>=1, ih>>=1, image_size=iw*ih;
-	float *buffer=(float*)malloc(image_size*4*sizeof(float));
-	memset(buffer, 0, image_size*4*sizeof(float));
 	if(imagetype==IM_BAYER||imagetype==IM_BAYER_SEPARATE)
-	//if(imagetype==IM_BAYER)
 	{
+		char bayer_idx[]={bayer[0]>>3, bayer[1]>>3, bayer[2]>>3, bayer[3]>>3};
+		int w2=iw;
+		iw>>=1, ih>>=1, image_size=iw*ih;
+		float *buffer=(float*)malloc(image_size*4*sizeof(float));
+		memset(buffer, 0, image_size*4*sizeof(float));
 		for(int ky=0;ky<ih;++ky)
 		{
 			for(int kx=0;kx<iw;++kx)
@@ -60,26 +22,11 @@ void			debayer()
 				buffer[idx+1]*=0.5;//half green
 			}
 		}
+		free(image);
+		image=buffer;
 	}
-	//else if(imagetype==IM_BAYER_SEPARATE)
-	//{
-	//	for(int ky=0;ky<ih;++ky)
-	//	{
-	//		for(int kx=0;kx<iw;++kx)
-	//		{
-	//			int idx=(iw*ky+kx)<<2;
-	//			buffer[idx+3]=1;//alpha
-	//			buffer[idx+bayer_idx[0]]+=image[w2*ky+kx];
-	//			buffer[idx+bayer_idx[1]]+=image[w2*ky+kx+iw];
-	//			buffer[idx+bayer_idx[2]]+=image[w2*(ky+ih)+kx];
-	//			buffer[idx+bayer_idx[3]]+=image[w2*(ky+ih)+kx+iw];
-	//			buffer[idx+1]*=0.5;//half green
-	//		}
-	//	}
-	//}
-	free(image);
-	image=buffer;
 }
+
 void			reset_FFTW_state()
 {
 #ifdef FFTW3_H
@@ -303,4 +250,56 @@ void			applyFFT()
 		}
 	}
 #endif
+}
+
+void			calculate_histogram(const float *buffer, int imsize, int nlevels, int *histogram)
+{
+	double normal=nlevels-1;
+	memset(histogram, 0, nlevels<<2);
+	for(int k=0;k<imsize;++k)
+	{
+		int level=buffer[k]*normal;
+		++histogram[level];
+	}
+}
+void			reset_histogram()
+{
+	if(histogram)
+	{
+		delete[] histogram;
+		histogram=nullptr;
+	}
+}
+void			toggle_histogram()
+{
+	histOn=!histOn;
+	if(histOn)
+	{
+		int nlevels=1<<idepth;
+		histogram=new int[nlevels];
+		calculate_histogram(image, image_size, nlevels, histogram);
+
+		histmax=0;
+		for(int k=0;k<nlevels;++k)
+			if(histmax<histogram[k])
+				histmax=histogram[k];
+	}
+	else
+	{
+		delete[] histogram;
+		histogram=nullptr;
+	}
+}
+void			cmd_histogram()
+{
+	int nlevels=1<<idepth;
+	console_start(80, 1000+nlevels);
+
+	int *histogram=new int[nlevels];
+	calculate_histogram(image, image_size, nlevels, histogram);//imagetype
+	print_histogram(histogram, nlevels, image_size);
+
+	console_pause();
+	console_end();
+	delete[] histogram;
 }

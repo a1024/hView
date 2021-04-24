@@ -21,6 +21,7 @@ void			console_start();
 void			console_end();
 void			console_pause();
 void			console_buffer_size(int x, int y);
+void			console_start(int cx, int cy);
 void			console_start_good();
 
 //gneeric buffer

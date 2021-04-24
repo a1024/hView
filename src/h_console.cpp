@@ -71,6 +71,12 @@ void			console_buffer_size(int x, int y)
     SetConsoleScreenBufferSize(Handle, coord);
     SetConsoleWindowInfo(Handle, TRUE, &Rect);
 }
+void			console_start(int cx, int cy)
+{
+	bool was_active=consoleactive;
+	console_start();
+	console_buffer_size(cx, cy);
+}
 void			console_start_good()
 {
 	bool was_active=consoleactive;

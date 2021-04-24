@@ -13,11 +13,16 @@ ImageType		imagetype=IM_RGBA;
 char			bayer[4]={};//shift ammounts for the 4 Bayer mosaic components, -1 for grayscale
 int				idepth=0;
 
+bool			histOn=false;
+int				*histogram=nullptr, histmax=0;
+
+#ifdef FFTW3_H
 bool			FourierDomain=false;
 int				fft_w=0, fft_h=0;//if not equal to image parameters then plans are uninitialized
 ImageType		fft_type=IM_UNINITIALIZED;//grayscale: fft_planes[0] only, otherwise use all 4 planes
 fftw_plan		fft_p[4]={}, ifft_p[4]={};
 fftw_complex	*fft_in_planes[4]={}, *fft_out_planes[4]={};
+#endif
 
 double			wpx=0, wpy=0,//window position (top-left corner) in image coordinates
 				zoom=1,//image pixel size in screen pixels
@@ -425,8 +430,25 @@ void			render()
 			}
 			label_pixels_rgba(istart, iend);
 		}
+		if(histOn)
+		{
+			int nlevels=1<<idepth, wndw=w, wndh=h-17;
+			for(int kx=0;kx<w;++kx)
+			{
+				int idx=kx*(nlevels-1)/(wndw-1);
+				int freq=histogram[idx]*wndh/histmax;
+				for(int ky=0;ky<freq;++ky)
+				{
+					//rgb[w*ky+kx]=0xFFFF00FF;
+					auto p=(unsigned char*)(rgb+w*ky+kx);
+					p[0]+=(0xFF-(int)p[0])>>1;
+					p[1]+=(0x00-(int)p[1])>>1;
+					p[2]+=(0xFF-(int)p[2])>>1;
+				}
+			}
+		}
 	}
-	//for(int k=0;k<rgbn;++k)//
+	//for(int k=0;k<rgbn;++k)//red screen test
 	//	rgb[k]=0xFFFF0000;//
 	BitBlt(ghDC, 0, 0, w, h, ghMemDC, 0, 0, SRCCOPY);
 }
@@ -559,14 +581,20 @@ long			__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long l
 			render();
 			break;
 		case 'C'://center
-			if((double)w/h>=(double)iw/ih)//window AR > image AR: fit height
-				zoom=(double)h/ih;
-			else//window AR < image AR: fit width
-				zoom=(double)w/iw;
-			invzoom=1/zoom;
-			wpx=(iw-w*invzoom)*0.5;//center image
-			wpy=(ih-h*invzoom)*0.5;
-			render();
+			{
+				int wndw=w, wndh=h-17;
+				if((double)wndw/wndh>=(double)iw/ih)//window AR > image AR: fit height
+				{
+					if(wndh>0)
+						zoom=(double)wndh/ih;
+				}
+				else//window AR < image AR: fit width
+					zoom=(double)wndw/iw;
+				invzoom=1/zoom;
+				wpx=(iw-wndw*invzoom)*0.5;//center image
+				wpy=(ih-wndh*invzoom)*0.5;
+				render();
+			}
 			break;
 		case '1':
 			applyFFT();
@@ -601,6 +629,15 @@ long			__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long l
 					imagetype=IM_BAYER;
 					render();
 				}
+			}
+			break;
+		case 'H'://histogram
+			if(kb[VK_CONTROL])
+				cmd_histogram();
+			else
+			{
+				toggle_histogram();
+				render();
 			}
 			break;
 		case 'S'://stack
