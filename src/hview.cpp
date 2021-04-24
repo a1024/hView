@@ -408,13 +408,13 @@ void			render()
 					int ix=screen2image_x_int(kx);
 					if(ix<0||ix>=iw)
 						continue;
-					ix=ix<<1|(ix>w2);
-					iy=iy<<1|(iy>h2);
-					float lum=float(contrast_gain*(image[iw*iy+ix]-contrast_offset)+contrast_offset);
+					int ix2=(ix-(w2&-(ix>=w2)))<<1|(ix>=w2);
+					int iy2=(iy-(h2&-(iy>=h2)))<<1|(iy>=h2);
+					float lum=float(contrast_gain*(image[iw*iy2+ix2]-contrast_offset)+contrast_offset);
 					lum=clamp01(lum);
 					int pixel=(int)(255*lum+0.5);//no filter
 					//int pixel=int(1023*lum);
-					int sh=bayer[(iy>h2)<<1|(ix>w2)];
+					int sh=bayer[(iy>=h2)<<1|(ix>=w2)];
 					rgb[w*ky+kx]=0xFF000000|(pixel>>(int)(sh==8))<<sh;//half the greens
 				}
 			}
@@ -452,7 +452,7 @@ void			render()
 			}
 			label_pixels_rgba(istart, iend);
 		}
-		if(histOn)
+		if(histOn)//draw histogram
 		{
 			int nlevels=1<<idepth, wndw=w, wndh=h-17;
 			for(int kx=0;kx<w;++kx)
@@ -560,19 +560,21 @@ long			__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long l
 		{
 		case VK_F1://show key shortcuts
 			messageboxa(ghWnd, "Shortcut keys",
-				"F1: Shortcut keys\n"
-				"F2: File properties\n"
 				"O: Open file\n"
-				"Left/Right: prev./next file\n"
-				"R: Reset scale & brightness\n"
+				"Left/Right: Prev./next file\n"
+				"R: 1:1 zoom & reset brightness\n"
 				"C: Center image\n"
 				"+/-: Adjust brightness\n"
 				"B: Split/join Bayer mosaic\n"
 				"Ctrl B: Debayer\n"
+				"H: Histogram\n"
+				"Ctrl H: Cmd histogram\n"
 				"F/F11: Toggle fullscreen\n"
 #ifdef FFTW3_H
 				"1: Fourier transform\n"
 #endif
+				"F1: Shortcut keys\n"
+				"F2: File properties\n"
 				"X: Quit\n"
 				"\n"
 				"Built on: %s, %s\n",
