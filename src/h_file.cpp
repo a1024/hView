@@ -192,6 +192,7 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 	reset_FFTW_state();
 	workfolder=std::move(folder), filetitle=std::move(title);
 	SetWindowTextW(ghWnd, (wfn+L" - hView").c_str());
+	center_image();
 	render();
 	return true;
 }

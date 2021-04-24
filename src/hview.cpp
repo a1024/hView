@@ -30,6 +30,14 @@ double			wpx=0, wpy=0,//window position (top-left corner) in image coordinates
 				zoomdelta=2,
 				invzoomdelta=1/zoomdelta;
 
+enum			ZoomMode
+{
+	AUTOZOOM_OFF,
+	AUTOZOOM_ON,
+	AUTOZOOM_CENTER,
+};
+ZoomMode		autozoom=AUTOZOOM_CENTER;
+
 double			contrast_gain=1, contrast_offset=0,//gain*(color-offset)+offset
 				contrast_delta=1.1;
 
@@ -58,6 +66,20 @@ char			kb[256]={};
 std::wstring	workfolder,//ends with slash
 				filetitle;
 
+void			center_image()
+{
+	int wndw=w, wndh=h-17;
+	if((double)wndw/wndh>=(double)iw/ih)//window AR > image AR: fit height
+	{
+		if(wndh>0)
+			zoom=(double)wndh/ih;
+	}
+	else//window AR < image AR: fit width
+		zoom=(double)wndw/iw;
+	invzoom=1/zoom;
+	wpx=(iw-wndw*invzoom)*0.5;//center image
+	wpy=(ih-wndh*invzoom)*0.5;
+}
 typedef unsigned long long u64;
 union			Color16
 {
@@ -466,7 +488,16 @@ long			__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long l
 			{
 				if(!h2)
 					h2=1;
+				if(autozoom==AUTOZOOM_ON&&w&&h&&w2&&h2)
+				{
+					zoom*=(double)w2/w;
+					//zoom*=0.5*((double)w2/w+(double)h2/h);
+					//zoom*=minimum((double)w2/w, (double)h2/h);//X
+					invzoom=1/zoom;
+				}
 				h=h2, w=w2, rgbn=w*h;
+				if(autozoom==AUTOZOOM_CENTER)
+					center_image();
 				if(hBitmap)
 				{
 					hBitmap=(HBITMAP)SelectObject(ghMemDC, hBitmap);
@@ -581,20 +612,8 @@ long			__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long l
 			render();
 			break;
 		case 'C'://center
-			{
-				int wndw=w, wndh=h-17;
-				if((double)wndw/wndh>=(double)iw/ih)//window AR > image AR: fit height
-				{
-					if(wndh>0)
-						zoom=(double)wndh/ih;
-				}
-				else//window AR < image AR: fit width
-					zoom=(double)wndw/iw;
-				invzoom=1/zoom;
-				wpx=(iw-wndw*invzoom)*0.5;//center image
-				wpy=(ih-wndh*invzoom)*0.5;
-				render();
-			}
+			center_image();
+			render();
 			break;
 		case '1':
 			applyFFT();

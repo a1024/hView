@@ -191,5 +191,6 @@ void			reset_histogram();
 void			cmd_histogram();
 
 //application
+void			center_image();
 void			render();
 #endif
