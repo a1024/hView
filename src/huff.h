@@ -3,7 +3,8 @@
 #include		<vector>
 
 
-//	#define 	PROFILER
+	#define 	PROFILER
+
 
 #ifdef PROFILER
 #include		<time.h>
@@ -52,7 +53,7 @@ enum			RequestedFormat
 };
 
 typedef unsigned char byte;
-struct			HuffHeader
+struct			HuffHeader//24 bytes
 {
 	char HUFF[4];//'H'|'U'<<8|'F'<<16|'F'<<24
 	unsigned version;//1: huffman, 2: encoded with palette, 10: uncompressed raw10 packing, 12: uncompressed raw12 packing
@@ -61,7 +62,7 @@ struct			HuffHeader
 	unsigned nLevels;//1<<bitDepth, also histogram size for version==1
 	unsigned histogram[];//compressed data begins at histogram+nLevels
 };
-struct			HuffDataHeader
+struct			HuffDataHeader//16 bytes
 {
 	char DATA[4];//'D'|'A'<<8|'T'<<16|'A'<<24
 	unsigned uPxCount;//uncompressed pixel count
@@ -70,11 +71,16 @@ struct			HuffDataHeader
 };
 
 void 			checkSIMD();
+short*			unpack_r10(const byte* src, int width, int height);
+short*			unpack_r12(const byte* src, int width, int height);
 namespace		huff
 {
 	int			compress(const short *buffer, int bw, int bh, int depth, int bayer, std::vector<int> &data);
+	int			compress_v2(const short *buffer, int bw, int bh, int depth, int bayer, std::vector<int> &data);
+	int			compress_v3(const short *buffer, int bw, int bh, int depth, int bayer, std::vector<int> &data);
 	int			pack_raw(const byte *buffer, int bw, int bh, int depth, int bayer, std::vector<int> &data);//depth: 10 or 12
-	int			pack_r10_g12(const short *buffer, int bw, int bh, std::vector<int> &data);//pass unpacked raw10
+	int			pack_r10_g12(const byte *buffer, int bw, int bh, int denoise, std::vector<int> &data);
+	int			pack_r12_g14(const byte *buffer, int bw, int bh, int denoise, std::vector<int> &data);
 	bool		decompress(const byte *data, int bytesize, RequestedFormat format, void **pbuffer, int &bw, int &bh, int &depth, char *bayer_sh);//realloc will be used on buffer
 }
 #endif//HUFF_H

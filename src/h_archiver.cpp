@@ -797,48 +797,85 @@ void			archiver_test()
 	}
 	console_end();
 }
+
+//short			*buffer0=nullptr;
 void			archiver_test2()
 {
-	if(image&&imagetype==IM_BAYER)
+	console_start_good();
+	if(!image)
 	{
-		console_start_good();
-		//console_start();
-		printf("Archiver test 2\n\n");
-
-		short *src=new short[image_size];
-		int maxlum=(1<<idepth)-1;
-		for(int k=0;k<image_size;++k)
-			src[k]=short(image[k]*maxlum);
-
-		//printf("Sample from image:\n");
-		//print_subimage(src, iw, ih, 0, 0, 8, 8, 2);//
-
-		std::vector<int> data;
-		int mosaic='G'|'R'<<8|'B'<<16|'G'<<24;
-		int data_start=huff::compress(src, iw, ih, idepth, mosaic, data);
-		
-		auto header=(HuffHeader*)data.data();
-		auto hData=(HuffDataHeader*)(header->histogram+header->nLevels);
-
-		short *dst=nullptr;
-		int w2=0, h2=0, depth2=0;
-		char bayer_sh[4];
-		huff::decompress((byte*)data.data(), data.size()*sizeof(int), RF_I16_BAYER, (void**)&dst, w2, h2, depth2, bayer_sh);
-		
-		if(!dst)
-			printf("Decompression failed\n");
-		else
-		{
-			bool identical=compare_images(src, dst, iw, ih, 1000);
-			if(identical)
-				printf("decompress(compress(image)) == image\n");
-				//printf("Buffer passed through compression and decompression\n");
-		}
-
+		printf("No image\n");
 		console_pause();
 		console_end();
-
-		delete[] src;
-		free(dst);
+		return;
 	}
+	if(imagetype!=IM_GRAYSCALE&&imagetype!=IM_BAYER&&imagetype!=IM_BAYER_SEPARATE)
+	{
+		printf("Need Bayer mosaic for archiver test\n");
+		console_pause();
+		console_end();
+		return;
+	}
+	//console_start();
+	printf("\nArchiver test 2\n");
+
+	int bw=iw, bh=ih;
+	short *src=new short[image_size];
+	int maxlum=(1<<idepth)-1;
+	for(int k=0;k<image_size;++k)
+		src[k]=short(image[k]*maxlum);
+
+	//int bw=8, bh=8;
+	//short src[]=
+	//{
+	//	 54, 61, 64, 68, 56, 52, 57, 69,
+	//	 76, 64, 66, 75, 66, 77, 79, 67,
+	//	 62, 60, 70, 47, 62, 62, 57, 74,
+	//	 74, 68, 42, 63, 72, 55, 73, 61,
+	//	 70, 68, 75, 68, 69, 59, 76, 64,
+	//	 64, 72, 58, 72, 57, 66, 59, 81,
+	//	 80, 64, 60, 55, 66, 59, 69, 63,
+	//	 63, 51, 72, 72, 57, 60, 83, 61,
+	//};
+
+	//buffer0=src;
+
+	//printf("Sample from image:\n");
+	//print_subimage(src, bw, bh, 0, 0, 8, 8, 2);//
+
+	std::vector<int> data;
+	int mosaic='G'|'R'<<8|'B'<<16|'G'<<24;
+	//int mosaic=imagetype==IM_GRAYSCALE?0:'G'|'R'<<8|'B'<<16|'G'<<24;
+	int data_start=huff::compress_v3(src, bw, bh, idepth, mosaic, data);
+	//int data_start=huff::compress(src, bw, bh, idepth, mosaic, data);
+		
+	auto header=(HuffHeader*)data.data();
+	auto hData=(HuffDataHeader*)(header->histogram+header->nLevels);
+
+	short *dst=nullptr;
+	int w2=0, h2=0, depth2=0;
+	char bayer_sh[4];
+	huff::decompress((byte*)data.data(), data.size()*sizeof(int), RF_I16_BAYER, (void**)&dst, w2, h2, depth2, bayer_sh);
+		
+	if(!dst)
+		printf("\nDecompression failed\n");
+	else
+	{
+		bool identical=compare_images(src, dst, bw, bh, 1000);
+		if(identical)
+		{
+			printf("\ndecompress(compress(image)) == image\n");
+			//printf("Buffer passed through compression and decompression\n");
+			int uncompressed=bw*bh*idepth, compressed=data.size()<<5;
+			printf("Uncompressed = %d bits = %g KB\n", uncompressed, (double)uncompressed/(8*1024));
+			printf("Compressed   = %d bits = %g KB\n", compressed, (double)compressed/(8*1024));
+			printf("Compression ratio = %g\n", (double)uncompressed/compressed);
+		}
+	}
+
+	console_pause();
+	console_end();
+
+	delete[] src;
+	free(dst);
 }

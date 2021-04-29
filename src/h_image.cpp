@@ -202,7 +202,7 @@ void			applyFFT()
 				{
 					int idx=iw*ky+kx;
 					double re=in_plane[idx][0], im=in_plane[idx][1];
-					image[idx]=sqrt(re*re+im*im);
+					image[idx]=(float)sqrt(re*re+im*im);
 
 					//image[idx]=in_plane[idx][0];
 				}
@@ -220,7 +220,7 @@ void			applyFFT()
 						double
 							re=fft_in_planes[kp][idx][0],
 							im=fft_in_planes[kp][idx][1];
-						image[idx+kp]=sqrt(re*re+im*im);
+						image[idx+kp]=(float)sqrt(re*re+im*im);
 
 						//image[idx+kp]=fft_in_planes[kp][idx][0];
 					}
@@ -241,7 +241,7 @@ void			applyFFT()
 						double
 							re=fft_in_planes[kp][d_idx][0],
 							im=fft_in_planes[kp][d_idx][1];
-						image[s_idx+offsets[kp]]=sqrt(re*re+im*im);
+						image[s_idx+offsets[kp]]=(float)sqrt(re*re+im*im);
 
 						//image[s_idx+offsets[kp]]=fft_in_planes[kp][d_idx][0];
 					}

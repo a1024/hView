@@ -25,6 +25,18 @@ fftw_complex	*fft_in_planes[4]={}, *fft_out_planes[4]={};
 #endif
 
 double			wpx=0, wpy=0,//window position (top-left corner) in image coordinates
+//class			Zoom
+//{
+//	static double val, inv, delta, invdelta;
+//	static double get()
+//	{
+//		return val;
+//	}
+//	static void set(double _val)
+//	{
+//		val=_val, inv=1/val;
+//	}
+//};
 				zoom=1,//image pixel size in screen pixels
 				invzoom=1,
 				zoomdelta=2,
@@ -36,7 +48,7 @@ enum			ZoomMode
 	AUTOZOOM_ON,
 	AUTOZOOM_CENTER,
 };
-ZoomMode		autozoom=AUTOZOOM_CENTER;
+ZoomMode		autozoom=AUTOZOOM_OFF;
 
 double			contrast_gain=1, contrast_offset=0,//gain*(color-offset)+offset
 				contrast_delta=1.1;
@@ -496,7 +508,7 @@ long			__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long l
 					invzoom=1/zoom;
 				}
 				h=h2, w=w2, rgbn=w*h;
-				if(autozoom==AUTOZOOM_CENTER)
+				if(autozoom==AUTOZOOM_CENTER&&iw&&ih)
 					center_image();
 				if(hBitmap)
 				{

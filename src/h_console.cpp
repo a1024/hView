@@ -82,6 +82,6 @@ void			console_start_good()
 	bool was_active=consoleactive;
 	console_start();
 	if(!was_active)
-		console_buffer_size(120, 9000);
+		console_buffer_size(100, 9000);
 		//console_buffer_size(160, 9000);
 }
