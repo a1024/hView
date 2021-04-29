@@ -846,7 +846,7 @@ void			archiver_test2()
 	std::vector<int> data;
 	int mosaic='G'|'R'<<8|'B'<<16|'G'<<24;
 	//int mosaic=imagetype==IM_GRAYSCALE?0:'G'|'R'<<8|'B'<<16|'G'<<24;
-	int data_start=huff::compress_v3(src, bw, bh, idepth, mosaic, data);
+	int data_start=huff::compress_v5(src, bw, bh, idepth, mosaic, data);
 	//int data_start=huff::compress(src, bw, bh, idepth, mosaic, data);
 		
 	auto header=(HuffHeader*)data.data();

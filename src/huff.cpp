@@ -38,7 +38,7 @@ inline void		shift_left_vector_small(__m128i const &x, int n, __m128i &ret_lo, _
 //	#define		PRINT_TREE
 //	#define		PRINT_ALPHABET
 //	#define		PRINT_DATA
-	#define		PRINT_V2
+//	#define		PRINT_V2
 //	#define		PRINT_V2_DATA
 
 
@@ -184,7 +184,6 @@ static void		print_alphabet(vector_bool const *alphabet, const int *histogram, i
 		print_flush();
 	}
 }
-
 static void		print_histogram(int *histogram, int nlevels, int scanned_count, int *sort_idx)
 {
 	int histmax=0;
@@ -357,6 +356,24 @@ short*			unpack_r12(const byte* src, int width, int height)
 	}
 	return dst;
 }
+
+short*			bayer2gray(const short *src, int width, int height)//+2 depth
+{
+	int imsize=width*height;
+	auto dst=new short[imsize];
+	for(int ky=0;ky<height;++ky)
+	{
+		int ky2=ky<<1;
+		const short *row=src+width*ky2, *row2=row+width;
+		for(int kx=0;kx<width;++kx)
+		{
+			int kx2=kx<<1;
+			dst[width*ky+kx]=row[kx2]+row[kx2+1]+row2[kx2]+row2[kx2+1];
+		}
+	}
+	return dst;
+}
+
 inline void 	denoise_laplace4(short *buffer, int bw, int bh, int w2, int x, int y, int threshold)
 {
 	int idx=bw*y+x;
@@ -678,8 +695,6 @@ void			denoise_bayer_simd(short *buffer, int bw, int bh, int depth)
 	}
 #endif
 }
-
-//extern short	*buffer0;//
 namespace		huff
 {
 	int			compress(const short *buffer, int bw, int bh, int depth, int bayer, std::vector<int> &data)
@@ -689,25 +704,29 @@ namespace		huff
 		short *temp=nullptr;
 		const short *b2;
 		int width, height, imSize;
-		if(bayer)//raw color
-			width=bw, height=bh, imSize=width*height, b2=buffer;
-		else//grayscale
+		if(bayer==0||bayer==1)//grayscale or gray denoised
 		{
 			width=bw>>1, height=bh>>1, imSize=width*height;
 			depth+=2;
-			temp=new short[imSize];
-			for(int ky=0;ky<height;++ky)
+			temp=bayer2gray(buffer, width, height);
+			time_mark("bayer2gray");
+			if(bayer==1)
 			{
-				int ky2=ky<<1;
-				const short *row=buffer+bw*ky2, *row2=buffer+bw*(ky2+1);
-				for(int kx=0;kx<width;++kx)
+				if(supportsSIMD)
 				{
-					int kx2=kx<<1;
-					temp[width*ky+kx]=row[kx2]+row[kx2+1]+row2[kx2]+row2[kx2+1];
+					denoise_bayer_simd(temp, width, height, depth);
+					time_mark("denoise SIMD");
+				}
+				else
+				{
+					denoise_bayer(temp, width, height, depth);
+					time_mark("denoise");
 				}
 			}
 			b2=temp;
 		}
+		else//raw color
+			width=bw, height=bh, imSize=width*height, b2=buffer;
 		int nLevels=1<<depth;
 
 		data.resize(sizeof(HuffHeader)/sizeof(int)+nLevels);
@@ -829,10 +848,11 @@ namespace		huff
 		time_mark("memcpy");
 
 		//delete[] alphabet;
-		if(!bayer)
+		if(bayer==0||bayer==1)
 		{
 			delete[] temp;
 			b2=buffer;
+			time_mark("delete[] temp");
 		}
 		return data_start;
 	}
@@ -878,7 +898,7 @@ namespace		huff
 			}
 		}
 		time_mark("count present symbols");
-		
+
 #ifdef PRINT_V2
 		print_histogram(histogram, nLevels, imSize, palette);
 		time_mark("print histogram");
@@ -936,7 +956,7 @@ namespace		huff
 		print("code_id: %d", code_id), print_flush();
 		time_mark("printf");
 #endif
-		
+
 		header->version=2+code_id;
 		int intsize=bitsize[code_id];
 		intsize=(intsize>>5)+((intsize&31)!=0);
@@ -1064,7 +1084,7 @@ namespace		huff
 
 				int bitlen=(!x+((x&8)>>3)+((x&0x80)>>7)+((x&0x800)>>11)+((x&0x8000)>>15))<<2;
 				x=x&0x7777|(x&0x8888)>>4;//clear MSB
-				
+
 				bits[intidx]|=x<<bitoffset;
 				if(bitoffset)
 					bits[intidx+1]|=x>>(32-bitoffset);
@@ -1099,31 +1119,60 @@ namespace		huff
 		time_mark("cleanup");
 		return data_idx;
 	}
-	int			compress_v3(const short *buffer, int bw, int bh, int depth, int bayer, std::vector<int> &data)
+	int			compress_v5(const short *buffer, int bw, int bh, int depth, int bayer, std::vector<int> &data)
 	{
 		time_start();
 		checkSIMD();
-		int imSize=bw*bh, nLevels=1<<depth;
 		const int hSize=sizeof(HuffHeader)/sizeof(int);
+
+		short *temp=nullptr;
+		const short *b2;
+		int width, height, imSize;
+		if(bayer==0||bayer==1)//grayscale or gray denoised
+		{
+			width=bw>>1, height=bh>>1, imSize=width*height;
+			depth+=2;
+			temp=bayer2gray(buffer, width, height);
+			time_mark("bayer2gray");
+			if(bayer==1)
+			{
+				if(supportsSIMD)
+				{
+					denoise_bayer_simd(temp, width, height, depth);
+					time_mark("denoise SIMD");
+				}
+				else
+				{
+					denoise_bayer(temp, width, height, depth);
+					time_mark("denoise");
+				}
+				bayer=0;
+			}
+			b2=temp;
+		}
+		else//raw color
+			width=bw, height=bh, imSize=width*height, b2=buffer;
+
+		int nLevels=1<<depth;
 		data.reserve(hSize+(imSize>>1));
 		data.resize(hSize);
 		auto header=(HuffHeader*)data.data();
 		*(int*)header->HUFF='H'|'U'<<8|'F'<<16|'F'<<24;
 		header->version=5;//RVL
-		header->width=bw;
-		header->height=bh;
+		header->width=width;
+		header->height=height;
 		*(int*)header->bayerInfo=bayer;
 		header->nLevels=nLevels;
 		time_mark("header");
 
 		int bitidx=0;
-		for(int ky=0;ky<bh;++ky)
+		for(int ky=0;ky<height;++ky)
 		{
-			data.resize(hSize+(bitidx>>5)+(bw>>1));
+			data.resize(hSize+(bitidx>>5)+(width>>1));
 			auto bits=((HuffHeader*)data.data())->histogram;
 			int prev=0;
-			const short *row=buffer+bw*ky;
-			for(int kx=0;kx<bw;++kx)
+			const short *row=b2+width*ky;
+			for(int kx=0;kx<width;++kx)
 			{
 				//if(ky==819&&kx==761)
 				//	int LOL_1=0;
@@ -1146,7 +1195,7 @@ namespace		huff
 
 				int bitlen=(!x+((x&8)>>3)+((x&0x80)>>7)+((x&0x800)>>11)+((x&0x8000)>>15)+((x&0x80000)>>19))<<2;
 				x=x&0x77777|(x&0x88888)>>4;//clear MSB
-				
+
 				int intidx=bitidx>>5, bitoffset=bitidx&31;
 				//if(intidx==6)//
 				//	int LOL_1=0;//
@@ -1162,6 +1211,12 @@ namespace		huff
 #endif
 		data.resize(hSize+(bitidx>>5)+((bitidx&31)!=0));
 		time_mark("resize");
+		if(bayer==0||bayer==1)
+		{
+			delete[] temp;
+			b2=buffer;
+			time_mark("delete[] temp");
+		}
 		return sizeof(HuffHeader)/sizeof(int);
 	}
 	int			pack_raw(const byte *buffer, int bw, int bh, int depth, int bayer, std::vector<int> &data)
@@ -1604,14 +1659,9 @@ namespace		huff
 
 					int negative=symbol&1;
 					symbol=symbol>>1^-negative;
-					//symbol=(symbol>>1^-negative)-negative;//X
 
 					row[kx]=prev+symbol;
 					prev=row[kx];
-					//if(prev!=buffer0[header->width*ky+kx])//
-					//	int LOL_1=0;//
-					//if(prev<0)
-					//	int LOL_1=0;
 				}
 			}
 			time_mark("decode RVL");

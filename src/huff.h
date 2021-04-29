@@ -3,7 +3,7 @@
 #include		<vector>
 
 
-	#define 	PROFILER
+//	#define 	PROFILER
 
 
 #ifdef PROFILER
@@ -77,7 +77,7 @@ namespace		huff
 {
 	int			compress(const short *buffer, int bw, int bh, int depth, int bayer, std::vector<int> &data);
 	int			compress_v2(const short *buffer, int bw, int bh, int depth, int bayer, std::vector<int> &data);
-	int			compress_v3(const short *buffer, int bw, int bh, int depth, int bayer, std::vector<int> &data);
+	int			compress_v5(const short *buffer, int bw, int bh, int depth, int bayer, std::vector<int> &data);
 	int			pack_raw(const byte *buffer, int bw, int bh, int depth, int bayer, std::vector<int> &data);//depth: 10 or 12
 	int			pack_r10_g12(const byte *buffer, int bw, int bh, int denoise, std::vector<int> &data);
 	int			pack_r12_g14(const byte *buffer, int bw, int bh, int denoise, std::vector<int> &data);
