@@ -714,7 +714,6 @@ long			__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long l
 			int maxlum=(1<<idepth)-1;
 			if(imagetype==IM_GRAYSCALE||imagetype==IM_BAYER||imagetype==IM_BAYER_SEPARATE)
 			{
-				int imx0=imx, imy0=imy;
 				if(imagetype==IM_BAYER_SEPARATE)
 				{
 					int ix2=imx>=(iw>>1), iy2=imy>=(ih>>1);
@@ -722,8 +721,6 @@ long			__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long l
 					imy-=ih>>1&-iy2;
 					imx=imx<<1|ix2;
 					imy=imy<<1|iy2;
-					//imx=imx<<1|(imx>=(iw>>1));
-					//imy=imy<<1|(imy>=(ih>>1));
 				}
 				float lum=image[iw*imy+imx];
 				GUIPrint(ghDC, xpos, ypos, "%dx%d, x%g, (%d, %d): Lum=%.6f = %d/%d, contr=%.2lf", iw, ih, zoom, imx, imy, lum, (int)(maxlum*lum), maxlum, contrast_gain);

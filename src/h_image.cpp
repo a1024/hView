@@ -5,6 +5,13 @@ void			debayer()
 	if(imagetype==IM_BAYER||imagetype==IM_BAYER_SEPARATE)
 	{
 		char bayer_idx[]={bayer[0]>>3, bayer[1]>>3, bayer[2]>>3, bayer[3]>>3};
+		for(int k=0;k<4;++k)
+		{
+			if(bayer_idx[k]==2)
+				bayer_idx[k]=0;
+			else if(bayer_idx[k]==0)
+				bayer_idx[k]=2;
+		}
 		int w2=iw;
 		iw>>=1, ih>>=1, image_size=iw*ih;
 		float *buffer=(float*)malloc(image_size*4*sizeof(float));
