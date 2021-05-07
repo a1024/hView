@@ -1140,7 +1140,7 @@ namespace		huff
 		printf("\n");
 #endif
 
-		delete[] histogram;
+		delete[] histogram, invP;
 		time_mark("cleanup");
 		return data_idx;
 	}
@@ -1240,12 +1240,12 @@ namespace		huff
 #endif
 		data.resize(hSize+(bitidx>>5)+((bitidx&31)!=0));
 		time_mark("resize");
-		if(bayer==0||bayer==1)
-		{
+		//if(bayer==0||bayer==1)
+		//{
 			delete[] temp;
 			b2=buffer;
 			time_mark("delete[] temp");
-		}
+		//}
 		return sizeof(HuffHeader)/sizeof(int);
 	}
 	int			pack_raw(const byte *buffer, int bw, int bh, int depth, int bayer, std::vector<int> &data)

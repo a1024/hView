@@ -1,6 +1,16 @@
 #include		"generic.h"
 #include		<stdio.h>
 static const char file[]=__FILE__;
+void			copy_to_clipboard(const char *a, int size)//size not including null terminator
+{
+	char *clipboard=(char*)LocalAlloc(LMEM_FIXED, (size+1)*sizeof(char));
+	memcpy(clipboard, a, (size+1)*sizeof(char));
+	clipboard[size]='\0';
+	OpenClipboard(ghWnd);
+	EmptyClipboard();
+	SetClipboardData(CF_OEMTEXT, (void*)clipboard);
+	CloseClipboard();
+}
 int				GUINPrint(HDC hDC, int x, int y, int w, int h, const char *a, ...)
 {
 	int length=vsprintf_s(g_buf, g_buf_size, a, (char*)(&a+1));

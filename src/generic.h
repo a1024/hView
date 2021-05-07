@@ -1,6 +1,7 @@
 #ifndef GENERIC_H
 #define GENERIC_H
 #include		<Windows.h>
+#include		<string>
 
 //error handling
 const int		e_msg_size=2048;
@@ -32,6 +33,8 @@ extern wchar_t	g_wbuf[g_buf_size];
 extern HWND		ghWnd;
 
 //win32
+void			copy_to_clipboard(const char *a, int size);
+inline void		copy_to_clipboard(std::string const &str){copy_to_clipboard(str.c_str(), str.size());}
 int				GUINPrint(HDC hDC, int x, int y, int w, int h, const char *a, ...);
 long			GUITPrint(HDC hDC, int x, int y, const char *a, ...);//return value: 0xHHHHWWWW		width=(short&)ret, height=((short*)&ret)[1]
 void			GUIPrint(HDC hDC, int x, int y, const char *a, ...);

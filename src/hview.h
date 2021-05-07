@@ -174,13 +174,15 @@ void			open_prev();
 //exposed archiver
 //int			compress_huff(const short *buffer, int bw, int bh, int depth, int bayer, std::vector<int> &data);
 //bool			decompress_huff(const byte *data, int bytesize, RequestedFormat format, void **buffer, int &bw, int &bh, int &depth, char *bayer_sh);
+void			print_histogram(int *histogram, int nlevels, int scanned_size, int *sort_idx, bool CDF=false);
 void			archiver_test();
 void			archiver_test2();
-void			print_histogram(int *histogram, int nlevels, int scanned_size);
+void			archiver_test3();
 
 //image operations
-void			separate_bayer();
-void			regroup_bayer();
+void			set_image(short *src, int width, int height, int depth, ImageType type);
+//void			separate_bayer();
+//void			regroup_bayer();
 void			debayer();
 
 void			applyFFT();

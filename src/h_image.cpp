@@ -1,5 +1,28 @@
 #include		"hview.h"
 #include		"generic.h"
+void			set_image(short *src, int width, int height, int depth, ImageType type)
+{
+	imagetype=type;
+	idepth=depth;
+	iw=width, ih=height, image_size=iw*ih;
+	float normal=1.f/(1<<depth);
+	switch(type)
+	{
+	case IM_GRAYSCALE:
+	case IM_BAYER:
+	case IM_BAYER_SEPARATE:
+		image=(float*)realloc(image, image_size<<2);
+		for(int k=0;k<image_size;++k)
+			image[k]=src[k]*normal;
+		break;
+	case IM_RGBA:
+		image=(float*)realloc(image, image_size<<4);//4 components/pixel
+		for(int k=0;k<image_size<<2;++k)
+			image[k]=src[k]*normal;
+		break;
+	}
+	InvalidateRect(ghWnd, nullptr, true);
+}
 void			debayer()
 {
 	if(imagetype==IM_BAYER||imagetype==IM_BAYER_SEPARATE)
@@ -265,7 +288,7 @@ void			calculate_histogram(const float *buffer, int imsize, int nlevels, int *hi
 	memset(histogram, 0, nlevels<<2);
 	for(int k=0;k<imsize;++k)
 	{
-		int level=buffer[k]*normal;
+		int level=int(buffer[k]*normal);
 		++histogram[level];
 	}
 }
@@ -304,7 +327,7 @@ void			cmd_histogram()
 
 	int *histogram=new int[nlevels];
 	calculate_histogram(image, image_size, nlevels, histogram);//imagetype
-	print_histogram(histogram, nlevels, image_size);
+	print_histogram(histogram, nlevels, image_size, nullptr);
 
 	console_pause();
 	console_end();

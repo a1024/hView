@@ -1,6 +1,7 @@
 #include		"generic.h"
 #include		"hview.h"
 #include		<string>
+#include		<sstream>
 #ifdef FFTW3_H
 #pragma			comment(lib, "libfftw3-3.lib")
 #endif
@@ -260,25 +261,65 @@ void			label_pixels_rgba(Point2d const &istart, Point2d const &iend)
 		hFont=(HFONT)SelectObject(ghMemDC, hFont);
 	}
 }
+void			copy_pixels(Point2d const &istart, Point2d const &iend)
+{
+	if(zoom>=16&&!FourierDomain)
+	{
+		std::stringstream LOL_1;
+		int maxlum=(1<<idepth)-1;
+		LOL_1<<"Depth: "<<idepth<<" bit\r\n";
+		if(imagetype==IM_RGBA)
+		{
+			for(int iy=maximum((int)floor(istart.y), 0), yend=minimum((int)floor(iend.y), ih);iy<yend;++iy)
+			{
+				for(int ix=maximum((int)floor(istart.x), 0), xend=minimum((int)floor(iend.x), iw);ix<xend;++ix)
+				{
+					int idx=(iw*iy+ix)<<2;
+					int lum_r=(int)floor(image[idx  ]*maxlum+0.5),
+						lum_g=(int)floor(image[idx+1]*maxlum+0.5),
+						lum_b=(int)floor(image[idx+2]*maxlum+0.5),
+						lum_a=(int)floor(image[idx+3]*maxlum+0.5);
+					sprintf_s(g_buf, g_buf_size, "    %4d %4d %4d %4d", lum_r, lum_g, lum_b, lum_a);
+					LOL_1<<g_buf;
+				}
+			}
+		}
+		else//bayer/grayscale
+		{
+			for(int iy=maximum((int)floor(istart.y), 0), yend=minimum((int)floor(iend.y), ih);iy<yend;++iy)
+			{
+				for(int ix=maximum((int)floor(istart.x), 0), xend=minimum((int)floor(iend.x), iw);ix<xend;++ix)
+				{
+					auto lum=(int)floor(image[iw*iy+ix]*maxlum+0.5);
+					sprintf_s(g_buf, g_buf_size, " %4d", lum);
+					LOL_1<<g_buf;
+				}
+				LOL_1<<"\r\n";
+			}
+		}
+		copy_to_clipboard(LOL_1.str());
+	}
+}
+Point2d s_start, s_end, istart, iend;
 void			render()
 {
 	memset(rgb, 0xFF, rgbn<<2);
 
 	if(image)
 	{
-		Point2d start(0, 0), end(w, h);
+		s_start.set(0, 0), s_end.set(w, h);
 #ifdef FFTW3_H
 		bool doubledim=FourierDomain&&imagetype==IM_RGBA;
 		if(doubledim)
 			iw<<=1, ih<<=1;
 #endif
-		start.screen2image();
-		end.screen2image();
-		start.clampImage();
-		end.clampImage();
-		Point2d istart=start, iend=end;
-		start.image2screen();
-		end.image2screen();
+		s_start.screen2image();
+		s_end.screen2image();
+		s_start.clampImage();
+		s_end.clampImage();
+		istart=s_start, iend=s_end;
+		s_start.image2screen();
+		s_end.image2screen();
 #ifdef FFTW3_H
 		if(doubledim)
 			iw>>=1, ih>>=1;
@@ -286,12 +327,12 @@ void			render()
 		{
 			if(imagetype==IM_GRAYSCALE)//1 plane
 			{
-				for(int ky=maximum((int)floor(start.y), 0), yend=minimum((int)floor(end.y), h);ky<yend;++ky)
+				for(int ky=maximum((int)floor(s_start.y), 0), yend=minimum((int)floor(s_end.y), h);ky<yend;++ky)
 				{
 					int iy=screen2image_y_int(ky);
 					if(iy<0||iy>=ih)
 						continue;
-					for(int kx=maximum((int)floor(start.x), 0), xend=minimum((int)floor(end.x), w);kx<xend;++kx)
+					for(int kx=maximum((int)floor(s_start.x), 0), xend=minimum((int)floor(s_end.x), w);kx<xend;++kx)
 					{
 						int ix=screen2image_x_int(kx);
 						if(ix<0||ix>=iw)
@@ -304,12 +345,12 @@ void			render()
 			}
 			else if(imagetype==IM_BAYER)//4 planes shown interleaved
 			{
-				for(int ky=maximum((int)floor(start.y), 0), yend=minimum((int)floor(end.y), h);ky<yend;++ky)
+				for(int ky=maximum((int)floor(s_start.y), 0), yend=minimum((int)floor(s_end.y), h);ky<yend;++ky)
 				{
 					int iy=screen2image_y_int(ky);
 					if(iy<0||iy>=ih)
 						continue;
-					for(int kx=maximum((int)floor(start.x), 0), xend=minimum((int)floor(end.x), w);kx<xend;++kx)
+					for(int kx=maximum((int)floor(s_start.x), 0), xend=minimum((int)floor(s_end.x), w);kx<xend;++kx)
 					{
 						int ix=screen2image_x_int(kx);
 						if(ix<0||ix>=iw)
@@ -322,12 +363,12 @@ void			render()
 			else if(imagetype==IM_BAYER_SEPARATE)//4 planes shown separately at half dimensions
 			{
 				int w2=iw>>1, h2=ih>>1;
-				for(int ky=maximum((int)floor(start.y), 0), yend=minimum((int)floor(end.y), h);ky<yend;++ky)
+				for(int ky=maximum((int)floor(s_start.y), 0), yend=minimum((int)floor(s_end.y), h);ky<yend;++ky)
 				{
 					int iy=screen2image_y_int(ky);
 					if(iy<0||iy>=ih)
 						continue;
-					for(int kx=maximum((int)floor(start.x), 0), xend=minimum((int)floor(end.x), w);kx<xend;++kx)
+					for(int kx=maximum((int)floor(s_start.x), 0), xend=minimum((int)floor(s_end.x), w);kx<xend;++kx)
 					{
 						int ix=screen2image_x_int(kx);
 						if(ix<0||ix>=iw)
@@ -343,12 +384,12 @@ void			render()
 			else if(imagetype==IM_RGBA)//4 planes shown separately at image dimensions
 			{
 				int w2=iw<<1, h2=ih<<1;
-				for(int ky=maximum((int)floor(start.y), 0), yend=minimum((int)floor(end.y), h);ky<yend;++ky)
+				for(int ky=maximum((int)floor(s_start.y), 0), yend=minimum((int)floor(s_end.y), h);ky<yend;++ky)
 				{
 					int iy=screen2image_y_int(ky);
 					if(iy<0||iy>=h2)
 						continue;
-					for(int kx=maximum((int)floor(start.x), 0), xend=minimum((int)floor(end.x), w);kx<xend;++kx)
+					for(int kx=maximum((int)floor(s_start.x), 0), xend=minimum((int)floor(s_end.x), w);kx<xend;++kx)
 					{
 						int ix=screen2image_x_int(kx);
 						if(ix<0||ix>=w2)
@@ -366,12 +407,12 @@ void			render()
 #endif
 		if(imagetype==IM_GRAYSCALE)
 		{
-			for(int ky=maximum((int)floor(start.y), 0), yend=minimum((int)floor(end.y), h);ky<yend;++ky)
+			for(int ky=maximum((int)floor(s_start.y), 0), yend=minimum((int)floor(s_end.y), h);ky<yend;++ky)
 			{
 				int iy=screen2image_y_int(ky);
 				if(iy<0||iy>=ih)
 					continue;
-				for(int kx=maximum((int)floor(start.x), 0), xend=minimum((int)floor(end.x), w);kx<xend;++kx)
+				for(int kx=maximum((int)floor(s_start.x), 0), xend=minimum((int)floor(s_end.x), w);kx<xend;++kx)
 				{
 					int ix=screen2image_x_int(kx);
 					if(ix<0||ix>=iw)
@@ -386,12 +427,12 @@ void			render()
 		}
 		else if(imagetype==IM_BAYER)//raw image
 		{
-			for(int ky=maximum((int)floor(start.y), 0), yend=minimum((int)floor(end.y), h);ky<yend;++ky)
+			for(int ky=maximum((int)floor(s_start.y), 0), yend=minimum((int)floor(s_end.y), h);ky<yend;++ky)
 			{
 				int iy=screen2image_y_int(ky);
 				if(iy<0||iy>=ih)
 					continue;
-				for(int kx=maximum((int)floor(start.x), 0), xend=minimum((int)floor(end.x), w);kx<xend;++kx)
+				for(int kx=maximum((int)floor(s_start.x), 0), xend=minimum((int)floor(s_end.x), w);kx<xend;++kx)
 				{
 					int ix=screen2image_x_int(kx);
 					if(ix<0||ix>=iw)
@@ -410,12 +451,12 @@ void			render()
 		else if(imagetype==IM_BAYER_SEPARATE)//raw image
 		{
 			int w2=iw>>1, h2=ih>>1;
-			for(int ky=maximum((int)floor(start.y), 0), yend=minimum((int)floor(end.y), h);ky<yend;++ky)
+			for(int ky=maximum((int)floor(s_start.y), 0), yend=minimum((int)floor(s_end.y), h);ky<yend;++ky)
 			{
 				int iy=screen2image_y_int(ky);
 				if(iy<0||iy>=ih)
 					continue;
-				for(int kx=maximum((int)floor(start.x), 0), xend=minimum((int)floor(end.x), w);kx<xend;++kx)
+				for(int kx=maximum((int)floor(s_start.x), 0), xend=minimum((int)floor(s_end.x), w);kx<xend;++kx)
 				{
 					int ix=screen2image_x_int(kx);
 					if(ix<0||ix>=iw)
@@ -434,12 +475,12 @@ void			render()
 		}
 		else if(imagetype==IM_RGBA)//ordinary image
 		{
-			for(int ky=maximum((int)floor(start.y), 0), yend=minimum((int)floor(end.y), h);ky<yend;++ky)
+			for(int ky=maximum((int)floor(s_start.y), 0), yend=minimum((int)floor(s_end.y), h);ky<yend;++ky)
 			{
 				int iy=screen2image_y_int(ky);
 				if(iy<0||iy>=ih)
 					continue;
-				for(int kx=maximum((int)floor(start.x), 0), xend=minimum((int)floor(end.x), w);kx<xend;++kx)
+				for(int kx=maximum((int)floor(s_start.x), 0), xend=minimum((int)floor(s_end.x), w);kx<xend;++kx)
 				{
 					int ix=screen2image_x_int(kx);
 					if(ix<0||ix>=iw)
@@ -609,7 +650,8 @@ long			__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long l
 			}
 			break;
 		case VK_SPACE:
-			archiver_test2();
+			archiver_test3();
+			//archiver_test2();
 			break;
 		case 'O'://open file
 			open_media();
@@ -625,9 +667,17 @@ long			__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long l
 			contrast_gain=1, contrast_offset=0;
 			render();
 			break;
-		case 'C'://center
-			center_image();
-			render();
+		case 'C':
+			if(kb[VK_CONTROL])//copy on-screen numbers
+			{
+				copy_pixels(istart, iend);
+				//messageboxa(ghWnd, "Information", "On-screen data was copied to clipboard");
+			}
+			else//center
+			{
+				center_image();
+				InvalidateRect(ghWnd, nullptr, true);
+			}
 			break;
 		case '1':
 			applyFFT();
