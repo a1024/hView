@@ -189,6 +189,7 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 	}
 
 	//on success
+	bitmode=false;
 	reset_FFTW_state();
 	workfolder=std::move(folder), filetitle=std::move(title);
 	SetWindowTextW(ghWnd, (wfn+L" - hView").c_str());

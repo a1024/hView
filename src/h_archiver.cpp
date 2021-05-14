@@ -1549,27 +1549,7 @@ void			ICER_IDWT_run(short *buffer, short *temp, const short *filter, int stride
 		buffer[stride*(count-1)]=l[nlo-1];
 		//buffer[stride*(count-1)]=l[nlo-1]+((d[nlo-1]+1)>>2);//d[nlo-1]==0
 }
-enum			ICER_FilterType
-{
-	ICER_FILTER_A,//up to 13bit image
-	ICER_FILTER_B,// 13bit
-	ICER_FILTER_C,//12bit
-	ICER_FILTER_D,// 13bit
-	ICER_FILTER_E,//12bit
-	ICER_FILTER_F,//12bit
-	ICER_FILTER_Q,// 13bit
-};
-const short ICER_filters[]=
-{//alphas, beta,	log2(denominator)	up to
-	0, 1, 1, 0,		2,//A
-	0, 2, 3, 2,		3,//B
-	-1, 4, 8, 6,	4,//C
-	0, 4, 5, 2,		4,//D
-	0, 3, 8, 6,		4,//E
-	0, 3, 9, 8,		4,//F
-	0, 1, 1, 1,		2,//Q
-};
-void			ICER_DWT1D(short *buffer, int count, ICER_FilterType filtertype, int nstages=0)
+void			ICER_DWT1D(short *buffer, int count, ICER_FilterType filtertype, int nstages)
 {
 	const short *filter=ICER_filters+5*filtertype;
 	int tsize=(count<<1)-(count>>1);
@@ -1582,7 +1562,7 @@ void			ICER_DWT1D(short *buffer, int count, ICER_FilterType filtertype, int nsta
 	}
 	delete[] temp;
 }
-void			ICER_IDWT1D(short *buffer, int count, ICER_FilterType filtertype, int nstages=0)
+void			ICER_IDWT1D(short *buffer, int count, ICER_FilterType filtertype, int nstages)
 {
 	const short *filter=ICER_filters+5*filtertype;
 
@@ -1602,7 +1582,7 @@ void			ICER_IDWT1D(short *buffer, int count, ICER_FilterType filtertype, int nst
 		ICER_IDWT_run(buffer, temp, filter, 1, sizes[it]);
 	delete[] sizes, temp;
 }
-void			ICER_DWT2D(short *buffer, int bw, int bh, ICER_FilterType filtertype, int nstages=0)
+void			ICER_DWT2D(short *buffer, int bw, int bh, ICER_FilterType filtertype, int nstages)
 {
 	const short *filter=ICER_filters+5*filtertype;
 	int tsize=maximum(bw, bh);
@@ -1624,7 +1604,7 @@ void			ICER_DWT2D(short *buffer, int bw, int bh, ICER_FilterType filtertype, int
 	}
 	delete[] temp;
 }
-void			ICER_IDWT2D(short *buffer, int bw, int bh, ICER_FilterType filtertype, int nstages=0)
+void			ICER_IDWT2D(short *buffer, int bw, int bh, ICER_FilterType filtertype, int nstages)
 {
 	const short *filter=ICER_filters+5*filtertype;
 
@@ -1665,6 +1645,15 @@ void			encode_zigzag(short *buffer, int imsize)
 		auto &symbol=buffer[k];
 		int neg=symbol<0;
 		symbol=abs(symbol+neg)<<1|neg;
+	}
+}
+void			decode_zigzag(short *buffer, int imsize)
+{
+	for(int k=0;k<imsize;++k)
+	{
+		auto &symbol=buffer[k];
+		int negative=symbol&1;
+		symbol=symbol>>1^-negative;
 	}
 }
 void			archiver_test3()
@@ -2150,4 +2139,337 @@ void			archiver_test3()
 	delete[] src;
 #endif
 	delete[] dst;
+}
+void			print_hex(const byte *buffer, int bytesize)
+{
+	for(int k=0;k<bytesize;++k)
+		printf("%02X-", (unsigned)buffer[k]);
+	printf("\n");
+}
+void			print_hex(const unsigned *buffer, int count)
+{
+	for(int k=0;k<count;++k)
+		printf("%08X-", buffer[k]);
+	printf("\n");
+}
+
+const int ac_logwindowbits=5,
+	ac_windowbits=1<<ac_logwindowbits,
+	ac_windowbitsmask=ac_windowbits-1,
+	ac_den=ac_windowbits+2,
+	ac_invden=(1<<16)/ac_den;
+void			encode_arithmetic(const short *buffer, int imsize, int depth, std::vector<int> &data)
+{
+	std::vector<std::vector<int>> planes(depth);
+	for(int kp=0;kp<depth;++kp)
+	{
+		auto &plane=planes[kp];
+
+		int history[ac_windowbits];
+		for(int k=0;k<ac_windowbits;++k)
+			history[k]=k&1;
+		int num=(ac_windowbits>>1)+1;
+		for(int kb=0;kb<imsize;)
+		{
+			long long start=0, end=0x100000000;
+			for(;kb<imsize;)
+			{
+				int bit=buffer[kb]>>kp&1;
+				long long middle=start+((end-start)*(ac_den-num)*ac_invden>>16);
+				long long s0=start, e0=end;
+				if(bit)
+					start=middle;
+				else
+					end=middle;
+
+				int &sieve=history[kb&ac_windowbitsmask];
+				num+=bit-sieve;
+				sieve=bit;
+
+				++kb;
+				if(e0-middle<=1||middle-s0<=1)
+					break;
+			}
+			plane.push_back((unsigned)start);
+		}
+	}
+	data.clear();
+	for(int k=0, size=depth;k<depth;++k)
+	{
+		size+=planes[k].size();
+		data.push_back(size);
+	}
+	for(int k=0;k<depth;++k)
+	{
+		auto &plane=planes[k];
+		data.insert(data.end(), plane.begin(), plane.end());
+	}
+}
+short*			decode_arithmetic(int *data, int imsize, int depth)
+{
+	short *dst=new short[imsize];
+	memset(dst, 0, imsize<<1);
+	
+	for(int kp=0;kp<depth;++kp)
+	{
+		int ncodes=data[kp];
+		auto plane=data+(kp?data[kp-1]:depth);
+
+		int history[ac_windowbits];
+		for(int k=0;k<ac_windowbits;++k)
+			history[k]=k&1;
+		int num=(ac_windowbits>>1)+1;
+		for(int kc=0, kb=0;kc<ncodes&&kb<imsize;++kc)
+		{
+			unsigned code=plane[kc];
+			long long start=0, end=0x100000000;
+			for(;kb<imsize;)
+			{
+				long long middle=start+((end-start)*(ac_den-num)*ac_invden>>16);
+				int bit=code>=middle;
+				long long s0=start, e0=end;
+				if(bit)
+					start=middle;
+				else
+					end=middle;
+
+				int &sieve=history[kb&ac_windowbitsmask];
+				num+=bit-sieve;
+				sieve=bit;
+
+				dst[kb]|=bit<<kp;
+				++kb;
+				if(e0-middle<=1||middle-s0<=1)
+					break;
+			}
+		}
+	}
+	return dst;
+}
+void			archiver_test4()
+{
+	console_start_good();
+#if 1
+	if(!image)
+	{
+		printf("Please open an image first\n");
+		console_pause();
+		console_end();
+		return;
+	}
+#if 0
+	int width=iw, height=ih;
+	int depth=idepth;
+	short *src=get_image();
+#define		HEAP_SRC2
+#else
+	int width=16, height=16;
+	int depth=12;
+	short src[]=
+	{
+		  411,  442,  462,  457,  441,  446,  464,  505,  500,  581,  800, 1074, 1195, 1288, 1398, 1519,
+		  409,  443,  433,  431,  426,  431,  450,  544,  568,  652,  896, 1134, 1202, 1310, 1394, 1428,
+		  415,  434,  406,  412,  423,  445,  496,  544,  603,  806, 1072, 1286, 1398, 1482, 1463, 1372,
+		  410,  402,  392,  419,  443,  467,  479,  580,  668,  918, 1241, 1386, 1468, 1520, 1458, 1637,
+		  390,  392,  422,  447,  464,  494,  542,  624,  836, 1173, 1410, 1520, 1472, 1523, 1717, 1893,
+		  395,  382,  424,  452,  483,  504,  584,  676, 1151, 1693, 1873, 1808, 1715, 1831, 1938, 1919,
+		  393,  383,  400,  451,  507,  543,  617, 1090, 2421, 2964, 2653, 2119, 1835, 1848, 1973, 1984,
+		  390,  393,  407,  455,  513,  574,  675, 2234, 3593, 3359, 2592, 1942, 1768, 1936, 1959, 1990,
+		  398,  396,  420,  490,  530,  611,  810, 2101, 2796, 2359, 1881, 1735, 1757, 1802, 1872, 1900,
+		  417,  450,  478,  493,  544,  603,  836, 1301, 1568, 1765, 1676, 1701, 1724, 1760, 1700, 1681,
+		  424,  474,  492,  501,  530,  562,  777, 1129, 1418, 1541, 1592, 1746, 1769, 1728, 1637, 1598,
+		  409,  433,  474,  502,  502,  570,  802, 1203, 1428, 1544, 1557, 1723, 1781, 1692, 1614, 1569,
+		  408,  434,  443,  460,  497,  574,  888, 1250, 1417, 1527, 1608, 1614, 1691, 1626, 1563, 1534,
+		  432,  434,  467,  476,  509,  629,  940, 1214, 1283, 1405, 1580, 1597, 1582, 1523, 1490, 1550,
+		  481,  484,  495,  517,  574,  733,  970, 1154, 1189, 1289, 1456, 1487, 1508, 1541, 1553, 1615,
+		  485,  491,  487,  545,  564,  815, 1056, 1167, 1270, 1343, 1416, 1482, 1528, 1544, 1596, 1675,
+		//0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+		//1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		//1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		//1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		//1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		//1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		//1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		//1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		//1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		//1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		//1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		//1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		//1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		//1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		//1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		//1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+	};
+#endif
+	int size=width*height;
+	std::vector<int> data;
+	encode_arithmetic(src, size, depth, data);
+	short *dst=decode_arithmetic(data.data(), size, depth);
+	bool valid=true;
+	for(int k=0;k<size;++k)
+	{
+		if(src[k]!=dst[k])
+		{
+			printf("Error at %d: %d=0x%X -> %d=0x%X\n", k, src[k], src[k], dst[k], dst[k]);
+			valid=false;
+			break;
+		}
+	}
+	if(valid)
+		printf("Decoding successful\n");
+	print_subimage(dst, width, height, 0, 0, 16, 16, 2);
+	set_image(dst, width, height, depth, imagetype);
+#ifdef HEAP_SRC2
+	delete[] src;
+#endif
+	delete[] dst;
+#endif
+#if 0
+	const byte msg[]={0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02};
+	//const byte msg[]={0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0x01, 0x20, 0x80};
+	const int size=sizeof(msg);
+	
+	printf("Source:\n");
+	print_hex(msg, size);
+
+	std::vector<unsigned> data;
+	int bitlen=size<<3;
+	const int logwindowbits=5,
+		windowbits=1<<logwindowbits,
+		windowbitsmask=windowbits-1,
+		den=windowbits+2,
+		invden=(1<<16)/den;
+	int num=(windowbits>>1)+1;
+	int history[windowbits];
+	for(int k=0;k<windowbits;++k)
+		history[k]=k&1;
+	//for(int k=0;k<(windowbits>>1);++k)
+	//	history[k]=1;
+	for(int kb=0;kb<bitlen;)
+	{
+		long long start=0, end=0x100000000;
+		for(;kb<bitlen;)
+		{
+			int bit=msg[kb>>3]>>(kb&7)&1;
+			long long middle=start+((end-start)*(den-num)*invden>>16);
+			long long s0=start, e0=end;
+			if(bit)
+				start=middle;
+			else
+				end=middle;
+
+			//printf("%d ", num);//
+			int &sieve=history[kb&windowbitsmask];
+			num+=bit-sieve;
+			sieve=bit;
+
+			//int hamming=0;
+			//for(int k=0;k<windowbits;++k)//
+			//	hamming+=history[k];//
+			//if(hamming+1!=num||!num||num==windowbits)
+			//	int LOL_1=0;
+
+			++kb;
+			if(e0-middle<=1||middle-s0<=1)
+				break;
+		}
+		data.push_back((unsigned)start);
+	}
+	//printf("\n");//
+	printf("Compressed data:\n");
+	print_hex(data.data(), data.size());
+	
+	std::vector<byte> dst;
+	num=(windowbits>>1)+1;
+	for(int k=0;k<windowbits;++k)
+		history[k]=k&1;
+	//for(int k=0;k<(windowbits>>1);++k)
+	//	history[k]=1;
+	//for(int k=windowbits>>1;k<windowbits;++k)
+	//	history[k]=0;
+	for(int kc=0, kb=0;kc<(int)data.size()&&kb<bitlen;++kc)
+	{
+		unsigned code=data[kc];
+		long long start=0, end=0x100000000;
+		for(;kb<bitlen;)
+		{
+			long long middle=start+((end-start)*(den-num)*invden>>16);
+			int bit=code>=middle;
+			long long s0=start, e0=end;
+			if(bit)
+				start=middle;
+			else
+				end=middle;
+
+			//printf("%d ", num);//
+			int &sieve=history[kb&windowbitsmask];
+			num+=bit-sieve;
+			sieve=bit;
+
+			if(kb>=(dst.size()<<3))
+				dst.push_back(0);
+			dst[kb>>3]|=bit<<(kb&7);
+			++kb;
+			if(e0-middle<=1||middle-s0<=1)
+				break;
+		}
+	}
+	printf("\n");//
+	printf("Uncompressed data:\n");
+	print_hex(dst.data(), dst.size());
+	
+/*	std::vector<unsigned> data;
+	int bitlen=size<<3;
+	int hamming=8;//TODO: calculate hamming weight
+	int pzeronum=bitlen-hamming+1, pzeroden=bitlen+1;//P(0)=num/den, P(1)=(den-num)/den
+	for(int kb=0;kb<bitlen;)
+	{
+		long long start=0, end=0x100000000;
+		for(;kb<bitlen;)
+		{
+			int bit=msg[kb>>3]>>(kb&7)&1;
+			++kb;
+			long long middle=start+(end-start)*pzeronum/pzeroden;
+			long long s0=start, e0=end;
+			if(bit)
+				start=middle;
+			else
+				end=middle;
+			if(e0-middle<=1||middle-s0<=1)
+				break;
+		}
+		data.push_back((unsigned)start);
+	}
+	printf("Compressed data:\n");
+	print_hex(data.data(), data.size());
+
+	std::vector<byte> dst;
+	for(int kc=0, kb=0;kc<(int)data.size()&&kb<bitlen;++kc)
+	{
+		unsigned code=data[kc];
+		long long start=0, end=0x100000000;
+		for(;kb<bitlen;)
+		{
+			//if(kb==6*8+4)//
+			//	int LOL_1=0;//
+			long long middle=start+(end-start)*pzeronum/pzeroden;
+			int bit=code>=middle;
+			long long s0=start, e0=end;
+			if(bit)
+				start=middle;
+			else
+				end=middle;
+			if(kb>=(dst.size()<<3))
+				dst.push_back(0);
+			dst[kb>>3]|=bit<<(kb&7);
+			++kb;
+			if(e0-middle<=1||middle-s0<=1)
+				break;
+		}
+	}
+	printf("Uncompressed data:\n");
+	print_hex(dst.data(), dst.size());//*/
+#endif
+	console_pause();
+	console_end();
 }

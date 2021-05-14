@@ -14,6 +14,9 @@ ImageType		imagetype=IM_RGBA;
 char			bayer[4]={};//shift ammounts for the 4 Bayer mosaic components, -1 for grayscale
 int				idepth=0;
 
+bool			bitmode=false;
+int				bitplane=0;
+
 bool			histOn=false;
 int				*histogram=nullptr, histmax=0;
 
@@ -405,7 +408,26 @@ void			render()
 		}//end Fourier domain
 		else
 #endif
-		if(imagetype==IM_GRAYSCALE)
+		if(bitmode)
+		{
+			int magitude=(1<<idepth)-1;
+			for(int ky=maximum((int)floor(s_start.y), 0), yend=minimum((int)floor(s_end.y), h);ky<yend;++ky)
+			{
+				int iy=screen2image_y_int(ky);
+				if(iy<0||iy>=ih)
+					continue;
+				for(int kx=maximum((int)floor(s_start.x), 0), xend=minimum((int)floor(s_end.x), w);kx<xend;++kx)
+				{
+					int ix=screen2image_x_int(kx);
+					if(ix<0||ix>=iw)
+						continue;
+					int lum=(int)floor(magitude*image[iw*iy+ix]+0.5);
+					rgb[w*ky+kx]=0xFF000000|-(lum>>bitplane&1);
+				}
+			}
+			label_pixels_raw(istart, iend);
+		}
+		else if(imagetype==IM_GRAYSCALE)
 		{
 			for(int ky=maximum((int)floor(s_start.y), 0), yend=minimum((int)floor(s_end.y), h);ky<yend;++ky)
 			{
@@ -624,8 +646,13 @@ long			__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long l
 				"Ctrl H: Cmd histogram\n"
 				"F/F11: Toggle fullscreen\n"
 #ifdef FFTW3_H
-				"1: Fourier transform\n"
+				"` (grave accent): toggle Fourier transform\n"
 #endif
+				"1~7: ICER lossless DWTs\n"
+				"Shift 1~7: inverse DWTs\n"
+				"\' (quote): Toggle bit mode\n"
+				"[: Previous bit plane\n"
+				"]: Next bit plane\n"
 				"F1: Shortcut keys\n"
 				"F2: File properties\n"
 				"X: Quit\n"
@@ -650,7 +677,8 @@ long			__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long l
 			}
 			break;
 		case VK_SPACE:
-			archiver_test3();
+			archiver_test4();
+			//archiver_test3();
 			//archiver_test2();
 			break;
 		case 'O'://open file
@@ -679,9 +707,47 @@ long			__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long l
 				InvalidateRect(ghWnd, nullptr, true);
 			}
 			break;
-		case '1':
+		case VK_OEM_7://quote key
+#ifdef FFTW3_H
+			if(!FourierDomain)
+#endif
+			if(imagetype==IM_GRAYSCALE)
+			{
+				bitmode=!bitmode;
+				bitplane=0;
+				InvalidateRect(ghWnd, nullptr, true);
+			}
+			break;
+		case VK_OEM_4://[ key
+			bitplane=(bitplane+1)%idepth;
+			InvalidateRect(ghWnd, nullptr, true);
+			break;
+		case VK_OEM_6://] key
+			bitplane=(bitplane-1+idepth)%idepth;
+			InvalidateRect(ghWnd, nullptr, true);
+			break;
+		case VK_OEM_3://tilda	Fourrier transform
 			applyFFT();
-			render();
+			InvalidateRect(ghWnd, nullptr, true);
+			break;
+		case '1':case '2':case '3':case '4':case '5':case '6':case '7'://discrete wavelet transforms
+			if(imagetype==IM_GRAYSCALE)
+			{
+				short *buffer=get_image();
+				if(kb[VK_SHIFT])
+				{
+					decode_zigzag(buffer, image_size);
+					ICER_IDWT2D(buffer, iw, ih, (ICER_FilterType)(ICER_FILTER_A+wParam-'1'));
+					set_image(buffer, iw, ih, idepth+1, IM_GRAYSCALE);
+				}
+				else
+				{
+					ICER_DWT2D(buffer, iw, ih, (ICER_FilterType)(ICER_FILTER_A+wParam-'1'));
+					encode_zigzag(buffer, image_size);
+					set_image(buffer, iw, ih, idepth-1, IM_GRAYSCALE);
+				}
+				delete[] buffer;
+			}
 			break;
 		case VK_OEM_PLUS:case VK_ADD:
 			contrast_gain*=contrast_delta;

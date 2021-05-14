@@ -1,11 +1,21 @@
 #include		"hview.h"
 #include		"generic.h"
+short*			get_image()//delete[] the returned buffer
+{
+	if(!image)
+		return nullptr;
+	short *buffer=new short[image_size];
+	int normal=1<<idepth;
+	for(int k=0;k<image_size;++k)
+		buffer[k]=(short)floor(image[k]*normal+0.5);
+	return buffer;
+}
 void			set_image(short *src, int width, int height, int depth, ImageType type)
 {
 	imagetype=type;
 	idepth=depth;
 	iw=width, ih=height, image_size=iw*ih;
-	float normal=1.f/(1<<depth);
+	float normal=1.f/((1<<depth)-1);
 	switch(type)
 	{
 	case IM_GRAYSCALE:

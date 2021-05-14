@@ -22,6 +22,9 @@ extern ImageType imagetype;
 extern char		bayer[4];
 extern int		idepth;
 
+extern bool		bitmode;
+extern int		bitplane;
+
 extern bool		histOn;
 extern int		*histogram, histmax;//size of 1<<idepth
 
@@ -175,11 +178,39 @@ void			open_prev();
 //int			compress_huff(const short *buffer, int bw, int bh, int depth, int bayer, std::vector<int> &data);
 //bool			decompress_huff(const byte *data, int bytesize, RequestedFormat format, void **buffer, int &bw, int &bh, int &depth, char *bayer_sh);
 void			print_histogram(int *histogram, int nlevels, int scanned_size, int *sort_idx, bool CDF=false);
+enum			ICER_FilterType
+{
+	ICER_FILTER_A,//up to 13bit image
+	ICER_FILTER_B,// 13bit
+	ICER_FILTER_C,//12bit
+	ICER_FILTER_D,// 13bit
+	ICER_FILTER_E,//12bit
+	ICER_FILTER_F,//12bit
+	ICER_FILTER_Q,// 13bit
+};
+const short ICER_filters[]=
+{//alphas, beta,	log2(denominator)	up to
+	0, 1, 1, 0,		2,//A
+	0, 2, 3, 2,		3,//B
+	-1, 4, 8, 6,	4,//C
+	0, 4, 5, 2,		4,//D
+	0, 3, 8, 6,		4,//E
+	0, 3, 9, 8,		4,//F
+	0, 1, 1, 1,		2,//Q
+};
+void			ICER_DWT1D(short *buffer, int count, ICER_FilterType filtertype, int nstages=0);
+void			ICER_IDWT1D(short *buffer, int count, ICER_FilterType filtertype, int nstages=0);
+void			ICER_DWT2D(short *buffer, int bw, int bh, ICER_FilterType filtertype, int nstages=0);
+void			ICER_IDWT2D(short *buffer, int bw, int bh, ICER_FilterType filtertype, int nstages=0);
+void			encode_zigzag(short *buffer, int imsize);
+void			decode_zigzag(short *buffer, int imsize);
 void			archiver_test();
 void			archiver_test2();
 void			archiver_test3();
+void			archiver_test4();
 
 //image operations
+short*			get_image();//delete[] the returned buffer
 void			set_image(short *src, int width, int height, int depth, ImageType type);
 //void			separate_bayer();
 //void			regroup_bayer();
