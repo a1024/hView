@@ -2140,6 +2140,7 @@ void			archiver_test3()
 #endif
 	delete[] dst;
 }
+
 void			print_hex(const byte *buffer, int bytesize)
 {
 	for(int k=0;k<bytesize;++k)
@@ -2174,9 +2175,11 @@ void			encode_arithmetic(const short *buffer, int imsize, int depth, std::vector
 			long long start=0, end=0x100000000;
 			for(;kb<imsize;)
 			{
-				int bit=buffer[kb]>>kp&1;
 				long long middle=start+((end-start)*(ac_den-num)*ac_invden>>16);
-				long long s0=start, e0=end;
+				if(end-middle<=1||middle-start<=1)
+					break;
+
+				int bit=buffer[kb]>>kp&1;
 				if(bit)
 					start=middle;
 				else
@@ -2187,8 +2190,8 @@ void			encode_arithmetic(const short *buffer, int imsize, int depth, std::vector
 				sieve=bit;
 
 				++kb;
-				if(e0-middle<=1||middle-s0<=1)
-					break;
+				//if(kp==2&&kb==60)
+				//	int LOL_1=0;
 			}
 			plane.push_back((unsigned)start);
 		}
@@ -2205,10 +2208,9 @@ void			encode_arithmetic(const short *buffer, int imsize, int depth, std::vector
 		data.insert(data.end(), plane.begin(), plane.end());
 	}
 }
-short*			decode_arithmetic(int *data, int imsize, int depth)
+void			decode_arithmetic(int *data, short *buffer, int imsize, int depth)
 {
-	short *dst=new short[imsize];
-	memset(dst, 0, imsize<<1);
+	memset(buffer, 0, imsize<<1);
 	
 	for(int kp=0;kp<depth;++kp)
 	{
@@ -2226,8 +2228,10 @@ short*			decode_arithmetic(int *data, int imsize, int depth)
 			for(;kb<imsize;)
 			{
 				long long middle=start+((end-start)*(ac_den-num)*ac_invden>>16);
+				if(end-middle<=1||middle-start<=1)
+					break;
+
 				int bit=code>=middle;
-				long long s0=start, e0=end;
 				if(bit)
 					start=middle;
 				else
@@ -2237,19 +2241,138 @@ short*			decode_arithmetic(int *data, int imsize, int depth)
 				num+=bit-sieve;
 				sieve=bit;
 
-				dst[kb]|=bit<<kp;
+				buffer[kb]|=bit<<kp;
 				++kb;
-				if(e0-middle<=1||middle-s0<=1)
-					break;
+				//if(kp==2&&kb==60)
+				//	int LOL_1=0;
 			}
 		}
 	}
-	return dst;
 }
+
+inline void		integerDCT8x8_step(__m128i *data)
+{
+	//https://stackoverflow.com/questions/18621167/dct-using-integer-only
+	//https://fgiesen.wordpress.com/2013/11/04/bink-2-2-integer-dct-design-part-1/
+	//stage 1
+	__m128i a[8];
+	a[0]=_mm_add_epi16(data[0], data[7]);
+	a[1]=_mm_add_epi16(data[1], data[6]);
+	a[2]=_mm_add_epi16(data[2], data[5]);
+	a[3]=_mm_add_epi16(data[3], data[4]);
+	a[4]=_mm_sub_epi16(data[0], data[7]);
+	a[5]=_mm_sub_epi16(data[1], data[6]);
+	a[6]=_mm_sub_epi16(data[2], data[5]);
+	a[7]=_mm_sub_epi16(data[3], data[4]);
+	
+	//even stage 2
+	__m128i b[8];
+	b[0]=_mm_add_epi16(a[0], a[3]);
+	b[1]=_mm_add_epi16(a[1], a[2]);
+	b[2]=_mm_sub_epi16(a[0], a[3]);
+	b[3]=_mm_sub_epi16(a[1], a[2]);
+	
+	//even stage 3
+	__m128i c[8];
+	c[0]=_mm_add_epi16(b[0], b[1]);
+	c[1]=_mm_sub_epi16(b[0], b[1]);
+	c[2]=_mm_add_epi16(_mm_add_epi16(b[2], _mm_srai_epi16(b[2], 2)), _mm_srai_epi16(b[3], 1));
+	c[3]=_mm_sub_epi16(_mm_sub_epi16(_mm_srai_epi16(b[2], 1), b[3]), _mm_srai_epi16(b[3], 2));
+
+	//odd stage 2
+	__m128i a4_4=_mm_srai_epi16(a[4], 2), a7_4=_mm_srai_epi16(a[7], 2);
+	b[4]=_mm_add_epi16(_mm_add_epi16(a7_4, a[4]), _mm_sub_epi16(a4_4, _mm_srai_epi16(a[4], 4)));
+	b[7]=_mm_add_epi16(_mm_sub_epi16(a4_4, a[7]), _mm_sub_epi16(_mm_srai_epi16(a[7], 4), a7_4));
+	b[5]=_mm_sub_epi16(_mm_add_epi16(a[5], a[6]), _mm_add_epi16(_mm_srai_epi16(a[6], 2), _mm_srai_epi16(a[6], 4)));
+	b[6]=_mm_add_epi16(_mm_sub_epi16(a[6], a[5]), _mm_add_epi16(_mm_srai_epi16(a[5], 2), _mm_srai_epi16(a[5], 4)));
+
+	//odd stage 3
+	c[4]=_mm_add_epi16(b[4], b[5]);
+	c[5]=_mm_sub_epi16(b[4], b[5]);
+	c[6]=_mm_add_epi16(b[6], b[7]);
+	c[7]=_mm_sub_epi16(b[6], b[7]);
+
+	//stage 4
+	data[0]=c[0];
+	data[1]=c[4];
+	data[2]=c[2];
+	data[3]=_mm_sub_epi16(c[5], c[7]);
+	data[4]=c[1];
+	data[5]=_mm_add_epi16(c[5], c[7]);
+	data[6]=c[3];
+	data[7]=c[6];
+	
+	//odd stage 4
+	//__m128i d4, d5, d6, d7;
+	//d4=c[4];
+	//d5=_mm_add_epi16(c[5], c[7]);
+	//d6=_mm_sub_epi16(c[5], c[7]);
+	//d7=c[6];
+	//
+	//permute/output
+	//o[0]=c[0], o[1]=d4, o[2]=c[2], o[3]=d6, o[4]=c[1], o[5]=d5, o[6]=c[3], o[7]=d7;
+}
+inline void		transpose8x8(__m128i *data)
+{
+	//https://stackoverflow.com/questions/2517584/transpose-for-8-registers-of-16-bit-elements-on-sse2-ssse3
+	__m128i a[8], b[8];
+	a[0]=_mm_unpacklo_epi16(data[0], data[1]);
+	a[1]=_mm_unpacklo_epi16(data[2], data[3]);
+	a[2]=_mm_unpacklo_epi16(data[4], data[5]);
+	a[3]=_mm_unpacklo_epi16(data[6], data[7]);
+	a[4]=_mm_unpackhi_epi16(data[0], data[1]);
+	a[5]=_mm_unpackhi_epi16(data[2], data[3]);
+	a[6]=_mm_unpackhi_epi16(data[4], data[5]);
+	a[7]=_mm_unpackhi_epi16(data[6], data[7]);
+
+	b[0]=_mm_unpacklo_epi32(a[0], a[1]);
+	b[1]=_mm_unpackhi_epi32(a[0], a[1]);
+	b[2]=_mm_unpacklo_epi32(a[2], a[3]);
+	b[3]=_mm_unpackhi_epi32(a[2], a[3]);
+	b[4]=_mm_unpacklo_epi32(a[4], a[5]);
+	b[5]=_mm_unpackhi_epi32(a[4], a[5]);
+	b[6]=_mm_unpacklo_epi32(a[6], a[7]);
+	b[7]=_mm_unpackhi_epi32(a[6], a[7]);
+
+	data[0]=_mm_unpacklo_epi64(b[0], b[2]);
+	data[1]=_mm_unpackhi_epi64(b[0], b[2]);
+	data[2]=_mm_unpacklo_epi64(b[1], b[3]);
+	data[3]=_mm_unpackhi_epi64(b[1], b[3]);
+	data[4]=_mm_unpacklo_epi64(b[4], b[6]);
+	data[5]=_mm_unpackhi_epi64(b[4], b[6]);
+	data[6]=_mm_unpacklo_epi64(b[5], b[7]);
+	data[7]=_mm_unpackhi_epi64(b[5], b[7]);
+}
+inline void		integerDCT8x8(short *buffer, int bw, int bh, int x, int y)
+{
+	__m128i data[8];
+	for(int k=0, k2=bw*y;k<8;++k, k2+=bw)
+		data[k]=_mm_loadu_si128((__m128i*)(buffer+k2));
+
+	integerDCT8x8_step(data);
+	transpose8x8(data);
+	integerDCT8x8_step(data);
+	transpose8x8(data);
+	//for(int k=0;k<8;++k)//divide by 8
+	//	data[k]=_mm_srli_epi16(data[k], 3);
+
+	for(int k=0, k2=bw*y;k<8;++k, k2+=bw)
+		_mm_storeu_si128((__m128i*)(buffer+k2), data[k]);
+
+	//short in[64];
+	//for(int k=0, k2=bw*y;k<8;++k, k2+=bw)
+	//	memcpy(in+(k<<3), buffer+k2, 8*sizeof(short));
+
+	//short i[8];
+	//for(int k=0, k2=0;k<8;++k, k2+=stride)
+	//	i[k]=buffer[k2];
+}
+
 void			archiver_test4()
 {
 	console_start_good();
 #if 1
+#if 0
 	if(!image)
 	{
 		printf("Please open an image first\n");
@@ -2257,32 +2380,74 @@ void			archiver_test4()
 		console_end();
 		return;
 	}
-#if 0
 	int width=iw, height=ih;
 	int depth=idepth;
+	int imsize=width*height;
 	short *src=get_image();
+	short *dst=new short[imsize];
 #define		HEAP_SRC2
 #else
-	int width=16, height=16;
-	int depth=12;
-	short src[]=
+	const int width=8, height=8, depth=4;
+	//const int width=16, height=16, depth=12;
+	const int imsize=width*height;
+	short src[imsize*3]=
 	{
-		  411,  442,  462,  457,  441,  446,  464,  505,  500,  581,  800, 1074, 1195, 1288, 1398, 1519,
-		  409,  443,  433,  431,  426,  431,  450,  544,  568,  652,  896, 1134, 1202, 1310, 1394, 1428,
-		  415,  434,  406,  412,  423,  445,  496,  544,  603,  806, 1072, 1286, 1398, 1482, 1463, 1372,
-		  410,  402,  392,  419,  443,  467,  479,  580,  668,  918, 1241, 1386, 1468, 1520, 1458, 1637,
-		  390,  392,  422,  447,  464,  494,  542,  624,  836, 1173, 1410, 1520, 1472, 1523, 1717, 1893,
-		  395,  382,  424,  452,  483,  504,  584,  676, 1151, 1693, 1873, 1808, 1715, 1831, 1938, 1919,
-		  393,  383,  400,  451,  507,  543,  617, 1090, 2421, 2964, 2653, 2119, 1835, 1848, 1973, 1984,
-		  390,  393,  407,  455,  513,  574,  675, 2234, 3593, 3359, 2592, 1942, 1768, 1936, 1959, 1990,
-		  398,  396,  420,  490,  530,  611,  810, 2101, 2796, 2359, 1881, 1735, 1757, 1802, 1872, 1900,
-		  417,  450,  478,  493,  544,  603,  836, 1301, 1568, 1765, 1676, 1701, 1724, 1760, 1700, 1681,
-		  424,  474,  492,  501,  530,  562,  777, 1129, 1418, 1541, 1592, 1746, 1769, 1728, 1637, 1598,
-		  409,  433,  474,  502,  502,  570,  802, 1203, 1428, 1544, 1557, 1723, 1781, 1692, 1614, 1569,
-		  408,  434,  443,  460,  497,  574,  888, 1250, 1417, 1527, 1608, 1614, 1691, 1626, 1563, 1534,
-		  432,  434,  467,  476,  509,  629,  940, 1214, 1283, 1405, 1580, 1597, 1582, 1523, 1490, 1550,
-		  481,  484,  495,  517,  574,  733,  970, 1154, 1189, 1289, 1456, 1487, 1508, 1541, 1553, 1615,
-		  485,  491,  487,  545,  564,  815, 1056, 1167, 1270, 1343, 1416, 1482, 1528, 1544, 1596, 1675,
+		//198, 200, 196, 196, 194, 186, 176, 159,
+		//197, 197, 194, 200, 195, 181, 168, 147,
+		//195, 192, 190, 201, 197, 179, 156, 138,
+		//197, 192, 192, 202, 194, 170, 144, 135,
+		//199, 195, 196, 200, 186, 155, 136, 138,
+		//200, 197, 197, 199, 179, 144, 131, 138,
+		//199, 197, 196, 197, 175, 140, 123, 132,
+		//198, 193, 191, 197, 182, 143, 124, 122,
+		//208, 203, 215, 208, 213, 202, 194, 192, 212, 211, 201, 202, 204, 202, 204, 215,
+		//199, 208, 215, 205, 204, 201, 203, 196, 209, 212, 203, 202, 212, 207, 217, 214,
+		//207, 226, 211, 202, 213, 218, 202, 205, 200, 205, 208, 213, 220, 217, 215, 215,
+		//212, 200, 213, 209, 223, 214, 216, 209, 209, 215, 224, 213, 223, 227, 227, 221,
+		//208, 214, 219, 204, 208, 206, 216, 216, 219, 222, 221, 226, 233, 229, 229, 218,
+		//207, 214, 217, 209, 211, 215, 203, 208, 226, 231, 227, 231, 239, 236, 231, 226,
+		//212, 206, 209, 218, 211, 214, 214, 224, 226, 233, 238, 238, 244, 244, 239, 232,
+		//213, 212, 215, 230, 218, 216, 220, 224, 235, 238, 242, 252, 248, 252, 250, 237,
+		//220, 217, 209, 218, 224, 212, 222, 227, 238, 241, 243, 249, 248, 251, 248, 241,
+		//218, 223, 215, 209, 222, 214, 220, 227, 237, 237, 245, 252, 252, 248, 252, 241,
+		//216, 217, 215, 220, 219, 226, 223, 226, 233, 236, 241, 245, 250, 252, 250, 240,
+		//215, 215, 216, 210, 215, 222, 232, 233, 237, 233, 237, 236, 239, 234, 239, 225,
+		//216, 219, 213, 214, 216, 227, 227, 223, 232, 234, 235, 237, 234, 234, 223, 228,
+		//223, 221, 222, 216, 219, 224, 225, 225, 231, 236, 239, 242, 232, 224, 222, 218,
+		//212, 221, 219, 216, 216, 215, 220, 227, 228, 247, 250, 249, 241, 241, 231, 221,
+		//225, 223, 217, 213, 214, 216, 209, 221, 230, 255, 252, 251, 250, 251, 236, 220,
+		//54, 61, 64, 68, 56, 52, 57, 69, 65, 69, 64, 49, 66, 67, 62, 69,
+		//76, 64, 66, 75, 66, 77, 79, 67, 67, 62, 65, 62, 62, 54, 79, 70,
+		//62, 60, 70, 47, 62, 62, 57, 74, 60, 74, 65, 69, 70, 70, 60, 66,
+		//74, 68, 42, 63, 72, 55, 73, 61, 73, 73, 66, 57, 67, 48, 56, 66,
+		//70, 68, 75, 68, 69, 59, 76, 64, 63, 49, 75, 68, 57, 58, 77, 61,
+		//64, 72, 58, 72, 57, 66, 59, 81, 67, 60, 64, 67, 66, 55, 66, 75,
+		//80, 64, 60, 55, 66, 59, 69, 63, 72, 62, 62, 72, 73, 61, 83, 64,
+		//63, 51, 72, 72, 57, 60, 83, 61, 62, 85, 67, 62, 55, 71, 60, 53,
+		//67, 63, 61, 73, 65, 66, 63, 66, 73, 60, 63, 50, 77, 66, 59, 63,
+		//69, 64, 78, 68, 60, 66, 72, 61, 75, 71, 66, 60, 56, 65, 66, 67,
+		//58, 70, 69, 76, 60, 61, 66, 66, 66, 80, 66, 64, 57, 53, 71, 66,
+		//74, 64, 53, 58, 75, 65, 79, 72, 63, 52, 66, 64, 71, 77, 68, 75,
+		//69, 60, 76, 83, 64, 57, 71, 64, 64, 64, 66, 64, 73, 52, 62, 60,
+		//64, 54, 69, 61, 59, 70, 61, 66, 65, 70, 70, 72, 70, 62, 59, 60,
+		//78, 76, 63, 69, 74, 71, 61, 45, 75, 70, 70, 63, 69, 66, 67, 69,
+		//66, 56, 68, 54, 75, 80, 80, 71, 66, 71, 71, 64, 62, 67, 67, 83,
+		//  411,  442,  462,  457,  441,  446,  464,  505,  500,  581,  800, 1074, 1195, 1288, 1398, 1519,
+		//  409,  443,  433,  431,  426,  431,  450,  544,  568,  652,  896, 1134, 1202, 1310, 1394, 1428,
+		//  415,  434,  406,  412,  423,  445,  496,  544,  603,  806, 1072, 1286, 1398, 1482, 1463, 1372,
+		//  410,  402,  392,  419,  443,  467,  479,  580,  668,  918, 1241, 1386, 1468, 1520, 1458, 1637,
+		//  390,  392,  422,  447,  464,  494,  542,  624,  836, 1173, 1410, 1520, 1472, 1523, 1717, 1893,
+		//  395,  382,  424,  452,  483,  504,  584,  676, 1151, 1693, 1873, 1808, 1715, 1831, 1938, 1919,
+		//  393,  383,  400,  451,  507,  543,  617, 1090, 2421, 2964, 2653, 2119, 1835, 1848, 1973, 1984,
+		//  390,  393,  407,  455,  513,  574,  675, 2234, 3593, 3359, 2592, 1942, 1768, 1936, 1959, 1990,
+		//  398,  396,  420,  490,  530,  611,  810, 2101, 2796, 2359, 1881, 1735, 1757, 1802, 1872, 1900,
+		//  417,  450,  478,  493,  544,  603,  836, 1301, 1568, 1765, 1676, 1701, 1724, 1760, 1700, 1681,
+		//  424,  474,  492,  501,  530,  562,  777, 1129, 1418, 1541, 1592, 1746, 1769, 1728, 1637, 1598,
+		//  409,  433,  474,  502,  502,  570,  802, 1203, 1428, 1544, 1557, 1723, 1781, 1692, 1614, 1569,
+		//  408,  434,  443,  460,  497,  574,  888, 1250, 1417, 1527, 1608, 1614, 1691, 1626, 1563, 1534,
+		//  432,  434,  467,  476,  509,  629,  940, 1214, 1283, 1405, 1580, 1597, 1582, 1523, 1490, 1550,
+		//  481,  484,  495,  517,  574,  733,  970, 1154, 1189, 1289, 1456, 1487, 1508, 1541, 1553, 1615,
+		//  485,  491,  487,  545,  564,  815, 1056, 1167, 1270, 1343, 1416, 1482, 1528, 1544, 1596, 1675,
 		//0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
 		//1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
 		//1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
@@ -2299,30 +2464,84 @@ void			archiver_test4()
 		//1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
 		//1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
 		//1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		//1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
 	};
+	short *dst=src+imsize;
 #endif
-	int size=width*height;
-	std::vector<int> data;
-	encode_arithmetic(src, size, depth, data);
-	short *dst=decode_arithmetic(data.data(), size, depth);
-	bool valid=true;
-	for(int k=0;k<size;++k)
+#if 1
+	//memset(src, 0, imsize*sizeof(short));
+	for(int ky=0;ky<height;++ky)
 	{
-		if(src[k]!=dst[k])
+		for(int kx=0;kx<width;++kx)
 		{
-			printf("Error at %d: %d=0x%X -> %d=0x%X\n", k, src[k], src[k], dst[k], dst[k]);
-			valid=false;
-			break;
+			int x=8-kx, y=ky+1;
+			int mag=64-x*x-y*y;
+			if(mag>=0)
+				//src[width*ky+kx]=(int)floor(31*sqrt((double)mag));
+				src[width*ky+kx]=(int)floor(sqrt((double)mag));
+			else
+				src[width*ky+kx]=0;
+
+			//src[width*ky+kx]=(kx&1)^(ky&1);
+
+			//src[width*ky+kx]=!kx&&!ky;
+		}
+	}
+	memcpy(dst, src, imsize*sizeof(short));
+	integerDCT8x8(dst, width, height, 0, 0);
+#endif
+#if 0
+	std::vector<int> data;
+	auto t1=time_ms();
+	//huff::compress_v5(src, width, height, depth, 'G'|'R'<<8|'B'<<16|'G'<<24, data);//27.274033ms
+	encode_arithmetic(src, imsize, depth, data);//308.837774ms
+	printf("Encode: %lfms\n", time_ms()-t1);
+	printf("Original size = %d bits\n", width*height*depth);
+	printf("Encoded size = %d bits\n", data.size()<<5);
+	t1=time_ms();
+	//dst=nullptr;//decompress calls realloc
+	//huff::decompress((byte*)data.data(), data.size()<<2, RF_I16_BAYER, (void**)&dst, width, height, depth, nullptr);//22.398665ms
+	decode_arithmetic(data.data(), dst, imsize, depth);//255.240717ms
+	printf("Decode: %lfms\n", time_ms()-t1);
+	bool valid=true;
+	for(int kp=0;kp<depth;++kp)
+	{
+		for(int k=0;k<imsize;++k)
+		{
+			if((src[k]>>kp&1)!=(dst[k]>>kp&1))
+			{
+				printf("Error bit %d at [%d](%d, %d):\n", kp, k, k%width, k/width);
+				printf("\t0x%04X=%d =\t", src[k], src[k]);
+				for(int kb=0;kb<16;++kb)
+					printf("%d", src[k]>>(15-kb)&1);
+				printf("\n");
+				printf("\t0x%04X=%d =\t", dst[k], dst[k]);
+				for(int kb=0;kb<16;++kb)
+					printf("%d", dst[k]>>(15-kb)&1);
+				printf("\n");
+				
+				//printf("Error bit %d at [%d](%d, %d):\n\t0x%04X=%d\n\t0x%04X=%d\n", kp, k, k%width, k/width, src[k], src[k], dst[k], dst[k]);
+				//printf("Error at %d: %d=0x%X -> %d=0x%X\n", k, src[k], src[k], dst[k], dst[k]);
+				valid=false;
+				break;
+			}
 		}
 	}
 	if(valid)
 		printf("Decoding successful\n");
 	print_subimage(dst, width, height, 0, 0, 16, 16, 2);
-	set_image(dst, width, height, depth, imagetype);
-#ifdef HEAP_SRC2
-	delete[] src;
 #endif
+#ifdef HEAP_SRC2
+	set_image(dst, width, height, depth, imagetype);
+	delete[] src;
 	delete[] dst;
+	//free(dst);
+#else
+	short *diff=dst+imsize;
+	for(int k=0;k<imsize;++k)
+		diff[k]=src[k]^dst[k];
+	set_image(src, width, height*3, depth, IM_GRAYSCALE);
+#endif
 #endif
 #if 0
 	const byte msg[]={0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02};

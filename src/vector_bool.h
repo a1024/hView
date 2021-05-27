@@ -25,7 +25,11 @@ struct			vector_bool//LSB-first: MSB {b31...b0} LSB, b0 is the 1st bit in bitstr
 	std::vector<int> data;
 	int bitSize;
 	vector_bool():bitSize(0){}//default constructor
+#if _MSC_VER<1700
+	vector_bool(vector_bool const &v):data(v.data), bitSize(v.bitSize){}
+#else
 	vector_bool(vector_bool const &v)=default;
+#endif
 	vector_bool(vector_bool &&v)NOEXCEPT
 	{
 		if(&v!=this)

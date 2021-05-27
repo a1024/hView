@@ -111,6 +111,11 @@ void			applyFFT()
 		{
 			fft_in_planes[kp]=(fftw_complex*)fftw_malloc(bytesize);
 			fft_out_planes[kp]=(fftw_complex*)fftw_malloc(bytesize);
+			if(!fft_in_planes[kp]||!fft_out_planes[kp])
+			{
+				reset_FFTW_state();
+				return;
+			}
 			fft_p[kp]=fftw_plan_dft_2d(fft_h, fft_w, fft_in_planes[kp], fft_out_planes[kp], FFTW_FORWARD, FFTW_ESTIMATE);
 			ifft_p[kp]=fftw_plan_dft_2d(fft_h, fft_w, fft_out_planes[kp], fft_in_planes[kp], FFTW_BACKWARD, FFTW_ESTIMATE);
 		}

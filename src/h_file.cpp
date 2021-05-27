@@ -99,10 +99,10 @@ void			get_extension(std::wstring const &filename, std::wstring &extension)
 }
 
 #if !defined __linux__
-#if _MSC_VER<1800
-#define	S_IFMT		00170000//octal
-#define	S_IFREG		 0100000
-#endif
+//#if _MSC_VER<1800
+//#define	S_IFMT		00170000//octal
+//#define	S_IFREG		 0100000
+//#endif
 #define	S_ISREG(m)	(((m)&S_IFMT)==S_IFREG)
 #endif
 int				file_is_readablea(const char *filename)//0: not readable, 1: regular file, 2: folder

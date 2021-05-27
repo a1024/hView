@@ -120,7 +120,7 @@ inline double	clamp01(double x)
 	return x;
 }
 const double
-	c_pi2_3=-0.5, s_pi2_3=sqrt(3)*0.5,
+	c_pi2_3=-0.5, s_pi2_3=sqrt(3.)*0.5,
 	c_pi4_3=-0.5, s_pi4_3=-s_pi2_3;
 inline int		polar2rgb(double mag, double angle)
 {
@@ -285,6 +285,7 @@ void			copy_pixels(Point2d const &istart, Point2d const &iend)
 					sprintf_s(g_buf, g_buf_size, "    %4d %4d %4d %4d", lum_r, lum_g, lum_b, lum_a);
 					LOL_1<<g_buf;
 				}
+				LOL_1<<"\r\n";
 			}
 		}
 		else//bayer/grayscale

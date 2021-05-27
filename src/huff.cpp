@@ -983,7 +983,7 @@ namespace		huff
 #endif
 
 		header->version=2+code_id;
-		int intsize=bitsize[code_id];
+		int intsize=(int)bitsize[code_id];
 		intsize=(intsize>>5)+((intsize&31)!=0);
 		int data_idx=data.size();
 		data.resize(data_idx+sizeof(HuffDataHeader)/sizeof(int)+intsize+1);//header invalidated
@@ -1792,7 +1792,8 @@ namespace		huff
 			break;
 		}
 		delete[] dst;
-		memcpy(bayer_sh, bayer_sh2, 4);
+		if(bayer_sh)
+			memcpy(bayer_sh, bayer_sh2, 4);
 		bw=header->width, bh=header->height, depth=floor_log2(header->nLevels);
 #ifdef DEBUG_ARCH
 		console_pause();
