@@ -19,7 +19,7 @@ enum			ImageType
 	IM_BAYER_SEPARATE,//stored same as bayer, channels are shown separately
 };
 extern ImageType imagetype;
-extern char		bayer[4];
+extern char		bayer[4];//shift ammounts for the 4 Bayer mosaic components, -1 for grayscale
 extern int		idepth;
 
 extern bool		bitmode;

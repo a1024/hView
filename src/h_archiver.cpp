@@ -6,6 +6,7 @@
 #include		<queue>
 #include		<stack>
 #include		<assert.h>
+//#include		<tmmintrin.h>
 const char		file[]=__FILE__;
 
 //#define		DEBUG_VEC_BOOL
@@ -2368,10 +2369,314 @@ inline void		integerDCT8x8(short *buffer, int bw, int bh, int x, int y)
 	//	i[k]=buffer[k2];
 }
 
+void			dwt2_1d_scale(float *even, float *odd, int halfsize, float ce, float co)
+{
+	int xrem=halfsize&3, xround=halfsize-xrem;
+	__m128 factor=_mm_set1_ps(ce);
+	for(int k=0;k<xround;k+=4)
+	{
+		__m128 val=_mm_loadu_ps(even+k);
+		val=_mm_mul_ps(val, factor);
+		_mm_storeu_ps(even+k, val);
+	}
+	for(int k=xround;k<halfsize;++k)
+		even[k]*=ce;
+	factor=_mm_set1_ps(co);
+	for(int k=0;k<xround;k+=4)
+	{
+		__m128 val=_mm_loadu_ps(odd+k);
+		val=_mm_mul_ps(val, factor);
+		_mm_storeu_ps(odd+k, val);
+	}
+	for(int k=xround;k<halfsize;++k)
+		odd[k]*=co;
+}
+void			dwt2_1d_predict_next(float *even, float *odd, int halfsize, float z10)
+{
+	--halfsize;
+	int xround=halfsize-(halfsize&3);
+	__m128 f0=_mm_set1_ps(z10);
+	for(int k=0;k<xround;k+=4)
+	{
+		__m128 vo=_mm_loadu_ps(odd+k);
+		__m128 ve0=_mm_loadu_ps(even+k);
+		__m128 ve1=_mm_loadu_ps(even+k+1);
+		ve0=_mm_add_ps(ve0, ve1);
+		ve0=_mm_mul_ps(ve0, f0);
+		ve0=_mm_add_ps(ve0, vo);
+		_mm_storeu_ps(odd+k, ve0);
+	}
+	for(int k=xround;k<halfsize;++k)
+		odd[k]+=z10*(even[k]+even[k+1]);
+	odd[halfsize]+=z10*(even[halfsize]+even[halfsize-1]);//symmetric padding at boundary
+}
+void			dwt2_1d_update_prev(float *even, float *odd, int halfsize, float z0m1)
+{
+	--halfsize;
+	__m128 f0=_mm_set1_ps(z0m1);
+	int k=halfsize-4;
+	for(;k>0;k-=4)
+	{
+		__m128 ve=_mm_loadu_ps(even+k);
+		__m128 vo0=_mm_loadu_ps(odd+k);
+		__m128 vo1=_mm_loadu_ps(odd+k-1);
+		vo0=_mm_add_ps(vo0, vo1);
+		vo0=_mm_mul_ps(vo0, f0);
+		vo0=_mm_add_ps(vo0, ve);
+		_mm_storeu_ps(even+k, vo0);
+	}
+	k+=4;
+	for(;k>0;--k)
+		even[k]+=z0m1*(odd[k]+odd[k-1]);
+	even[0]+=z0m1*(odd[0]+odd[1]);
+#if 0//X	should go backwards
+	--halfsize;
+	int xround=halfsize-(halfsize&3);
+	even[0]+=z0m1*(odd[0]+odd[1]);//symmetric padding at boundary
+	__m128 f0=_mm_set1_ps(z0m1);
+	for(int k=1;k<xround+1;k+=4)
+	{
+		__m128 ve=_mm_loadu_ps(even+k);
+		__m128 vo0=_mm_loadu_ps(odd+k);
+		__m128 vo1=_mm_loadu_ps(odd+k-1);
+		vo0=_mm_add_ps(vo0, vo1);
+		vo0=_mm_mul_ps(vo0, f0);
+		vo0=_mm_add_ps(vo0, ve);
+		_mm_storeu_ps(even+k, vo0);
+	}
+	for(int k=xround;k<halfsize;++k)
+		even[k]+=z0m1*(odd[k]+odd[k-1]);
+#endif
+}
+//void			dwt2_1d_d4(float *buffer, int halfsize)
+//{
+//	//'factring wavelet transforms into lifting steps' - page 16
+//	float coeff=-sqrt(3.f);
+//}
+void			dwt2_1d_9_7(float *even, float *odd, int halfsize)
+{
+	//'factring wavelet transforms into lifting steps' - page 19
+	//'a wavelet tour of signal processing - the sparse way' - page 376
+	const double alpha=-1.58613434342059, beta=-0.0529801185729, gamma=0.8829110755309, delta=0.4435068520439, zeta=1.1496043988602;
+	dwt2_1d_scale(even, odd, halfsize, zeta, 1/zeta);
+	dwt2_1d_predict_next(even, odd, halfsize, delta);
+	dwt2_1d_update_prev(even, odd, halfsize, gamma);
+	dwt2_1d_predict_next(even, odd, halfsize, beta);
+	dwt2_1d_update_prev(even, odd, halfsize, alpha);
+}
+void			dwt2_1d_9_7_inv(float *even, float *odd, int halfsize)
+{
+	const double alpha=-1.58613434342059, beta=-0.0529801185729, gamma=0.8829110755309, delta=0.4435068520439, zeta=1.1496043988602;
+	dwt2_1d_update_prev(even, odd, halfsize, -alpha);
+	dwt2_1d_predict_next(even, odd, halfsize, -beta);
+	dwt2_1d_update_prev(even, odd, halfsize, -gamma);
+	dwt2_1d_predict_next(even, odd, halfsize, -delta);
+	dwt2_1d_scale(even, odd, halfsize, 1/zeta, zeta);
+}
+void			dwt2_1d(float *buffer, int size, int stride, float *b2)//size is even
+{
+	int halfsize=size>>1;
+	float *even=b2+halfsize, *odd=b2;
+	
+	for(int k=0, ks=0;k<halfsize;++k, ks+=stride<<1)//lazy wavelet: split into even & odd
+	{
+		even[k]=buffer[ks];
+		odd[k]=buffer[ks+stride];
+	}
+
+	dwt2_1d_9_7(even, odd, halfsize);
+
+	for(int k=0, ks=0;k<size;++k, ks+=stride)
+		buffer[ks]=b2[k];
+#if 0
+	if(!inv)
+	{
+		for(int k=0, ks=0;k<halfsize;++k, ks+=stride<<1)//lazy wavelet: split into even & odd
+		{
+			even[k]=buffer[ks];
+			odd[k]=buffer[ks+stride];
+		}
+		dwt2_1d_9_7(even, odd, halfsize);
+		for(int k=0, ks=0;k<size;++k, ks+=stride)
+			buffer[ks]=b2[k];
+	}
+	else
+	{
+		for(int k=0, ks=0;k<size;++k, ks+=stride)
+			b2[k]=buffer[ks];
+		dwt2_1d_9_7_inv(even, odd, halfsize);
+		for(int k=0, ks=0;k<halfsize;++k, ks+=stride<<1)//inv lazy wavelet: join even & odd
+		{
+			buffer[ks]=even[k];
+			buffer[ks+stride]=odd[k];
+		}
+	}
+#endif
+#if 0//size divisible by 8, temp: size + padsize * 4
+	const int padsize=1;//on both ends
+	int halfsize=size>>1;
+	float *even=b2+padsize, *odd=b2+halfsize+padsize*3;
+	for(int k=0, ks=0;k<size;k+=2, ks+=stride<<1)//lazy wavelet: split into even & odd
+	{
+		even[k>>1]=buffer[ks];
+		odd[k>>1]=buffer[ks+stride];
+	}
+	even[-1]=even[1];//symmetric padding
+	even[halfsize]=even[halfsize-2];
+	odd[-1]=odd[1];
+	odd[halfsize]=odd[halfsize-2];
+
+	dwt2_1d_9_7(b2, halfsize);
+	//dwt2_1d_d4(b2, halfsize);
+
+	for(int k=0, ks=0;k<size;k+=2, ks+=stride<<1)//inv lazy wavelet: join even & odd
+	{
+		buffer[ks]=even[k>>1];
+		buffer[ks+stride]=odd[k>>1];
+	}
+#endif
+}
+void			dwt2_1d_inv(float *buffer, int size, int stride, float *b2)//size is even
+{
+	int halfsize=size>>1;
+	float *even=b2+halfsize, *odd=b2;
+
+	for(int k=0, ks=0;k<size;++k, ks+=stride)
+		b2[k]=buffer[ks];
+
+	dwt2_1d_9_7_inv(even, odd, halfsize);
+
+	for(int k=0, ks=0;k<halfsize;++k, ks+=stride<<1)//inv lazy wavelet: join even & odd
+	{
+		buffer[ks]=even[k];
+		buffer[ks+stride]=odd[k];
+	}
+}
+void			dwt2_2d(float *buffer, int bw, int bh, int nstages)
+{
+	int tsize=maximum(bw, bh);
+	float *temp=new float[tsize];
+	for(int w2=bw, h2=bh, it=0;w2>=3&&h2>=3&&(!nstages||it<nstages);++it)
+	{
+		for(int ky=0;ky<h2;++ky)//horizontal DWT
+			dwt2_1d(buffer+bw*ky, w2, 1, temp);
+
+		for(int kx=0;kx<w2;++kx)//vertical DWT
+			dwt2_1d(buffer+kx, h2, bw, temp);
+
+		w2-=w2>>1;//w=ceil(w/2)
+		h2-=h2>>1;//h=ceil(h/2)
+	}
+	delete[] temp;
+}
+void			dwt2_2d_inv(float *buffer, int bw, int bh, int nstages)
+{
+	int lw=floor_log2(bw), lh=floor_log2(bh);
+	short *sizes=new short[minimum(lw, lh)<<1];
+	int nsizes=0;
+	for(int w2=bw, h2=bh;w2>=3&&h2>=3&&(!nstages||nsizes<nstages);++nsizes)//calculate dimensions of each stage
+	{
+		sizes[nsizes<<1]=w2;
+		sizes[(nsizes<<1)+1]=h2;
+		w2-=w2>>1;//w=ceil(w/2)
+		h2-=h2>>1;//h=ceil(h/2)
+	}
+
+	int tsize=maximum(bw, bh);
+	float *temp=new float[tsize];
+	for(int it=nsizes-1;it>=0;--it)
+	{
+		int w2=sizes[it<<1], h2=sizes[(it<<1)+1];
+
+		for(int kx=0;kx<w2;++kx)//vertical IDWT
+			dwt2_1d_inv(buffer+kx, h2, bw, temp);
+
+		for(int ky=0;ky<h2;++ky)//horizontal IDWT
+			dwt2_1d_inv(buffer+bw*ky, w2, 1, temp);
+	}
+	delete[] sizes, temp;
+}
+
+void			print_subimage(float *buffer, int bw, int bh, int x0, int y0, int dx, int dy, int chars, int decimals)
+{
+	for(int ky=0;ky<dy;++ky)
+	{
+		for(int kx=0;kx<dx;++kx)
+			printf("%*.*f  ", chars, decimals, buffer[bw*(y0+ky)+x0+kx]);
+			//printf("%10.5f  ", buffer[bw*(y0+ky)+x0+kx]);
+		printf("\n");
+	}
+	printf("\n");
+}
+
+int				count_pot(int x)
+{
+	for(int k=0;k<32;++k)
+		if(x>>k&1)
+			return k;
+	return -1;
+}
 void			archiver_test4()
 {
-	console_start_good();
+	//console_start_good();
 #if 1
+	static bool temp=false;
+	int pw=count_pot(iw), ph=count_pot(ih);
+	int pot_count=minimum(pw, ph);
+	if(temp=!temp)
+		dwt2_2d(image, iw, ih, pot_count);
+	else
+		dwt2_2d_inv(image, iw, ih, pot_count);
+	render();
+#endif
+#if 0
+	int bw=16, bh=16;
+	float src[]=
+	{
+		855,  820,  817,  797,  825,  828,  843,  832,  828,  892, 2088, 2211, 2218, 2220, 2209, 2146,
+		830,  832,  830,  813,  846,  805,  820,  844,  843,  956, 2222, 2268, 2179, 2164, 2269, 2207,
+		829,  784,  808,  824,  837,  790,  828,  840,  828, 1016, 2269, 2255, 2163, 2225, 2297, 2147,
+		802,  833,  813,  836,  817,  835,  814,  828,  796, 1193, 2289, 2195, 2215, 2278, 2262, 2211,
+		793,  821,  854,  860,  836,  799,  839,  830,  845, 1413, 2273, 2238, 2226, 2288, 2291, 2346,
+		805,  835,  850,  829,  821,  832,  805,  812,  812, 1500, 2272, 2164, 2228, 2302, 2387, 2534,
+		827,  838,  849,  792,  805,  831,  833,  831,  805, 1643, 2335, 2249, 2291, 2295, 2472, 2618,
+		811,  841,  833,  836,  820,  839,  812,  838,  807, 1783, 2307, 2296, 2347, 2315, 2522, 2604,
+		805,  843,  816,  823,  810,  801,  846,  840,  827, 1955, 2325, 2322, 2312, 2407, 2516, 2577,
+		826,  818,  784,  828,  825,  820,  823,  840,  838, 2055, 2300, 2368, 2364, 2417, 2567, 2532,
+		829,  803,  807,  794,  809,  806,  837,  837,  847, 2112, 2290, 2356, 2404, 2583, 2633, 2603,
+		854,  834,  810,  822,  819,  833,  820,  844,  906, 2235, 2322, 2306, 2409, 2579, 2621, 2488,
+		809,  816,  801,  810,  781,  840,  828,  832, 1071, 2319, 2366, 2302, 2422, 2573, 2515, 2508,
+		810,  814,  821,  817,  815,  816,  831,  798, 1202, 2303, 2289, 2360, 2451, 2611, 2507, 2525,
+		792,  840,  813,  829,  856,  839,  808,  777, 1396, 2339, 2334, 2406, 2436, 2595, 2497, 2499,
+		815,  810,  800,  824,  821,  830,  839,  823, 1533, 2347, 2315, 2402, 2536, 2495, 2540, 2531,
+		//1, 1, 1, 1, 1, 1, 1, 1,
+		//1, 1, 1, 2, 1, 1, 1, 1,
+		//1, 1, 1, 1, 1, 1, 1, 1,
+		//1, 1, 1, 1, 1, 1, 1, 1,
+		//1, 1, 1, 1, 1, 1, 1, 1,
+		//1, 1, 1, 1, 1, 1, 1, 1,
+		//1, 1, 1, 1, 1, 1, 1, 1,
+		//1, 1, 1, 1, 1, 1, 1, 1,
+	};
+
+	//int chars=10, decimals=5;
+	int chars=5, decimals=2;
+	//print_subimage(src, bw, bh, 0, 0, bw, 1, chars, decimals);
+	//dwt2_1d(src, bw, 1, src+4);
+	//print_subimage(src, bw, bh, 0, 0, bw, 1, chars, decimals);
+	//dwt2_1d_inv(src, bw, 1, src+4);
+	//print_subimage(src, bw, bh, 0, 0, bw, 1, chars, decimals);
+
+	print_subimage(src, bw, bh, 0, 0, bw, bh, chars, decimals);
+	dwt2_2d(src, bw, bh, 0);
+	print_subimage(src, bw, bh, 0, 0, bw, bh, chars, decimals);
+	dwt2_2d_inv(src, bw, bh, 0);
+	print_subimage(src, bw, bh, 0, 0, bw, bh, chars, decimals);
+
+	//dwt2_2d(image, iw, ih, 1);
+	//dwt2_2d_inv(image, iw, ih, 1);
+#endif
+#if 0
 #if 0
 	if(!image)
 	{
@@ -2689,6 +2994,6 @@ void			archiver_test4()
 	printf("Uncompressed data:\n");
 	print_hex(dst.data(), dst.size());//*/
 #endif
-	console_pause();
-	console_end();
+	//console_pause();
+	//console_end();
 }

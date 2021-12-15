@@ -64,6 +64,39 @@ void			debayer()
 		}
 		free(image);
 		image=buffer;
+		imagetype=IM_RGBA;
+	}
+	else if(imagetype==IM_RGBA)
+	{
+		bayer[0]=8, bayer[1]=0, bayer[2]=16, bayer[3]=8;
+		char bayer_idx[]={bayer[0]>>3, bayer[1]>>3, bayer[2]>>3, bayer[3]>>3};
+		for(int k=0;k<4;++k)
+		{
+			if(bayer_idx[k]==2)
+				bayer_idx[k]=0;
+			else if(bayer_idx[k]==0)
+				bayer_idx[k]=2;
+		}
+		int w_2=iw, h_2=ih;
+		iw<<=1, ih<<=1, image_size=iw*ih;
+		float *buffer=(float*)malloc(image_size*sizeof(float));
+		memset(buffer, 0, image_size*sizeof(float));
+		for(int ky=0;ky<h_2;++ky)
+		{
+			for(int kx=0;kx<w_2;++kx)
+			{
+				int idx=(w_2*ky+kx)<<2;
+				//buffer[idx+3]=1;//alpha
+				buffer[iw* (ky<<1)   +(kx<<1)  ]+=image[idx+bayer_idx[0]];
+				buffer[iw* (ky<<1)   +(kx<<1)+1]+=image[idx+bayer_idx[1]];
+				buffer[iw*((ky<<1)+1)+(kx<<1)  ]+=image[idx+bayer_idx[2]];
+				buffer[iw*((ky<<1)+1)+(kx<<1)+1]+=image[idx+bayer_idx[3]];
+				//buffer[idx+1]*=0.5;//half green
+			}
+		}
+		free(image);
+		image=buffer;
+		imagetype=IM_BAYER;
 	}
 }
 

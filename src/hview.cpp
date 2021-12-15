@@ -82,6 +82,17 @@ char			kb[256]={};
 std::wstring	workfolder,//ends with slash
 				filetitle;
 
+bool			mouse_captured=false;
+void			mouse_capture()
+{
+	if(!mouse_captured)
+		SetCapture(ghWnd), mouse_captured=true;
+}
+void			mouse_release()
+{
+	if(mouse_captured)
+		ReleaseCapture(), mouse_captured=false;
+}
 void			center_image()
 {
 	int wndw=w, wndh=h-17;
@@ -605,9 +616,11 @@ long			__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long l
 	case WM_LBUTTONDOWN:
 		start_mx=(short&)lParam, start_my=((short*)&lParam)[1];//client coordinates
 		drag=DRAG_IMAGE;
+		mouse_capture();
 		break;
 	case WM_LBUTTONUP:
 		drag=DRAG_NONE;
+		mouse_release();
 		break;
 	case WM_MOUSEWHEEL:
 		{
@@ -643,6 +656,7 @@ long			__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long l
 				"+/-: Adjust brightness\n"
 				"B: Split/join Bayer mosaic\n"
 				"Ctrl B: Debayer\n"
+				"G: Toggle between Bayer and grayscale\n"
 				"H: Histogram\n"
 				"Ctrl H: Cmd histogram\n"
 				"F/F11: Toggle fullscreen\n"
@@ -666,15 +680,38 @@ long			__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long l
 				long filesize=file_sizew((workfolder+filetitle).c_str());
 				long long bitsize=iw*ih*idepth;
 				double MBsize=(double)bitsize/(8*1024*1024);
-				messageboxa(ghWnd, "Properties",
-					"Width: %d\n"
-					"Height: %d\n"
-					"Depth: %d bit/channel\n"
-					"File size: %d bytes = %.2lf KB\n"
-					"Uncompressed size: %lld bits = %.2lf MB\n",
-					iw, ih, idepth,
-					filesize, (double)filesize/1024,
-					bitsize, MBsize);
+				if(imagetype==IM_BAYER||imagetype==IM_BAYER_SEPARATE)
+				{
+					char labels[]="BGRA";
+					//char labels[]="RGB";
+					//int c='B'<<16|'G'<<8|'R';
+					messageboxa(ghWnd, "Properties",
+						"Width: %d\n"
+						"Height: %d\n"
+						"Depth: %d bit/channel\n"
+						"Bayer mosaic type:\n"
+						"\t%c%c\n"
+						"\t%c%c\n"
+						"File size: %d bytes = %.2lf KB\n"
+						"Uncompressed size: %lld bits = %.2lf MB\n",
+						iw, ih, idepth,
+						labels[bayer[0]>>3], labels[bayer[1]>>3],
+						labels[bayer[2]>>3], labels[bayer[3]>>3],
+						filesize, (double)filesize/1024,
+						bitsize, MBsize);
+				}
+				else
+				{
+					messageboxa(ghWnd, "Properties",
+						"Width: %d\n"
+						"Height: %d\n"
+						"Depth: %d bit/channel\n"
+						"File size: %d bytes = %.2lf KB\n"
+						"Uncompressed size: %lld bits = %.2lf MB\n",
+						iw, ih, idepth,
+						filesize, (double)filesize/1024,
+						bitsize, MBsize);
+				}
 			}
 			break;
 		case VK_SPACE:
@@ -762,7 +799,6 @@ long			__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long l
 			if(kb[VK_CONTROL])//collapse Bayer mosaic
 			{
 				debayer();
-				imagetype=IM_RGBA;
 				render();
 			}
 			else
@@ -780,6 +816,13 @@ long			__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long l
 					render();
 				}
 			}
+			break;
+		case 'G':
+			if(imagetype==IM_BAYER||imagetype==IM_BAYER_SEPARATE)
+				imagetype=IM_GRAYSCALE;
+			else if(imagetype==IM_GRAYSCALE)
+				imagetype=IM_BAYER;
+			render();
 			break;
 		case 'H'://histogram
 			if(kb[VK_CONTROL])
