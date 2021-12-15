@@ -14,8 +14,8 @@ ImageType		imagetype=IM_RGBA;
 char			bayer[4]={};//shift ammounts for the 4 Bayer mosaic components, -1 for grayscale
 int				idepth=0;
 
-bool			bitmode=false;
-int				bitplane=0;
+bool			bitmode=false;//draw standalone bitplane
+int				bitplane=0;//see bitmode
 
 bool			histOn=false;
 int				*histogram=nullptr, histmax=0;
@@ -865,6 +865,18 @@ long			__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long l
 	}
 	if(image)
 	{
+		const char *imtypestr="IM_INVALID";
+		switch(imagetype)
+		{
+		case IM_UNINITIALIZED:	imtypestr="IM_UNINITIALIZED";break;
+		case IM_GRAYSCALE:		imtypestr="IM_GRAYSCALE";break;
+		case IM_RGBA:			imtypestr="IM_RGBA";break;//4 floats per pixel (quad width)
+		case IM_BAYER:			imtypestr="IM_BAYER";break;
+		case IM_BAYER_SEPARATE:	imtypestr="IM_BAYER_SEPARATE";break;//stored same as bayer, channels are shown separately
+		}
+		static char bitinfo[100]={};
+		if(bitmode)
+			sprintf_s(bitinfo, 100, ", bit %d", bitplane);
 		int xpos=0, ypos=h-16;
 		int imx=screen2image_x_int(mx), imy=screen2image_y_int(my);
 		bool mouseinimage=imx>=0&&imx<iw&&imy>=0&&imy<ih;
@@ -883,7 +895,7 @@ long			__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long l
 					imy=imy<<1|iy2;
 				}
 				float lum=image[iw*imy+imx];
-				GUIPrint(ghDC, xpos, ypos, "%dx%d, x%g, (%d, %d): Lum=%.6f = %d/%d, contr=%.2lf", iw, ih, zoom, imx, imy, lum, (int)(maxlum*lum), maxlum, contrast_gain);
+				GUIPrint(ghDC, xpos, ypos, "%dx%d, x%g, (%d, %d): Lum=%.6f = %d/%d, contr=%.2lf, %s%s", iw, ih, zoom, imx, imy, lum, (int)(maxlum*lum), maxlum, contrast_gain, imtypestr, bitmode?bitinfo:"");
 
 				//Color16 colorAtMouse;
 				//colorAtMouse.color=(u64)(0xFFFF*image[iw*imy+imx])<<(bayer[(imy&1)<<1|imx&1]<<1);
@@ -893,13 +905,13 @@ long			__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long l
 			{
 				int idx=(iw*imy+imx)<<2;
 				float red=image[idx], green=image[idx+1], blue=image[idx+2], alpha=image[idx+3];
-				GUIPrint(ghDC, xpos, ypos, "%dx%d, x%g, (%d, %d): RGBA=(%.4f, %.4f, %.4f, %.4f) = (%d, %d, %d, %d)/%d, contr=%.2lf", iw, ih, zoom, imx, imy, red, green, blue, alpha, (int)(maxlum*red), (int)(maxlum*green), (int)(maxlum*blue), (int)(maxlum*alpha), maxlum, contrast_gain);
+				GUIPrint(ghDC, xpos, ypos, "%dx%d, x%g, (%d, %d): RGBA=(%.4f, %.4f, %.4f, %.4f) = (%d, %d, %d, %d)/%d, contr=%.2lf, %s%s", iw, ih, zoom, imx, imy, red, green, blue, alpha, (int)(maxlum*red), (int)(maxlum*green), (int)(maxlum*blue), (int)(maxlum*alpha), maxlum, contrast_gain, imtypestr, bitmode?bitinfo:"");
 			}
 			else//unreachable
-				GUIPrint(ghDC, xpos, ypos, "%dx%d, x%g, (%d, %d) INVALID STATE", iw, ih, zoom, imx, imy);
+				GUIPrint(ghDC, xpos, ypos, "%dx%d, x%g, (%d, %d) INVALID STATE, %s%s", iw, ih, zoom, imx, imy, imtypestr, bitmode?bitinfo:"");
 		}
 		else
-			GUIPrint(ghDC, xpos, ypos, "%dx%d, x%g, (%d, %d)", iw, ih, zoom, imx, imy);
+			GUIPrint(ghDC, xpos, ypos, "%dx%d, x%g, (%d, %d), %s%s", iw, ih, zoom, imx, imy, imtypestr, bitmode?bitinfo:"");
 	}
 	return DefWindowProcA(hWnd, message, wParam, lParam);
 }
