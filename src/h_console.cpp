@@ -62,7 +62,7 @@ void			console_pause()
 {
 	system("pause");
 }
-void			console_buffer_size(int x, int y)
+void			console_buffer_size(short x, short y)
 {
 	COORD coord={x, y};
 	_SMALL_RECT Rect={0, 0, x-1, y-1};

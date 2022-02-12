@@ -110,7 +110,7 @@ struct			vector_bool//LSB-first: MSB {b31...b0} LSB, b0 is the 1st bit in bitstr
 		//	int LOL_1=0;
 		//++counter;
 
-		int unitCount=v.data.size();
+		size_t unitCount=v.data.size();
 		//int floorUnitCount=v.bitSize>>LBPU;
 		if(bitOffset>0&&bitOffset<BPU_MASK+1)
 		{
@@ -135,7 +135,7 @@ struct			vector_bool//LSB-first: MSB {b31...b0} LSB, b0 is the 1st bit in bitstr
 	void set_size_factor(int log_unit_factor)//resize to a multiple of 1<<log_unit_factor, (pass 2 for int and 128bit SIMD)
 	{
 		int unit_factor=1<<log_unit_factor, uf_mask=unit_factor-1;
-		int size=data.size();
+		int size=(int)data.size();
 		data.resize((size&~uf_mask)+(((size&uf_mask)!=0)<<log_unit_factor));
 	}
 

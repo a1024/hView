@@ -223,7 +223,7 @@ static std::vector<Node> tree;//root is at the end of array
 static int		nLevels;
 static int		make_node(int symbol, int freq, int left, int right)//https://gist.github.com/pwxcoo/72d7d3c5c3698371c21e486722f9b34b
 {
-	int idx=tree.size();
+	int idx=(int)tree.size();
 	tree.push_back(Node());
 	auto &n=*tree.rbegin();
 	n.value=symbol, n.freq=freq;
@@ -242,7 +242,7 @@ struct			compare_nodes
 
 static void		print_tree()
 {
-	for(int k=tree.size()-1;k>=0;--k)
+	for(int k=(int)tree.size()-1;k>=0;--k)
 	{
 		auto &node=tree[k];
 		if(!node.freq)
@@ -271,7 +271,7 @@ static void		make_alphabet(std::vector<vector_bool> &alphabet)
 	alphabet.resize(nLevels);
 	typedef std::pair<int, vector_bool> TraverseInfo;
 	std::stack<TraverseInfo> s;
-	s.push(TraverseInfo(tree.size()-1, vector_bool()));
+	s.push(TraverseInfo((int)tree.size()-1, vector_bool()));
 	vector_bool left, right;
 	while(s.size())//depth-first
 	{
@@ -862,7 +862,7 @@ namespace		huff
 		bits.debug_print(0);
 		print_flush();
 #endif
-		int data_start=data.size();
+		int data_start=(int)data.size();
 		data.resize(data_start+sizeof(HuffDataHeader)+bits.size_bytes()/sizeof(int));
 		auto dataHeader=(HuffDataHeader*)(data.data()+data_start);
 		*(int*)dataHeader->DATA='D'|'A'<<8|'T'<<16|'A'<<24;
@@ -985,7 +985,7 @@ namespace		huff
 		header->version=2+code_id;
 		int intsize=(int)bitsize[code_id];
 		intsize=(intsize>>5)+((intsize&31)!=0);
-		int data_idx=data.size();
+		int data_idx=(int)data.size();
 		data.resize(data_idx+sizeof(HuffDataHeader)/sizeof(int)+intsize+1);//header invalidated
 		auto hData=(HuffDataHeader*)(data.data()+data_idx);
 		*(int*)hData->DATA='D'|'A'<<8|'T'<<16|'A'<<24;
@@ -1566,7 +1566,7 @@ namespace		huff
 			int bit_idx=0, kd=0;//naive 1bit decode
 			for(;kd<imSize&&bit_idx<hData->cBitSize;++kd)
 			{
-				int prev=tree.size()-1, node=prev;
+				int prev=(int)tree.size()-1, node=prev;
 				while(bit_idx<hData->cBitSize&&(tree[node].branch[0]!=-1||tree[node].branch[1]!=-1))
 				{
 					int ex_idx=bit_idx>>5, in_idx=bit_idx&31;

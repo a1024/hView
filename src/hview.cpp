@@ -7,8 +7,12 @@
 #endif
 static const char file[]=__FILE__;
 
+//dependencies
+//FFTW3			https://fftw.org/download.html
+//SAIL			https://github.com/HappySeaFox/sail/releases	for WEBP
+
 int				w=0, h=0, *rgb=nullptr, rgbn=0,
-				iw=0, ih=0, image_size=0;
+				iw=0, ih=0, image_size=0;//image dimensions
 float			*image=nullptr;
 ImageType		imagetype=IM_RGBA;
 char			bayer[4]={};//shift ammounts for the 4 Bayer mosaic components, -1 for grayscale
@@ -185,11 +189,11 @@ void			label_pixels_raw(Point2d const &istart, Point2d const &iend)
 		//}
 		//else
 		{
-			for(int iy=maximum((int)floor(istart.y), 0), yend=minimum((int)floor(iend.y), ih);iy<yend;++iy)
+			for(int iy=maximum((int)floor(istart.y), 0), yend=minimum((int)floor(iend.y)+1, ih);iy<yend;++iy)
 			{
 				int ky=image2screen_y_int(iy);
 				//int ky=image2screen_y_int(iy+0.5)-8;
-				for(int ix=maximum((int)floor(istart.x), 0), xend=minimum((int)floor(iend.x), iw);ix<xend;++ix)
+				for(int ix=maximum((int)floor(istart.x), 0), xend=minimum((int)floor(iend.x)+1, iw);ix<xend;++ix)
 				{
 					int kx=image2screen_x_int(ix);
 					auto lum=(int)floor(image[iw*iy+ix]*maxlum+0.5);
@@ -215,10 +219,10 @@ void			draw_pixel_vectors(Point2d const &istart, Point2d const &iend, int comp, 
 	HPEN hPen=CreatePen(PS_SOLID, 1, color);
 	hPen=(HPEN)SelectObject(ghMemDC, hPen);
 	//int maxlum=(1<<idepth)-1;
-	for(int iy=maximum((int)floor(istart.y), 0), yend=minimum((int)floor(iend.y), ih);iy<yend;++iy)
+	for(int iy=maximum((int)floor(istart.y), 0), yend=minimum((int)floor(iend.y)+1, ih);iy<yend;++iy)
 	{
 		int ky=image2screen_y_int(iy);
-		for(int ix=maximum((int)floor(istart.x), 0), xend=minimum((int)floor(iend.x), iw);ix<xend;++ix)
+		for(int ix=maximum((int)floor(istart.x), 0), xend=minimum((int)floor(iend.x)+1, iw);ix<xend;++ix)
 		{
 			int kx=image2screen_x_int(ix)+1;
 			int idx=(iw*iy+ix)<<2;
@@ -243,11 +247,11 @@ void			label_pixels_rgba(Point2d const &istart, Point2d const &iend)
 		if(zoom<=32)
 			bkMode=SetBkMode(ghMemDC, TRANSPARENT);
 		int maxlum=(1<<idepth)-1;
-		for(int iy=maximum((int)floor(istart.y), 0), yend=minimum((int)floor(iend.y), ih);iy<yend;++iy)
+		for(int iy=maximum((int)floor(istart.y), 0), yend=minimum((int)floor(iend.y)+1, ih);iy<yend;++iy)
 		{
 			int ky=image2screen_y_int(iy);
 			//int ky=image2screen_y_int(iy+0.5)-8;
-			for(int ix=maximum((int)floor(istart.x), 0), xend=minimum((int)floor(iend.x), iw);ix<xend;++ix)
+			for(int ix=maximum((int)floor(istart.x), 0), xend=minimum((int)floor(iend.x)+1, iw);ix<xend;++ix)
 			{
 				int kx=image2screen_x_int(ix)+3;
 				int idx=(iw*iy+ix)<<2;
@@ -284,9 +288,9 @@ void			copy_pixels(Point2d const &istart, Point2d const &iend)
 		LOL_1<<"Depth: "<<idepth<<" bit\r\n";
 		if(imagetype==IM_RGBA)
 		{
-			for(int iy=maximum((int)floor(istart.y), 0), yend=minimum((int)floor(iend.y), ih);iy<yend;++iy)
+			for(int iy=maximum((int)floor(istart.y), 0), yend=minimum((int)floor(iend.y)+1, ih);iy<yend;++iy)
 			{
-				for(int ix=maximum((int)floor(istart.x), 0), xend=minimum((int)floor(iend.x), iw);ix<xend;++ix)
+				for(int ix=maximum((int)floor(istart.x), 0), xend=minimum((int)floor(iend.x)+1, iw);ix<xend;++ix)
 				{
 					int idx=(iw*iy+ix)<<2;
 					int lum_r=(int)floor(image[idx  ]*maxlum+0.5),
@@ -301,9 +305,9 @@ void			copy_pixels(Point2d const &istart, Point2d const &iend)
 		}
 		else//bayer/grayscale
 		{
-			for(int iy=maximum((int)floor(istart.y), 0), yend=minimum((int)floor(iend.y), ih);iy<yend;++iy)
+			for(int iy=maximum((int)floor(istart.y), 0), yend=minimum((int)floor(iend.y)+1, ih);iy<yend;++iy)
 			{
-				for(int ix=maximum((int)floor(istart.x), 0), xend=minimum((int)floor(iend.x), iw);ix<xend;++ix)
+				for(int ix=maximum((int)floor(istart.x), 0), xend=minimum((int)floor(iend.x)+1, iw);ix<xend;++ix)
 				{
 					auto lum=(int)floor(image[iw*iy+ix]*maxlum+0.5);
 					sprintf_s(g_buf, g_buf_size, " %4d", lum);
@@ -561,7 +565,7 @@ void			render()
 	//	rgb[k]=0xFFFF0000;//
 	BitBlt(ghDC, 0, 0, w, h, ghMemDC, 0, 0, SRCCOPY);
 }
-long			__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long lParam)
+LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM lParam)
 {
 	switch(message)
 	{
@@ -663,8 +667,10 @@ long			__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long l
 #ifdef FFTW3_H
 				"` (grave accent): toggle Fourier transform\n"
 #endif
-				"1~7: ICER lossless DWTs\n"
+				"1~7: ICER lossless DWTs (grayscale only)\n"
 				"Shift 1~7: inverse DWTs\n"
+				"Ctrl 1~9: DCT size 2^n\n"
+				"Ctrl 0: Inverse DCT\n"
 				"\' (quote): Toggle bit mode\n"
 				"[: Previous bit plane\n"
 				"]: Next bit plane\n"
@@ -768,8 +774,25 @@ long			__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long l
 			applyFFT();
 			InvalidateRect(ghWnd, nullptr, true);
 			break;
-		case '1':case '2':case '3':case '4':case '5':case '6':case '7'://discrete wavelet transforms
-			if(imagetype==IM_GRAYSCALE)
+		case '1':case '2':case '3':case '4':case '5':case '6':case '7':case '8':case '9':case '0':
+			if(kb[VK_CONTROL])
+			{
+				static int DCTsize=0;
+				if(wParam>'0')
+					apply_DCT((int)wParam-'0', false);
+				else if(DCTsize)
+					apply_DCT(DCTsize, true);
+				DCTsize=(int)wParam-'0';
+				//static std::wstring DCTfile;
+				//static int DCTsize=0;
+				//if(wParam=='0')
+				//{
+				//	if(DCTfile==filetitle&&DCTsize)
+				//}
+				//else
+				//	apply_DCT(wParam-'0', false), DCTsize=wParam-'0';
+			}
+			else if(imagetype==IM_GRAYSCALE&&wParam<'8')//discrete wavelet transforms
 			{
 				short *buffer=get_image();
 				if(kb[VK_SHIFT])
@@ -786,6 +809,7 @@ long			__stdcall WndProc(HWND__ *hWnd, unsigned message, unsigned wParam, long l
 				}
 				delete[] buffer;
 			}
+			render();
 			break;
 		case VK_OEM_PLUS:case VK_ADD:
 			contrast_gain*=contrast_delta;
@@ -973,5 +997,5 @@ int				__stdcall WinMain(HINSTANCE__ *hInstance, HINSTANCE__ *hPrevInstance, cha
 		if(image)
 			free(image);
 
-	return msg.wParam;
+	return (int)msg.wParam;
 }

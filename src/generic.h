@@ -21,7 +21,7 @@ extern bool		consoleactive;
 void			console_start();
 void			console_end();
 void			console_pause();
-void			console_buffer_size(int x, int y);
+void			console_buffer_size(short x, short y);
 void			console_start(int cx, int cy);
 void			console_start_good();
 
@@ -34,7 +34,7 @@ extern HWND		ghWnd;
 
 //win32
 void			copy_to_clipboard(const char *a, int size);
-inline void		copy_to_clipboard(std::string const &str){copy_to_clipboard(str.c_str(), str.size());}
+inline void		copy_to_clipboard(std::string const &str){copy_to_clipboard(str.c_str(), (int)str.size());}
 int				GUINPrint(HDC hDC, int x, int y, int w, int h, const char *a, ...);
 long			GUITPrint(HDC hDC, int x, int y, const char *a, ...);//return value: 0xHHHHWWWW		width=(short&)ret, height=((short*)&ret)[1]
 void			GUIPrint(HDC hDC, int x, int y, const char *a, ...);

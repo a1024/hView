@@ -7,6 +7,8 @@
 #include		<math.h>//abs
 typedef unsigned char byte;
 
+	#define		HVIEW_WEBP_SUPPORT
+
 extern int		w, h, *rgb, rgbn,
 				iw, ih, image_size;
 extern float	*image;//the image
@@ -204,6 +206,7 @@ void			ICER_DWT2D(short *buffer, int bw, int bh, ICER_FilterType filtertype, int
 void			ICER_IDWT2D(short *buffer, int bw, int bh, ICER_FilterType filtertype, int nstages=0);
 void			encode_zigzag(short *buffer, int imsize);
 void			decode_zigzag(short *buffer, int imsize);
+void			apply_DCT(int logsize, bool inv);
 void			archiver_test();
 void			archiver_test2();
 void			archiver_test3();

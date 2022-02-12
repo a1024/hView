@@ -3,6 +3,14 @@
 #include		"huff.h"
 #define			STBI_WINDOWS_UTF8
 #include		"stb_image.h"
+#ifdef HVIEW_WEBP_SUPPORT
+#include		<sail/sail.h>
+#pragma			comment(lib, "sail.lib")
+#pragma			comment(lib, "sail-c++.lib")
+#pragma			comment(lib, "sail-codecs.lib")
+#pragma			comment(lib, "sail-common.lib")
+#pragma			comment(lib, "sail-manip.lib")
+#endif
 #include		<vector>
 #include		<string>
 #include		<fstream>
@@ -16,7 +24,7 @@ void			assign_path(std::wstring const &text, int start, int end, std::wstring &p
 	start+=text[start]==doublequote, end-=text[end-1]==doublequote;
 	assert(start<end);
 	std::wstring temp(text.begin()+start, text.begin()+end);
-	int size=temp.size();
+	int size=(int)temp.size();
 	for(int k=0;k<size;++k)
 	{
 		if(temp[k]==L'\\')
@@ -32,7 +40,7 @@ void			assign_path(std::string const &text, int start, int end, std::wstring &pa
 	start+=text[start]==doublequote, end-=text[end-1]==doublequote;
 	assert(start<end);
 	std::wstring temp(text.begin()+start, text.begin()+end);
-	int size=temp.size();
+	int size=(int)temp.size();
 	for(int k=0;k<size;++k)
 	{
 		if(temp[k]==L'\\')
@@ -46,12 +54,12 @@ void			assign_path(std::string const &text, int start, int end, std::string &pat
 {
 	assert(text.size());
 	if(end>=(int)text.size())
-		end=text.size();
+		end=(int)text.size();
 	for(;end>0&&(text[end-1]==' '||text[end-1]=='\t'||text[end-1]=='\r'||text[end-1]=='\n');--end);//skip trailing whitespace
 	start+=text[start]==doublequote, end-=text[end-1]==doublequote;
 	assert(start<end);
 	std::string temp(text.begin()+start, text.begin()+end);
-	int size=temp.size();
+	int size=(int)temp.size();
 	for(int k=0;k<size;++k)
 	{
 		if(temp[k]==L'\\')
@@ -64,10 +72,10 @@ void			assign_path(std::string const &text, int start, int end, std::string &pat
 void			split_filename(std::wstring const &filename, std::wstring &folder, std::wstring &title)//folder ends with slash
 {
 	std::wstring filteredfilename;
-	assign_path(filename, 0, filename.size(), filteredfilename);
+	assign_path(filename, 0, (int)filename.size(), filteredfilename);
 
 	int start=-1;
-	for(int k=filteredfilename.size()-1;k>=0;--k)
+	for(int k=(int)filteredfilename.size()-1;k>=0;--k)
 	{
 		if(filteredfilename[k]==L'/'||filteredfilename[k]==L'\\')
 		{
@@ -84,7 +92,7 @@ void			split_filename(std::wstring const &filename, std::wstring &folder, std::w
 }
 void			get_extension(std::wstring const &filename, std::wstring &extension)
 {
-	int k=filename.size()-1;
+	int k=(int)filename.size()-1;
 	bool has_ext=true;
 	for(;k>=0&&filename[k]!=L'.';--k)
 	{
@@ -136,7 +144,87 @@ void			read_binary(const wchar_t *filename, std::vector<byte> &binary_data)
 	input.close();
 }
 
-//void			open_mediaa(const char *filename){}
+#ifdef HVIEW_WEBP_SUPPORT
+const char*		sail_error2str(int e)
+{
+	const char *a="<Unknown error>";
+	switch(e)
+	{
+#define	CASE(LABEL)	case LABEL:a=#LABEL;break;
+		CASE(SAIL_OK)
+		CASE(SAIL_ERROR_MEMORY_ALLOCATION)
+		CASE(SAIL_ERROR_OPEN_FILE)
+		CASE(SAIL_ERROR_READ_FILE)
+		CASE(SAIL_ERROR_SEEK_FILE)
+		CASE(SAIL_ERROR_CLOSE_FILE)
+		CASE(SAIL_ERROR_LIST_DIR)
+		CASE(SAIL_ERROR_PARSE_FILE)
+		CASE(SAIL_ERROR_INVALID_ARGUMENT)
+		CASE(SAIL_ERROR_READ_IO)
+		CASE(SAIL_ERROR_WRITE_IO)
+		CASE(SAIL_ERROR_FLUSH_IO)
+		CASE(SAIL_ERROR_SEEK_IO)
+		CASE(SAIL_ERROR_TELL_IO)
+		CASE(SAIL_ERROR_CLOSE_IO)
+		CASE(SAIL_ERROR_EOF)
+		CASE(SAIL_ERROR_NOT_IMPLEMENTED)
+		CASE(SAIL_ERROR_UNSUPPORTED_SEEK_WHENCE)
+		CASE(SAIL_ERROR_EMPTY_STRING)
+		CASE(SAIL_ERROR_NULL_PTR)
+		CASE(SAIL_ERROR_INVALID_IO)
+		CASE(SAIL_ERROR_INCORRECT_IMAGE_DIMENSIONS)
+		CASE(SAIL_ERROR_UNSUPPORTED_PIXEL_FORMAT)
+		CASE(SAIL_ERROR_INVALID_PIXEL_FORMAT)
+		CASE(SAIL_ERROR_UNSUPPORTED_COMPRESSION)
+		CASE(SAIL_ERROR_UNSUPPORTED_META_DATA)
+		CASE(SAIL_ERROR_UNDERLYING_CODEC)
+		CASE(SAIL_ERROR_NO_MORE_FRAMES)
+		CASE(SAIL_ERROR_INTERLACING_UNSUPPORTED)
+		CASE(SAIL_ERROR_INCORRECT_BYTES_PER_LINE)
+		CASE(SAIL_ERROR_UNSUPPORTED_IMAGE_PROPERTY)
+		CASE(SAIL_ERROR_UNSUPPORTED_BIT_DEPTH)
+		CASE(SAIL_ERROR_MISSING_PALETTE)
+		CASE(SAIL_ERROR_UNSUPPORTED_FORMAT)
+		CASE(SAIL_ERROR_BROKEN_IMAGE)
+		CASE(SAIL_ERROR_CODEC_LOAD)
+		CASE(SAIL_ERROR_CODEC_NOT_FOUND)
+		CASE(SAIL_ERROR_UNSUPPORTED_CODEC_LAYOUT)
+		CASE(SAIL_ERROR_CODEC_SYMBOL_RESOLVE)
+		CASE(SAIL_ERROR_INCOMPLETE_CODEC_INFO)
+		CASE(SAIL_ERROR_UNSUPPORTED_CODEC_FEATURE)
+		CASE(SAIL_ERROR_UNSUPPORTED_CODEC_PRIORITY)
+		CASE(SAIL_ERROR_ENV_UPDATE)
+		CASE(SAIL_ERROR_CONTEXT_UNINITIALIZED)
+		CASE(SAIL_ERROR_GET_DLL_PATH)
+		CASE(SAIL_ERROR_CONFLICTING_OPERATION)
+#undef	CASE
+	}
+	return a;
+}
+#define			WEBP_CHECK(ERROR)		(!(ERROR)||log_error(file, __LINE__, sail_error2str(ERROR)))
+#endif
+void			init_from_RGBA8(const int *src, int iw2, int ih2)
+{
+	iw=iw2, ih=ih2, image_size=iw*ih;
+	void *buf=realloc(image, image_size*4*sizeof(float));
+	if(!buf)
+	{
+		LOG_ERROR("realloc returned null");
+		return;
+	}
+	image=(float*)buf;
+	idepth=8;
+	float inv255=1.f/255;
+	for(int ks=0, kd=0;ks<image_size;++ks, kd+=4)
+	{
+		auto p=(unsigned char*)(src+ks);
+		image[kd  ]=p[0]*inv255;
+		image[kd+1]=p[1]*inv255;
+		image[kd+2]=p[2]*inv255;
+		image[kd+3]=p[3]*inv255;
+	}
+	imagetype=IM_RGBA;
+}
 bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, updates title
 {
 	std::wstring wfn=filename, folder, title, extension;
@@ -148,7 +236,7 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 	{
 		std::vector<byte> data;
 		read_binary(filename, data);
-		auto success=huff::decompress(data.data(), data.size(), RF_F32_BAYER, (void**)&image, iw, ih, idepth, bayer);
+		auto success=huff::decompress(data.data(), (int)data.size(), RF_F32_BAYER, (void**)&image, iw, ih, idepth, bayer);
 		//auto success=decompress_huff(data.data(), data.size(), RF_F32_BAYER, (void**)&image, iw, ih, idepth, bayer);
 		if(!success)
 			return false;
@@ -158,6 +246,29 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 		else
 			imagetype=IM_BAYER;
 	}
+#ifdef HVIEW_WEBP_SUPPORT
+	else if(extension==L"webp")
+	{
+		stbi_convert_wchar_to_utf8(g_buf, g_buf_size, filename);
+
+		void *state=nullptr;
+		struct sail_image *img=nullptr;
+		auto error=sail_start_reading_file(g_buf, nullptr, &state);	WEBP_CHECK(error);
+		error=sail_read_next_frame(state, &img);					WEBP_CHECK(error);
+		switch(img->pixel_format)
+		{
+		case SAIL_PIXEL_FORMAT_BPP32_RGBA:
+			init_from_RGBA8((int*)img->pixels, img->width, img->height);
+			break;
+		}
+		error=sail_stop_reading(state);								WEBP_CHECK(error);
+		sail_destroy_image(img);
+
+		//struct sail_io *io;
+		//auto result=sail_alloc_io_read_file(g_buf, &io);
+		//sail_destroy_io(io);
+	}
+#endif
 	else//ordinary image
 	{
 		stbi_convert_wchar_to_utf8(g_buf, g_buf_size, filename);
@@ -166,7 +277,9 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 		if(!original_image)
 			return false;
 		auto src=(int*)original_image;
-		iw=iw2, ih=ih2, image_size=iw*ih;
+		
+		init_from_RGBA8(src, iw2, ih2);
+	/*	iw=iw2, ih=ih2, image_size=iw*ih;
 		void *buf=realloc(image, image_size*4*sizeof(float));
 		if(!buf)
 		{
@@ -184,7 +297,8 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 			image[kd+2]=p[2]*inv255;
 			image[kd+3]=p[3]*inv255;
 		}
-		imagetype=IM_RGBA;
+		imagetype=IM_RGBA;//*/
+
 		free(original_image);
 	}
 
@@ -255,11 +369,11 @@ void			open_prev()
 		if(current==-1)
 			current=0;
 		else
-			current=(current-1+filenames.size())%filenames.size();
+			current=(current-1+(int)filenames.size())%(int)filenames.size();
 		int c0=current;
 		for(;!open_mediaw((workfolder+filenames[current]).c_str());)
 		{
-			current=(current-1+filenames.size())%filenames.size();
+			current=(current-1+(int)filenames.size())%(int)filenames.size();
 			if(current==c0)
 				break;
 		}

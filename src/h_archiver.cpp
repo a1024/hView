@@ -318,7 +318,7 @@ int				compress_huff(const short *buffer, int bw, int bh, int depth, int bayer, 
 	bits.debug_print(0);
 	printf("\n");
 #endif
-	int data_start=data.size();
+	int data_start=(int)data.size();
 	data.resize(data_start+sizeof(HuffDataHeader)+bits.size_bytes()/sizeof(int));
 	auto dataHeader=(HuffDataHeader*)(data.data()+data_start);
 	*(int*)dataHeader->DATA='D'|'A'<<8|'T'<<16|'A'<<24;
@@ -538,7 +538,7 @@ bool			decompress_huff(const byte *data, int bytesize, RequestedFormat format, v
 	printf("Sorted alphabet\n");
 	print_alphabet(alphabet.data(), (int*)header->histogram, header->nLevels, imSize, indices.data());//
 
-	print_bin((byte*)src, (data+bytesize)-(byte*)src);
+	print_bin((byte*)src, (int)((data+bytesize)-(byte*)src));
 	printf("\n");
 #endif
 
@@ -813,7 +813,7 @@ void			archiver_test()
 		short *dst=nullptr;
 		int w2=0, h2=0, depth2=0;
 		char bayer_sh[4];
-		decompress_huff((byte*)data.data(), data.size()*sizeof(int), RF_I16_BAYER, (void**)&dst, w2, h2, depth2, bayer_sh);//decompress test image
+		decompress_huff((byte*)data.data(), (int)data.size()*sizeof(int), RF_I16_BAYER, (void**)&dst, w2, h2, depth2, bayer_sh);//decompress test image
 	
 		//printf("After decompression:\n");
 		//print_subimage(dst, bw, bh, bw>>1, bh>>1, 16, 16, 2);//
@@ -888,7 +888,7 @@ void			archiver_test2()
 	short *dst=nullptr;
 	int w2=0, h2=0, depth2=0;
 	char bayer_sh[4];
-	huff::decompress((byte*)data.data(), data.size()*sizeof(int), RF_I16_BAYER, (void**)&dst, w2, h2, depth2, bayer_sh);
+	huff::decompress((byte*)data.data(), (int)data.size()*sizeof(int), RF_I16_BAYER, (void**)&dst, w2, h2, depth2, bayer_sh);
 		
 	if(!dst)
 		printf("\nDecompression failed\n");
@@ -899,7 +899,7 @@ void			archiver_test2()
 		{
 			printf("\ndecompress(compress(image)) == image\n");
 			//printf("Buffer passed through compression and decompression\n");
-			int uncompressed=bw*bh*idepth, compressed=data.size()<<5;
+			int uncompressed=bw*bh*idepth, compressed=(int)data.size()<<5;
 			printf("Uncompressed = %d bits = %g KB\n", uncompressed, (double)uncompressed/(8*1024));
 			printf("Compressed   = %d bits = %g KB\n", compressed, (double)compressed/(8*1024));
 			printf("Compression ratio = %g\n", (double)uncompressed/compressed);
@@ -2200,7 +2200,7 @@ void			encode_arithmetic(const short *buffer, int imsize, int depth, std::vector
 	data.clear();
 	for(int k=0, size=depth;k<depth;++k)
 	{
-		size+=planes[k].size();
+		size+=(int)planes[k].size();
 		data.push_back(size);
 	}
 	for(int k=0;k<depth;++k)
@@ -2457,7 +2457,7 @@ void			dwt2_1d_9_7(float *even, float *odd, int halfsize)
 {
 	//'factring wavelet transforms into lifting steps' - page 19
 	//'a wavelet tour of signal processing - the sparse way' - page 376
-	const double alpha=-1.58613434342059, beta=-0.0529801185729, gamma=0.8829110755309, delta=0.4435068520439, zeta=1.1496043988602;
+	const float alpha=-1.58613434342059f, beta=-0.0529801185729f, gamma=0.8829110755309f, delta=0.4435068520439f, zeta=1.1496043988602f;
 	dwt2_1d_scale(even, odd, halfsize, zeta, 1/zeta);
 	dwt2_1d_predict_next(even, odd, halfsize, delta);
 	dwt2_1d_update_prev(even, odd, halfsize, gamma);
@@ -2466,7 +2466,7 @@ void			dwt2_1d_9_7(float *even, float *odd, int halfsize)
 }
 void			dwt2_1d_9_7_inv(float *even, float *odd, int halfsize)
 {
-	const double alpha=-1.58613434342059, beta=-0.0529801185729, gamma=0.8829110755309, delta=0.4435068520439, zeta=1.1496043988602;
+	const float alpha=-1.58613434342059f, beta=-0.0529801185729f, gamma=0.8829110755309f, delta=0.4435068520439f, zeta=1.1496043988602f;
 	dwt2_1d_update_prev(even, odd, halfsize, -alpha);
 	dwt2_1d_predict_next(even, odd, halfsize, -beta);
 	dwt2_1d_update_prev(even, odd, halfsize, -gamma);
@@ -2608,6 +2608,87 @@ void			print_subimage(float *buffer, int bw, int bh, int x0, int y0, int dx, int
 	}
 	printf("\n");
 }
+
+const float	_pi=acos(-1.f);
+void		dct_init(float *&weights, float *&temp, int size, bool inv)
+{
+	weights=new float[size*size];
+	temp=new float[size];
+	double scale=sqrt(2./size), freq=_pi/size;
+	for(int ky=0;ky<size;++ky)
+	{
+		auto row=weights+size*ky;
+		if(inv)
+		{
+			for(int kx=0;kx<size;++kx)
+			{
+				if(!kx)
+					row[kx]=float(scale*0.5);
+				else
+					row[kx]=float(scale*cos(freq*kx*(ky+0.5f)));
+			}
+		}
+		else
+		{
+			for(int kx=0;kx<size;++kx)
+				row[kx]=float(scale*cos(freq*(kx+0.5f)*ky));
+		}
+	}
+}
+void		dct_finish(float *&weights, float *&temp)
+{
+	delete[] weights, temp;
+	weights=temp=nullptr;
+}
+void		dct_apply_1D(float *data, const float *weights, float *temp, int size, int stride)
+{
+	for(int k=0;k<size;++k)
+	{
+		auto row=weights+size*k;
+		temp[k]=0;
+		for(int ks=0, kd=0;kd<size;ks+=stride, ++kd)
+			temp[k]+=row[kd]*data[ks];
+	}
+	for(int ks=0, kd=0;ks<size;++ks, kd+=stride)
+		data[kd]=temp[ks];
+}
+void			apply_DCT(int logsize, bool inv)
+{
+	int size=1<<logsize;
+	float *weights=nullptr, *temp=nullptr;
+	dct_init(weights, temp, size, inv);
+	switch(imagetype)
+	{
+	case IM_GRAYSCALE:
+		for(int ky=0;ky<ih;++ky)
+		{
+			for(int kx=0;kx+size-1<iw;kx+=size)
+				dct_apply_1D(image+iw*ky+kx, weights, temp, size, 1);
+		}
+		for(int ky=0;ky+size-1<ih;ky+=size)
+		{
+			for(int kx=0;kx<iw;++kx)
+				dct_apply_1D(image+iw*ky+kx, weights, temp, size, iw);
+		}
+		break;
+	case IM_RGBA:
+		for(int ky=0;ky<ih;++ky)
+		{
+			for(int kx=0;kx+size-1<iw;kx+=size)
+				for(int kc=0;kc<3;++kc)
+					dct_apply_1D(image+((iw*ky+kx)<<2)+kc, weights, temp, size, 4);
+		}
+		for(int ky=0;ky+size-1<ih;ky+=size)
+		{
+			for(int kx=0;kx<iw;++kx)
+				for(int kc=0;kc<3;++kc)
+					dct_apply_1D(image+((iw*ky+kx)<<2)+kc, weights, temp, size, iw<<2);
+		}
+		break;
+	}
+	dct_finish(weights, temp);
+}
+
 
 int				count_pot(int x)
 {
