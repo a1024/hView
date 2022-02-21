@@ -10,6 +10,7 @@ static const char file[]=__FILE__;
 //dependencies
 //FFTW3			https://fftw.org/download.html
 //SAIL			https://github.com/HappySeaFox/sail/releases	for WEBP
+//LIBHEIF		https://github.com/strukturag/libheif			for HEIF
 
 int				w=0, h=0, *rgb=nullptr, rgbn=0,
 				iw=0, ih=0, image_size=0;//image dimensions

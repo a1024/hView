@@ -1,13 +1,25 @@
 #ifndef HVIEW_H
 #define HVIEW_H
+
+//dependencies (can be disabled by commenting-out the macros below)
+//FFTW3			https://fftw.org/download.html
+//SAIL			https://github.com/HappySeaFox/sail/releases	for WEBP
+//LIBHEIF		https://github.com/strukturag/libheif			for HEIF
+
+
+	#define		HVIEW_INCLUDE_FFTW
+	#define		HVIEW_INCLUDE_SAIL
+	#define		HVIEW_INCLUDE_LIBHEIF
+
+
+#ifdef HVIEW_INCLUDE_FFTW
 #include		"fftw3.h"
+#endif
 #include		<vector>
 #include		<string>
 #define _USE_MATH_DEFINES
 #include		<math.h>//abs
 typedef unsigned char byte;
-
-	#define		HVIEW_WEBP_SUPPORT
 
 extern int		w, h, *rgb, rgbn,
 				iw, ih, image_size;

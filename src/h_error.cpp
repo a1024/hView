@@ -19,7 +19,7 @@ bool 			log_error(const char *file, int line, const char *format, ...)
 	va_start(args, format);
 	vsprintf_s(g_buf, e_msg_size, format, args);
 	va_end(args);
-	int size=strlen(file), start=size-1;
+	int size=(int)strlen(file), start=size-1;
 	for(;start>=0&&file[start]!='/'&&file[start]!='\\';--start);
 	start+=start==-1||file[start]=='/'||file[start]=='\\';
 //	int length=snprintf(buf, e_msg_size, "%s (%d)%s", g_buf, line, file+start);

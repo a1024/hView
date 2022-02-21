@@ -3,13 +3,18 @@
 #include		"huff.h"
 #define			STBI_WINDOWS_UTF8
 #include		"stb_image.h"
-#ifdef HVIEW_WEBP_SUPPORT
+#ifdef HVIEW_INCLUDE_SAIL
 #include		<sail/sail.h>
 #pragma			comment(lib, "sail.lib")
 #pragma			comment(lib, "sail-c++.lib")
 #pragma			comment(lib, "sail-codecs.lib")
 #pragma			comment(lib, "sail-common.lib")
 #pragma			comment(lib, "sail-manip.lib")
+#endif
+#ifdef HVIEW_INCLUDE_LIBHEIF
+#include		<libheif/heif.h>
+#pragma			comment(lib, "libheif-1.lib")
+#pragma			comment(lib, "liblibde265.lib")
 #endif
 #include		<vector>
 #include		<string>
@@ -144,7 +149,7 @@ void			read_binary(const wchar_t *filename, std::vector<byte> &binary_data)
 	input.close();
 }
 
-#ifdef HVIEW_WEBP_SUPPORT
+#ifdef HVIEW_INCLUDE_SAIL
 const char*		sail_error2str(int e)
 {
 	const char *a="<Unknown error>";
@@ -203,6 +208,9 @@ const char*		sail_error2str(int e)
 }
 #define			WEBP_CHECK(ERROR)		(!(ERROR)||log_error(file, __LINE__, sail_error2str(ERROR)))
 #endif
+#ifdef HVIEW_INCLUDE_LIBHEIF
+#define			LIBHEIF_CHECK(ERROR)	(!(ERROR).code||log_error(file, __LINE__, (ERROR).message))
+#endif
 void			init_from_RGBA8(const int *src, int iw2, int ih2)
 {
 	iw=iw2, ih=ih2, image_size=iw*ih;
@@ -230,6 +238,11 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 	std::wstring wfn=filename, folder, title, extension;
 	split_filename(filename, folder, title);
 	get_extension(title, extension);
+
+	bitmode=false;
+	reset_FFTW_state();
+	workfolder=std::move(folder), filetitle=std::move(title);
+	SetWindowTextW(ghWnd, (wfn+L" - hView").c_str());
 	
 	//check extension
 	if(extension==L"huf")//compressed raw
@@ -246,19 +259,53 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 		else
 			imagetype=IM_BAYER;
 	}
-#ifdef HVIEW_WEBP_SUPPORT
-	else if(extension==L"webp")
+#ifdef HVIEW_INCLUDE_LIBHEIF
+	else if(extension==L"heic")
+	{
+		stbi_convert_wchar_to_utf8(g_buf, g_buf_size, filename);
+
+		heif_context *ctx=heif_context_alloc();
+		heif_error error=heif_context_read_from_file(ctx, g_buf, nullptr);	LIBHEIF_CHECK(error);
+
+		heif_image_handle *handle=nullptr;
+		error=heif_context_get_primary_image_handle(ctx, &handle);			LIBHEIF_CHECK(error);//get a handle to the primary image
+
+		heif_context_free(ctx);
+
+		int iw2=heif_image_handle_get_width(handle), ih2=heif_image_handle_get_height(handle);
+
+		heif_image *img=nullptr;
+		error=heif_decode_image(handle, &img, heif_colorspace_RGB, heif_chroma_interleaved_RGBA, nullptr);	LIBHEIF_CHECK(error);
+		//error=heif_decode_image(handle, &img, heif_colorspace_RGB, heif_chroma_interleaved_RGB, nullptr);//decode the image and convert colorspace to RGB, saved as 24bit interleaved
+		if(!img)
+			return false;
+
+		int stride=4;
+		const uint8_t *data=heif_image_get_plane_readonly(img, heif_channel_interleaved, &stride);	LIBHEIF_CHECK(error);
+		init_from_RGBA8((int*)data, iw2, ih2);
+
+		heif_image_release(img);
+		heif_image_handle_release(handle);
+	}
+#endif
+#ifdef HVIEW_INCLUDE_SAIL
+	else if(extension==L"avif"||extension==L"webp"||extension==L"jp2")
 	{
 		stbi_convert_wchar_to_utf8(g_buf, g_buf_size, filename);
 
 		void *state=nullptr;
 		struct sail_image *img=nullptr;
 		auto error=sail_start_reading_file(g_buf, nullptr, &state);	WEBP_CHECK(error);
+		if(!state)
+			return false;
 		error=sail_read_next_frame(state, &img);					WEBP_CHECK(error);
 		switch(img->pixel_format)
 		{
 		case SAIL_PIXEL_FORMAT_BPP32_RGBA:
 			init_from_RGBA8((int*)img->pixels, img->width, img->height);
+			break;
+		default:
+			messageboxa(ghWnd, "Error", "Unsupported pixel format from libSAIL: %d", img->pixel_format);
 			break;
 		}
 		error=sail_stop_reading(state);								WEBP_CHECK(error);
@@ -302,11 +349,6 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 		free(original_image);
 	}
 
-	//on success
-	bitmode=false;
-	reset_FFTW_state();
-	workfolder=std::move(folder), filetitle=std::move(title);
-	SetWindowTextW(ghWnd, (wfn+L" - hView").c_str());
 	//center_image();
 	render();
 	return true;
