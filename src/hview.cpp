@@ -956,6 +956,7 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 		else
 			GUIPrint(ghDC, xpos, ypos, "%dx%d, x%g, (%d, %d), %s%s", iw, ih, zoom, imx, imy, imtypestr, bitmode?bitinfo:"");
 	}
+	print_errors(ghDC);//
 	return DefWindowProcA(hWnd, message, wParam, lParam);
 }
 int				__stdcall WinMain(HINSTANCE__ *hInstance, HINSTANCE__ *hPrevInstance, char *lpCmdLine, int nCmdShow)

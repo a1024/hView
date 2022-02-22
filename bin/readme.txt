@@ -8,6 +8,7 @@ libfftw3-3.dll
 https://github.com/strukturag/libde265
 https://github.com/strukturag/libheif
 libheif-1.dll
+liblibde265.dll
 
 3) SAIL:	for opening WEBP, AVIF & JP2 images
 https://github.com/HappySeaFox/sail/releases
@@ -29,3 +30,8 @@ sail-extra-zstd.dll
 sail-manip.dll
 sail.dll
 sail_extra_resvg.dll
+
+4) LIBJXL	for opening JXL images
+https://gitlab.com/wg1/jpeg-xl
+libjxl.dll
+libjxl_threads.dll

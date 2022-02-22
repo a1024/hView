@@ -18,13 +18,15 @@
 #include		"hview.h"
 #include		<stdio.h>
 static const char file[]=__FILE__;
+int				error_count=0;
 char			first_error_msg[e_msg_size]={}, latest_error_msg[e_msg_size]={};
 void			print_errors(HDC hDC)
 {
 	if(first_error_msg[0])
 	{
-		GUIPrint(hDC, w>>1, (h>>1)-32, first_error_msg);
-		GUIPrint(hDC, w>>1, (h>>1)-16, latest_error_msg);
+		GUIPrint(hDC, w>>2, (h>>1)-32, first_error_msg);
+		if(error_count>1)
+			GUIPrint(hDC, w>>2, (h>>1)-16, latest_error_msg);
 	}
 }
 bool 			log_error(const char *file, int line, const char *format, ...)
@@ -41,12 +43,13 @@ bool 			log_error(const char *file, int line, const char *format, ...)
 //	int length=snprintf(buf, e_msg_size, "%s (%d)%s", g_buf, line, file+start);
 //	int length=snprintf(buf, e_msg_size, "%s\n%s(%d)", g_buf, file, line);
 //	int length=snprintf(buf, e_msg_size, "%s(%d):\n\t%s", file, line, g_buf);
-	int length=sprintf_s(buf, e_msg_size, "%s(%d): %s", file+start, line, g_buf);
+	int length=sprintf_s(buf, e_msg_size, "[%d] %s(%d): %s", error_count, file+start, line, g_buf);
 	if(firsttime)
 	{
 		memcpy(latest_error_msg, first_error_msg, length);
 		messageboxa(ghWnd, "Error", latest_error_msg);//redundant, since report_error/emergencyPrint prints both
 	}
+	++error_count;
 	return firsttime;
 }
 int				sys_check(const char *file, int line)

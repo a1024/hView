@@ -1,5 +1,5 @@
 //h_file.cpp - all file operations
-//Copyright (C) 2022  Ayman Wagih Mohsen
+//Copyright (C) 2022  Ayman Wagih Mohsen, unless source link provided
 //
 //This program is free software: you can redistribute it and/or modify
 //it under the terms of the GNU General Public License as published by
@@ -32,7 +32,26 @@
 #pragma			comment(lib, "libheif-1.lib")
 #pragma			comment(lib, "liblibde265.lib")
 #endif
-#include		<Shlobj.h>
+#ifdef HVIEW_INCLUDE_LIBJXL
+#include		<jxl/decode.h>
+#include		<jxl/thread_parallel_runner.h>
+#pragma			comment(lib, "libjxl.lib")
+#pragma			comment(lib, "libjxl_threads.lib")
+#endif
+//#include		<Shlobj.h>
+#define STRICT_TYPED_ITEMIDS
+#include		<shlobj.h>
+#include		<objbase.h>      // For COM headers
+#include		<shobjidl.h>     // for IFileDialogEvents and IFileDialogControlEvents
+#include		<shlwapi.h>
+#include		<knownfolders.h> // for KnownFolder APIs/datatypes/function headers
+#include		<propvarutil.h>  // for PROPVAR-related functions
+#include		<propkey.h>      // for the Property key APIs/datatypes
+#include		<propidl.h>      // for the Property System APIs
+#include		<strsafe.h>      // for StringCchPrintfW
+#include		<shtypes.h>      // for COMDLG_FILTERSPEC
+#include		<new>
+
 #include		<vector>
 #include		<string>
 #include		<fstream>
@@ -271,7 +290,55 @@ const char*		sail_error2str(int e)
 #ifdef HVIEW_INCLUDE_LIBHEIF
 #define			LIBHEIF_CHECK(ERROR)	(!(ERROR).code||log_error(file, __LINE__, (ERROR).message))
 #endif
-void			init_from_RGBA8(const int *src, int iw2, int ih2)
+#ifdef HVIEW_INCLUDE_LIBJXL
+//void*			libjxl_alloc(void* opaque, size_t size)
+//{
+//	return malloc(size);
+//}
+//void			libjxl_free(void* opaque, void* address)
+//{
+//	free(address);
+//}
+//JxlMemoryManager libjxl_memman={nullptr, libjxl_alloc, libjxl_free};
+//bool			libjxl_ready=false;
+//void			prep_libjxl()
+//{
+//	if(!libjxl_ready)
+//	{
+//		libjxl_ready=true;
+//	}
+//}
+const char*		libjxl_err2str(int e)
+{
+	const char *a="<Unknown error>";
+	switch(e)
+	{
+#define	CASE(LABEL)	case LABEL:a=#LABEL;break;
+		CASE(JXL_DEC_SUCCESS)
+		CASE(JXL_DEC_ERROR)
+		CASE(JXL_DEC_NEED_MORE_INPUT)
+		CASE(JXL_DEC_NEED_PREVIEW_OUT_BUFFER)
+		CASE(JXL_DEC_NEED_DC_OUT_BUFFER)
+		CASE(JXL_DEC_NEED_IMAGE_OUT_BUFFER)
+		CASE(JXL_DEC_JPEG_NEED_MORE_OUTPUT)
+		CASE(JXL_DEC_BOX_NEED_MORE_OUTPUT)
+		CASE(JXL_DEC_BASIC_INFO)
+		CASE(JXL_DEC_EXTENSIONS)
+		CASE(JXL_DEC_COLOR_ENCODING)
+		CASE(JXL_DEC_PREVIEW_IMAGE)
+		CASE(JXL_DEC_FRAME)
+		CASE(JXL_DEC_DC_IMAGE)
+		CASE(JXL_DEC_FULL_IMAGE)
+		CASE(JXL_DEC_JPEG_RECONSTRUCTION)
+		CASE(JXL_DEC_BOX)
+		CASE(JXL_DEC_FRAME_PROGRESSION)
+#undef	CASE
+	}
+	return a;
+}
+#define			LIBJXL_CHECK(ERROR)		(!(ERROR)||log_error(file, __LINE__, "JPEG XL library: %s", libjxl_err2str(ERROR)))
+#endif
+void			assign_from_RGBA8(const int *src, int iw2, int ih2)
 {
 	iw=iw2, ih=ih2, image_size=iw*ih;
 	void *buf=realloc(image, image_size*4*sizeof(float));
@@ -306,110 +373,206 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 	
 	//check extension
 	int ext_idx=enumerate_extension(extension);
-	if(ext_idx==EXT_HUF)//compressed raw
+	switch(ext_idx)
 	{
-		std::vector<byte> data;
-		read_binary(filename, data);
-		if(!data.size())
-			return false;
-		auto success=huff::decompress(data.data(), (int)data.size(), RF_F32_BAYER, (void**)&image, iw, ih, idepth, bayer);
-		//auto success=decompress_huff(data.data(), data.size(), RF_F32_BAYER, (void**)&image, iw, ih, idepth, bayer);
-		if(!success)
-			return false;
-		image_size=iw*ih;
-		if(bayer[0]==-1)
-			imagetype=IM_GRAYSCALE;
-		else
-			imagetype=IM_BAYER;
-	}
+	case EXT_HUF://compressed raw
+		{
+			std::vector<byte> data;
+			read_binary(filename, data);
+			if(!data.size())
+				return false;
+			auto success=huff::decompress(data.data(), (int)data.size(), RF_F32_BAYER, (void**)&image, iw, ih, idepth, bayer);
+			//auto success=decompress_huff(data.data(), data.size(), RF_F32_BAYER, (void**)&image, iw, ih, idepth, bayer);
+			if(!success)
+				return false;
+			image_size=iw*ih;
+			if(bayer[0]==-1)
+				imagetype=IM_GRAYSCALE;
+			else
+				imagetype=IM_BAYER;
+		}
+		break;
+#ifdef HVIEW_INCLUDE_LIBJXL
+	case EXT_JXL:
+		{
+			std::vector<byte> data;
+			read_binary(filename, data);
+			if(!data.size())
+				return false;
+
+			//int version=JxlDecoderVersion();//7000
+
+			JxlDecoder *decoder=JxlDecoderCreate(nullptr);		GEN_ASSERT(decoder);//https://github.com/alistair7/imlib2-jxl/blob/main/imlib2-jxl.c
+			if(!decoder)
+				return false;
+			JxlDecoderStatus result=JXL_DEC_SUCCESS;
+
+			void *runner=JxlThreadParallelRunnerCreate(nullptr, JxlThreadParallelRunnerDefaultNumWorkerThreads());	GEN_ASSERT(runner);
+			result=JxlDecoderSetParallelRunner(decoder, JxlThreadParallelRunner, runner);		LIBJXL_CHECK(result);
+			result=JxlDecoderSubscribeEvents(decoder, JXL_DEC_BASIC_INFO|JXL_DEC_FULL_IMAGE);	LIBJXL_CHECK(result);
+
+			result=JxlDecoderSetInput(decoder, data.data(), data.size());	LIBJXL_CHECK(result);
+			JxlBasicInfo info={};
+			JxlPixelFormat format={4, JXL_TYPE_UINT8, JXL_LITTLE_ENDIAN, 0};
+#if 0
+			JxlColorEncoding color_encoding={};
+			unsigned char *icc_blob=nullptr;
+			size_t icc_size=0;
+#endif
+			size_t imsize=0;
+			int *buffer=nullptr;
+			while((result=JxlDecoderProcessInput(decoder))!=JXL_DEC_FULL_IMAGE)
+			{
+				switch(result)
+				{
+				case JXL_DEC_BASIC_INFO:
+					result=JxlDecoderGetBasicInfo(decoder, &info);			LIBJXL_CHECK(result);
+					continue;
+				case JXL_DEC_COLOR_ENCODING:
+#if 0
+					result=JxlDecoderGetColorAsEncodedProfile(decoder, &format, JXL_COLOR_PROFILE_TARGET_DATA, &color_encoding);
+					result=JxlDecoderGetICCProfileSize(decoder, &format, JXL_COLOR_PROFILE_TARGET_DATA, &icc_size);
+					icc_blob=new unsigned char[icc_size];
+					result=JxlDecoderGetColorAsICCProfile(decoder, &format, JXL_COLOR_PROFILE_TARGET_DATA, icc_blob, icc_size);
+#endif
+					continue;
+				case JXL_DEC_NEED_IMAGE_OUT_BUFFER:
+					{
+						if(buffer)
+						{
+							LOG_ERROR("Out of buffer again, multiple frames are not supported yet");
+							continue;
+						}
+						result=JxlDecoderImageOutBufferSize(decoder, &format, &imsize);			LIBJXL_CHECK(result);
+						GEN_ASSERT(imsize==info.xsize*info.ysize*format.num_channels);
+						buffer=new int[info.xsize*info.ysize];
+						result=JxlDecoderSetImageOutBuffer(decoder, &format, buffer, imsize);	LIBJXL_CHECK(result);
+					}
+					continue;
+				case JXL_DEC_NEED_MORE_INPUT:
+					LOG_ERROR("File is truncated");
+					break;
+				case JXL_DEC_ERROR:
+					{
+						JxlSignature sig=JxlSignatureCheck((uint8_t*)data.data(), data.size());
+						const char *a="<UNKNOWN ERROR>";
+						switch(sig)
+						{
+#define					CASE(LABEL)		case LABEL:a=#LABEL;break;
+						CASE(JXL_SIG_NOT_ENOUGH_BYTES)
+						CASE(JXL_SIG_INVALID)
+						CASE(JXL_SIG_CODESTREAM)
+						CASE(JXL_SIG_CONTAINER)
+#undef					CASE
+						}
+						LOG_ERROR("JPEG XL library: %s", a);
+					}
+					break;
+				default:
+					LOG_ERROR("Unexpected return value %s: %s", result, libjxl_err2str(result));
+					break;
+				}
+			}
+			assign_from_RGBA8((int*)buffer, info.xsize, info.ysize);
+			if(buffer)
+				delete[] buffer;
+#if 0
+			if(icc_blob)
+				delete[] icc_blob;
+#endif
+			//auto remaining=JxlDecoderReleaseInput(decoder);
+			JxlDecoderDestroy(decoder);
+
+			//JxlPixelFormat format={4, JXL_TYPE_UINT8, JXL_LITTLE_ENDIAN, 0};
+			//size_t size=0;
+			//result=JxlDecoderImageOutBufferSize(decoder, &format, &size);		LIBJXL_CHECK(result);
+			//iw=info.xsize, ih=info.ysize, image_size=iw*ih;
+			//GEN_ASSERT((image_size*sizeof(float)<<2)==size);
+			//image=(float*)realloc(image, image_size*sizeof(float)<<2);
+			//result=JxlDecoderSetImageOutBuffer(decoder, &format, image, size);	LIBJXL_CHECK(result);
+			//
+			//result=JxlDecoderFlushImage(decoder);				LIBJXL_CHECK(result);
+			//
+			//auto remaining=JxlDecoderReleaseInput(decoder);
+			//JxlDecoderDestroy(decoder);
+		}
+		break;
+#endif
 #ifdef HVIEW_INCLUDE_LIBHEIF
-	else if(ext_idx==EXT_HEIC)
-	{
-		stbi_convert_wchar_to_utf8(g_buf, g_buf_size, filename);
+	case EXT_HEIC:
+		{
+			stbi_convert_wchar_to_utf8(g_buf, g_buf_size, filename);
 
-		heif_context *ctx=heif_context_alloc();
-		heif_error error=heif_context_read_from_file(ctx, g_buf, nullptr);	LIBHEIF_CHECK(error);
+			heif_context *ctx=heif_context_alloc();
+			heif_error error=heif_context_read_from_file(ctx, g_buf, nullptr);	LIBHEIF_CHECK(error);
 
-		heif_image_handle *handle=nullptr;
-		error=heif_context_get_primary_image_handle(ctx, &handle);			LIBHEIF_CHECK(error);//get a handle to the primary image
+			heif_image_handle *handle=nullptr;
+			error=heif_context_get_primary_image_handle(ctx, &handle);			LIBHEIF_CHECK(error);//get a handle to the primary image
 
-		heif_context_free(ctx);
+			heif_context_free(ctx);
 
-		int iw2=heif_image_handle_get_width(handle), ih2=heif_image_handle_get_height(handle);
+			int iw2=heif_image_handle_get_width(handle), ih2=heif_image_handle_get_height(handle);
 
-		heif_image *img=nullptr;
-		error=heif_decode_image(handle, &img, heif_colorspace_RGB, heif_chroma_interleaved_RGBA, nullptr);	LIBHEIF_CHECK(error);
-		//error=heif_decode_image(handle, &img, heif_colorspace_RGB, heif_chroma_interleaved_RGB, nullptr);//decode the image and convert colorspace to RGB, saved as 24bit interleaved
-		if(!img)
-			return false;
+			heif_image *img=nullptr;
+			error=heif_decode_image(handle, &img, heif_colorspace_RGB, heif_chroma_interleaved_RGBA, nullptr);	LIBHEIF_CHECK(error);
+			//error=heif_decode_image(handle, &img, heif_colorspace_RGB, heif_chroma_interleaved_RGB, nullptr);//decode the image and convert colorspace to RGB, saved as 24bit interleaved
+			if(!img)
+				return false;
 
-		int stride=4;
-		const uint8_t *data=heif_image_get_plane_readonly(img, heif_channel_interleaved, &stride);	LIBHEIF_CHECK(error);
-		init_from_RGBA8((int*)data, iw2, ih2);
+			int stride=4;
+			const uint8_t *data=heif_image_get_plane_readonly(img, heif_channel_interleaved, &stride);	LIBHEIF_CHECK(error);
+			assign_from_RGBA8((int*)data, iw2, ih2);
 
-		heif_image_release(img);
-		heif_image_handle_release(handle);
-	}
+			heif_image_release(img);
+			heif_image_handle_release(handle);
+		}
+		break;
 #endif
 #ifdef HVIEW_INCLUDE_SAIL
-	else if(ext_idx==EXT_AVIF||ext_idx==EXT_WEBP||ext_idx==EXT_JP2||ext_idx==EXT_J2K)
-	{
-		stbi_convert_wchar_to_utf8(g_buf, g_buf_size, filename);
-
-		void *state=nullptr;
-		struct sail_image *img=nullptr;
-		auto error=sail_start_reading_file(g_buf, nullptr, &state);	WEBP_CHECK(error);
-		if(!state)
-			return false;
-		error=sail_read_next_frame(state, &img);					WEBP_CHECK(error);
-		switch(img->pixel_format)
+	case EXT_AVIF:
+	case EXT_WEBP:
+	case EXT_JP2:
+	case EXT_J2K:
 		{
-		case SAIL_PIXEL_FORMAT_BPP32_RGBA:
-			init_from_RGBA8((int*)img->pixels, img->width, img->height);
-			break;
-		default:
-			messageboxa(ghWnd, "Error", "Unsupported pixel format from libSAIL: %d", img->pixel_format);
-			break;
-		}
-		error=sail_stop_reading(state);								WEBP_CHECK(error);
-		sail_destroy_image(img);
+			stbi_convert_wchar_to_utf8(g_buf, g_buf_size, filename);
 
-		//struct sail_io *io;
-		//auto result=sail_alloc_io_read_file(g_buf, &io);
-		//sail_destroy_io(io);
-	}
+			void *state=nullptr;
+			struct sail_image *img=nullptr;
+			auto error=sail_start_reading_file(g_buf, nullptr, &state);	WEBP_CHECK(error);
+			if(!state)
+				return false;
+			error=sail_read_next_frame(state, &img);	WEBP_CHECK(error);
+			switch(img->pixel_format)
+			{
+			case SAIL_PIXEL_FORMAT_BPP32_RGBA:
+				assign_from_RGBA8((int*)img->pixels, img->width, img->height);
+				break;
+			default:
+				messageboxa(ghWnd, "Error", "Unsupported pixel format from libSAIL: %d", img->pixel_format);
+				break;
+			}
+			error=sail_stop_reading(state);				WEBP_CHECK(error);
+			sail_destroy_image(img);
+
+			//struct sail_io *io;
+			//auto result=sail_alloc_io_read_file(g_buf, &io);
+			//sail_destroy_io(io);
+		}
+		break;
 #endif
-	else//ordinary image
-	{
-		stbi_convert_wchar_to_utf8(g_buf, g_buf_size, filename);
-		int iw2=0, ih2=0, nch2=0;
-		unsigned char *original_image=stbi_load(g_buf, &iw2, &ih2, &nch2, 4);
-		if(!original_image)
-			return false;
-		auto src=(int*)original_image;
+	default://ordinary image
+		{
+			stbi_convert_wchar_to_utf8(g_buf, g_buf_size, filename);
+			int iw2=0, ih2=0, nch2=0;
+			unsigned char *original_image=stbi_load(g_buf, &iw2, &ih2, &nch2, 4);
+			if(!original_image)
+				return false;
+			auto src=(int*)original_image;
 		
-		init_from_RGBA8(src, iw2, ih2);
-	/*	iw=iw2, ih=ih2, image_size=iw*ih;
-		void *buf=realloc(image, image_size*4*sizeof(float));
-		if(!buf)
-		{
-			LOG_ERROR("realloc returned null");
-			return false;
-		}
-		image=(float*)buf;
-		idepth=8;
-		float inv255=1.f/255;
-		for(int ks=0, kd=0;ks<image_size;++ks, kd+=4)
-		{
-			auto p=(unsigned char*)(src+ks);
-			image[kd  ]=p[0]*inv255;
-			image[kd+1]=p[1]*inv255;
-			image[kd+2]=p[2]*inv255;
-			image[kd+3]=p[3]*inv255;
-		}
-		imagetype=IM_RGBA;//*/
+			assign_from_RGBA8(src, iw2, ih2);
 
-		free(original_image);
+			free(original_image);
+		}
 	}
 
 	//center_image();
@@ -423,8 +586,201 @@ void			open_media()
 	if(GetOpenFileNameW(&ofn))
 		open_mediaw(ofn.lpstrFile);
 }
+
+
+#if 0
+#pragma comment(linker, "\"/manifestdependency:type='Win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
+
+const COMDLG_FILTERSPEC c_rgSaveTypes[] =
+{
+    {L"Word Document (*.doc)",       L"*.doc"},
+    {L"Web Page (*.htm; *.html)",    L"*.htm;*.html"},
+    {L"Text Document (*.txt)",       L"*.txt"},
+    {L"All Documents (*.*)",         L"*.*"}
+};
+
+// Indices of file types
+#define INDEX_WORDDOC 1
+#define INDEX_WEBPAGE 2
+#define INDEX_TEXTDOC 3
+
+// Controls
+#define CONTROL_GROUP           2000
+#define CONTROL_RADIOBUTTONLIST 2
+#define CONTROL_RADIOBUTTON1    1
+#define CONTROL_RADIOBUTTON2    2       // It is OK for this to have the same ID as CONTROL_RADIOBUTTONLIST,
+                                        // because it is a child control under CONTROL_RADIOBUTTONLIST
+
+// IDs for the Task Dialog Buttons
+#define IDC_BASICFILEOPEN                       100
+#define IDC_ADDITEMSTOCUSTOMPLACES              101
+#define IDC_ADDCUSTOMCONTROLS                   102
+#define IDC_SETDEFAULTVALUESFORPROPERTIES       103
+#define IDC_WRITEPROPERTIESUSINGHANDLERS        104
+#define IDC_WRITEPROPERTIESWITHOUTUSINGHANDLERS 105
+
+/* File Dialog Event Handler *****************************************************************************************************/
+
+class CDialogEventHandler : public IFileDialogEvents,
+                            public IFileDialogControlEvents
+{
+public:
+    // IUnknown methods
+    IFACEMETHODIMP QueryInterface(REFIID riid, void** ppv)
+    {
+        static const QITAB qit[] = {
+            QITABENT(CDialogEventHandler, IFileDialogEvents),
+            QITABENT(CDialogEventHandler, IFileDialogControlEvents),
+            { 0 },
+#pragma warning(suppress:4838)
+        };
+        return QISearch(this, qit, riid, ppv);
+    }
+
+    IFACEMETHODIMP_(ULONG) AddRef()
+    {
+        return InterlockedIncrement(&_cRef);
+    }
+
+    IFACEMETHODIMP_(ULONG) Release()
+    {
+        long cRef = InterlockedDecrement(&_cRef);
+        if (!cRef)
+            delete this;
+        return cRef;
+    }
+
+    // IFileDialogEvents methods
+    IFACEMETHODIMP OnFileOk(IFileDialog *) { return S_OK; };
+    IFACEMETHODIMP OnFolderChange(IFileDialog *) { return S_OK; };
+    IFACEMETHODIMP OnFolderChanging(IFileDialog *, IShellItem *) { return S_OK; };
+    IFACEMETHODIMP OnHelp(IFileDialog *) { return S_OK; };
+    IFACEMETHODIMP OnSelectionChange(IFileDialog *) { return S_OK; };
+    IFACEMETHODIMP OnShareViolation(IFileDialog *, IShellItem *, FDE_SHAREVIOLATION_RESPONSE *) { return S_OK; };
+    IFACEMETHODIMP OnTypeChange(IFileDialog *pfd);
+    IFACEMETHODIMP OnOverwrite(IFileDialog *, IShellItem *, FDE_OVERWRITE_RESPONSE *) { return S_OK; };
+
+    // IFileDialogControlEvents methods
+    IFACEMETHODIMP OnItemSelected(IFileDialogCustomize *pfdc, DWORD dwIDCtl, DWORD dwIDItem);
+    IFACEMETHODIMP OnButtonClicked(IFileDialogCustomize *, DWORD) { return S_OK; };
+    IFACEMETHODIMP OnCheckButtonToggled(IFileDialogCustomize *, DWORD, BOOL) { return S_OK; };
+    IFACEMETHODIMP OnControlActivating(IFileDialogCustomize *, DWORD) { return S_OK; };
+
+    CDialogEventHandler() : _cRef(1) { };
+private:
+    ~CDialogEventHandler() { };
+    long _cRef;
+};
+// Instance creation helper
+HRESULT CDialogEventHandler_CreateInstance(REFIID riid, void **ppv)
+{
+    *ppv = NULL;
+    CDialogEventHandler *pDialogEventHandler = new (std::nothrow) CDialogEventHandler();
+    HRESULT hr = pDialogEventHandler ? S_OK : E_OUTOFMEMORY;
+    if (SUCCEEDED(hr))
+    {
+        hr = pDialogEventHandler->QueryInterface(riid, ppv);
+        pDialogEventHandler->Release();
+    }
+    return hr;
+}
+HRESULT BasicFileOpen()
+{
+    // CoCreate the File Open Dialog object.
+    IFileDialog *pfd = NULL;
+    HRESULT hr = CoCreateInstance(CLSID_FileOpenDialog, 
+                      NULL, 
+                      CLSCTX_INPROC_SERVER, 
+                      IID_PPV_ARGS(&pfd));
+    if (SUCCEEDED(hr))
+    {
+        // Create an event handling object, and hook it up to the dialog.
+        IFileDialogEvents *pfde = NULL;
+        hr = CDialogEventHandler_CreateInstance(IID_PPV_ARGS(&pfde));
+        if (SUCCEEDED(hr))
+        {
+            // Hook up the event handler.
+            DWORD dwCookie;
+            hr = pfd->Advise(pfde, &dwCookie);
+            if (SUCCEEDED(hr))
+            {
+                // Set the options on the dialog.
+                DWORD dwFlags;
+
+                // Before setting, always get the options first in order 
+                // not to override existing options.
+                hr = pfd->GetOptions(&dwFlags);
+                if (SUCCEEDED(hr))
+                {
+                    // In this case, get shell items only for file system items.
+                    hr = pfd->SetOptions(dwFlags | FOS_FORCEFILESYSTEM);
+                    if (SUCCEEDED(hr))
+                    {
+                        // Set the file types to display only. 
+                        // Notice that this is a 1-based array.
+                        hr = pfd->SetFileTypes(ARRAYSIZE(c_rgSaveTypes), c_rgSaveTypes);
+                        if (SUCCEEDED(hr))
+                        {
+                            // Set the selected file type index to Word Docs for this example.
+                            hr = pfd->SetFileTypeIndex(INDEX_WORDDOC);
+                            if (SUCCEEDED(hr))
+                            {
+                                // Set the default extension to be ".doc" file.
+                                hr = pfd->SetDefaultExtension(L"doc;docx");
+                                if (SUCCEEDED(hr))
+                                {
+                                    // Show the dialog
+                                    hr = pfd->Show(NULL);
+                                    if (SUCCEEDED(hr))
+                                    {
+                                        // Obtain the result once the user clicks 
+                                        // the 'Open' button.
+                                        // The result is an IShellItem object.
+                                        IShellItem *psiResult;
+                                        hr = pfd->GetResult(&psiResult);
+                                        if (SUCCEEDED(hr))
+                                        {
+                                            // We are just going to print out the 
+                                            // name of the file for sample sake.
+                                            PWSTR pszFilePath = NULL;
+                                            hr = psiResult->GetDisplayName(SIGDN_FILESYSPATH, 
+                                                               &pszFilePath);
+                                            if (SUCCEEDED(hr))
+                                            {
+                                                TaskDialog(NULL,
+                                                           NULL,
+                                                           L"CommonFileDialogApp",
+                                                           pszFilePath,
+                                                           NULL,
+                                                           TDCBF_OK_BUTTON,
+                                                           TD_INFORMATION_ICON,
+                                                           NULL);
+                                                CoTaskMemFree(pszFilePath);
+                                            }
+                                            psiResult->Release();
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                // Unhook the event handler.
+                pfd->Unadvise(dwCookie);
+            }
+            pfde->Release();
+        }
+        pfd->Release();
+    }
+    return hr;
+}
+#endif
 void			dialog_get_folder(const wchar_t *user_instr, std::wstring &path)
 {
+
+
+	//tree structure dialog
+#if 1
 	wchar_t folderpath[MAX_PATH]={};//https://stackoverflow.com/questions/12034943/win32-select-directory-dialog-from-c-c
 	BROWSEINFOW binfo=
 	{
@@ -450,6 +806,7 @@ void			dialog_get_folder(const wchar_t *user_instr, std::wstring &path)
             imalloc->Release();
         }
 	}
+#endif
 
 	//wchar_t szFile[MAX_PATH]={'\0'};
 	//tagOFNW ofn=

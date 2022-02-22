@@ -19,13 +19,15 @@
 
 //dependencies (can be disabled by commenting-out the macros below)
 //FFTW3			https://fftw.org/download.html
-//SAIL			https://github.com/HappySeaFox/sail/releases	for WEBP
+//SAIL			https://github.com/HappySeaFox/sail/releases	for WEBP, AVIF & JP2
 //LIBHEIF		https://github.com/strukturag/libheif			for HEIF
+//LIBJXL		https://gitlab.com/wg1/jpeg-xl					for JXL
 
 
 	#define		HVIEW_INCLUDE_FFTW
 	#define		HVIEW_INCLUDE_SAIL
 	#define		HVIEW_INCLUDE_LIBHEIF
+	#define		HVIEW_INCLUDE_LIBJXL
 
 
 #ifdef HVIEW_INCLUDE_FFTW
