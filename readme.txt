@@ -7,6 +7,8 @@ An image viewer that opens:
 		https://github.com/HappySeaFox/sail
 	.heic - using libheif
 		https://github.com/strukturag/libheif
+	.jxl - using libjxl
+		https://gitlab.com/wg1/jpeg-xl
 	and .huf files created by RawCam camera2 Android app.
 
 Press F1 for key shortcuts.
