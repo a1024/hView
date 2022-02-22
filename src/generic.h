@@ -32,6 +32,7 @@ int				sys_check(const char *file, int line);
 
 //math
 int				floor_log2(unsigned long long n);
+int				ceil_log2(unsigned long long n);
 
 extern bool		consoleactive;
 void			console_start();

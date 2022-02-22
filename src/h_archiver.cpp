@@ -3094,3 +3094,83 @@ void			archiver_test4()
 	//console_pause();
 	//console_end();
 }
+
+
+//	#define			NO_CONSOLE
+
+float*			backup_image_alloc_buffer(int &ccount)//don't forget to delete[] buffer
+{
+	int count=image_size;
+	count<<=2&-(imagetype==IM_RGBA);//only IM_RGBA format has quadruple bytesize
+	auto buffer=new float[count];
+	return buffer;
+}
+void			backup_image(float *buffer, int ccount)
+{
+	memcpy(buffer, image, ccount*sizeof(float));
+}
+void			restore_image(float *buffer, int ccount)
+{
+	memcpy(image, buffer, ccount*sizeof(float));
+}
+void			add_buffers(float *dst, const float *src, int ccount)
+{
+	for(int k=0;k<ccount;++k)
+		dst[k]+=src[k];
+}
+void			stack_images()
+{
+#ifndef NO_CONSOLE
+	console_start(80, 2000);
+	printf("Simple average stacker\n");
+#endif
+	std::wstring wpath;
+	dialog_get_folder(L"Open folder...", wpath);
+	wpath+='/';
+	std::vector<std::wstring> filenames;
+	get_all_image_filenames(wpath, filenames);
+
+	if(!filenames.size())
+	{
+#ifndef NO_CONSOLE
+		printf("\nNo images found in %S\n", wpath.c_str());
+#endif
+		LOG_ERROR("No images found in %S", wpath.c_str());
+#ifndef NO_CONSOLE
+		console_end();
+#endif
+		return;
+	}
+	open_mediaw((wpath+filenames[0]).c_str());
+	int iw2=iw, ih2=ih, idepth2=idepth;
+	int ccount=0;
+	auto buffer=backup_image_alloc_buffer(ccount);
+	backup_image(buffer, ccount);
+	int nframes=(int)filenames.size();
+	for(int k=1;k<nframes;++k)
+	{
+#ifndef NO_CONSOLE
+		printf("\rStacking %d/%d...", k+1, nframes);
+#endif
+		open_mediaw((wpath+filenames[k]).c_str());
+		if(iw!=iw2||ih!=ih2||idepth!=idepth2)
+		{
+#ifndef NO_CONSOLE
+			printf("\nWarning: skipping frame with different dimensions: first image = %dbit x %dx%d  !=  frame %d/%d = %dbit x %dx%d\n", idepth2, iw2, ih2, k+1, nframes, idepth, iw, ih);
+#endif
+			LOG_ERROR("Warning: skipping frame with different dimensions: first image = %dbit x %dx%d  !=  frame %d/%d = %dbit x %dx%d", idepth2, iw2, ih2, k+1, nframes, idepth, iw, ih);
+			continue;
+		}
+		add_buffers(buffer, image, ccount);
+	}
+#ifndef NO_CONSOLE
+	printf("\n");
+#endif
+	int cl2_nframes=ceil_log2(nframes);
+	idepth+=cl2_nframes;
+	restore_image(buffer, ccount);
+	delete[] buffer;
+#ifndef NO_CONSOLE
+	console_end();
+#endif
+}

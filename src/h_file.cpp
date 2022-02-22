@@ -32,11 +32,12 @@
 #pragma			comment(lib, "libheif-1.lib")
 #pragma			comment(lib, "liblibde265.lib")
 #endif
+#include		<Shlobj.h>
 #include		<vector>
 #include		<string>
 #include		<fstream>
 #include		<assert.h>
-#include		<sys\stat.h>
+#include		<sys/stat.h>
 const char		file[]=__FILE__;
 const wchar_t	doublequote=L'\"';
 void			assign_path(std::wstring const &text, int start, int end, std::wstring &pathret)//pathret can be text
@@ -125,6 +126,49 @@ void			get_extension(std::wstring const &filename, std::wstring &extension)
 	}
 	if(has_ext&&k>=0)
 		extension.assign(filename.begin()+k+1, filename.end());
+}
+
+int				wcscmp_ci(const wchar_t *s1, const wchar_t *s2)//case-insensitive only for ASCII
+{
+	for(;*s1&&*s2&&tolower(*s1)==tolower(*s2);++s1, ++s2);
+	int result=*s1-*s2;
+	return (result>0)-(result<0);
+}
+
+#define			EXT_LIST	\
+	EXT(JPG)\
+	EXT(JPEG)\
+	EXT(PNG)\
+	EXT(BMP)\
+	EXT(GIF)\
+	EXT(TIF)\
+	EXT(TIFF)\
+	EXT(JP2)\
+	EXT(J2K)\
+	EXT(WEBP)\
+	EXT(AVIF)\
+	EXT(HEIC)\
+	EXT(JXL)\
+	EXT(HUF)
+enum			Extension
+{
+#define EXT(LABEL)	EXT_##LABEL,
+	EXT_LIST
+#undef	EXT
+	EXT_COUNT,
+};
+const wchar_t	*supported_ext[]=
+{
+#define EXT(LABEL)	L###LABEL,
+	EXT_LIST
+#undef	EXT
+};
+inline int		enumerate_extension(std::wstring const &ext)
+{
+	for(int k=0;k<EXT_COUNT;++k)
+		if(!wcscmp_ci(ext.c_str(), supported_ext[k]))
+			return k;
+	return EXT_COUNT;
 }
 
 #if !defined __linux__
@@ -261,10 +305,13 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 	SetWindowTextW(ghWnd, (wfn+L" - hView").c_str());
 	
 	//check extension
-	if(extension==L"huf")//compressed raw
+	int ext_idx=enumerate_extension(extension);
+	if(ext_idx==EXT_HUF)//compressed raw
 	{
 		std::vector<byte> data;
 		read_binary(filename, data);
+		if(!data.size())
+			return false;
 		auto success=huff::decompress(data.data(), (int)data.size(), RF_F32_BAYER, (void**)&image, iw, ih, idepth, bayer);
 		//auto success=decompress_huff(data.data(), data.size(), RF_F32_BAYER, (void**)&image, iw, ih, idepth, bayer);
 		if(!success)
@@ -276,7 +323,7 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 			imagetype=IM_BAYER;
 	}
 #ifdef HVIEW_INCLUDE_LIBHEIF
-	else if(extension==L"heic")
+	else if(ext_idx==EXT_HEIC)
 	{
 		stbi_convert_wchar_to_utf8(g_buf, g_buf_size, filename);
 
@@ -305,7 +352,7 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 	}
 #endif
 #ifdef HVIEW_INCLUDE_SAIL
-	else if(extension==L"avif"||extension==L"webp"||extension==L"jp2")
+	else if(ext_idx==EXT_AVIF||ext_idx==EXT_WEBP||ext_idx==EXT_JP2||ext_idx==EXT_J2K)
 	{
 		stbi_convert_wchar_to_utf8(g_buf, g_buf_size, filename);
 
@@ -374,25 +421,73 @@ void			open_media()
 	wchar_t szFile[MAX_PATH]={'\0'};
 	tagOFNW ofn={sizeof(ofn), ghWnd, 0, L"All files(*.*)\0*.*\0", 0, 0, 1, szFile, sizeof(szFile), 0, 0, 0, 0, OFN_PATHMUSTEXIST|OFN_FILEMUSTEXIST, 0, 0, 0, 0, 0, 0};
 	if(GetOpenFileNameW(&ofn))
-	{
 		open_mediaw(ofn.lpstrFile);
+}
+void			dialog_get_folder(const wchar_t *user_instr, std::wstring &path)
+{
+	wchar_t folderpath[MAX_PATH]={};//https://stackoverflow.com/questions/12034943/win32-select-directory-dialog-from-c-c
+	BROWSEINFOW binfo=
+	{
+		ghWnd,
+		nullptr,
+		folderpath,
+		user_instr,
+		BIF_USENEWUI|BIF_RETURNONLYFSDIRS,
+		nullptr, 0,
+		0,
+	};
+	auto result=SHBrowseForFolderW(&binfo);
+	if(result)
+	{
+		SHGetPathFromIDListW(result, folderpath);
+		path=folderpath;
+		assign_path(path, 0, (int)path.size(), path);
+
+		IMalloc *imalloc=nullptr;
+        if(SUCCEEDED(SHGetMalloc(&imalloc)))
+        {
+            imalloc->Free(result);
+            imalloc->Release();
+        }
 	}
+
+	//wchar_t szFile[MAX_PATH]={'\0'};
+	//tagOFNW ofn=
+	//{
+	//	sizeof(ofn), ghWnd, 0, nullptr, 0, 0, 1, szFile, sizeof(szFile), 0, 0, 0, 0,
+	//	0,
+	//	0, 0, 0, 0, 0, 0
+	//};
+	//if(GetOpenFileNameW(&ofn))
+	//	path=ofn.lpstrFile;
+}
+void			convert_w2utf8(const wchar_t *src, std::string &dst)
+{
+	stbi_convert_wchar_to_utf8(g_buf, g_buf_size, src);
+	dst=g_buf;
 }
 
-int			enumerate_files(std::wstring const &folder, std::wstring const &currenttitle, std::vector<std::wstring> &filenames)
+bool			get_all_image_filenames(std::wstring const &path, std::vector<std::wstring> &filenames)//path ends with slash
 {
-	_WIN32_FIND_DATAW data;
-	void *hSearch=FindFirstFileW((workfolder+L'*').c_str(), &data);//skip .
+	std::wstring ext;
+	_WIN32_FIND_DATAW data={};
+	void *hSearch=FindFirstFileW((path+L'*').c_str(), &data);//skip .
 	if(hSearch==INVALID_HANDLE_VALUE)
-		return -1;
+		return false;
 	int success=FindNextFileW(hSearch, &data);//skip ..
 	for(;success=FindNextFileW(hSearch, &data);)
 	{
-		if(!(data.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY))
+		get_extension(data.cFileName, ext);
+		if(!(data.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY)&&enumerate_extension(ext)<EXT_COUNT)
 			filenames.push_back(data.cFileName);
 	}
 	success=FindClose(hSearch);
 	SYS_ASSERT(success);
+	return true;
+}
+int				enumerate_files(std::wstring const &folder, std::vector<std::wstring> &filenames, std::wstring const &currenttitle)
+{
+	get_all_image_filenames(folder, filenames);
 
 	for(int k=0;k<(int)filenames.size();++k)
 		if(currenttitle==filenames[k])
@@ -402,7 +497,7 @@ int			enumerate_files(std::wstring const &folder, std::wstring const &currenttit
 void			open_next()
 {
 	std::vector<std::wstring> filenames;
-	int current=enumerate_files(workfolder, filetitle, filenames);
+	int current=enumerate_files(workfolder, filenames, filetitle);
 	if(filenames.size())
 	{
 		if(current==-1)
@@ -421,7 +516,7 @@ void			open_next()
 void			open_prev()
 {
 	std::vector<std::wstring> filenames;
-	int current=enumerate_files(workfolder, filetitle, filenames);
+	int current=enumerate_files(workfolder, filenames, filetitle);
 	if(filenames.size())
 	{
 		if(current==-1)

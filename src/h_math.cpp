@@ -25,3 +25,9 @@ int				floor_log2(unsigned long long n)
 		sh= n>=1<< 1;		logn+=sh;
 	return logn;
 }
+int				ceil_log2(unsigned long long n)
+{
+	int l2=floor_log2(n);
+	l2+=(1ULL<<l2)<n;
+	return l2;
+}

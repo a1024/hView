@@ -680,6 +680,7 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 				"G: Toggle between Bayer and grayscale\n"
 				"H: Histogram\n"
 				"Ctrl H: Cmd histogram\n"
+				"S: Simple average image stacker\n"
 				"F/F11: Toggle fullscreen\n"
 #ifdef FFTW3_H
 				"` (grave accent): toggle Fourier transform\n"
@@ -875,6 +876,7 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 			}
 			break;
 		case 'S'://stack
+			stack_images();
 			break;
 		case 'E'://export
 			break;
