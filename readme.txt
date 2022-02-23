@@ -1,7 +1,7 @@
 hView
 
 An image viewer that opens:
-	.jpg, .png, .gif (still frame) - using stb_image.h
+	.jpg, .png, .gif (still frame), .bmp - using stb_image.h
 		https://github.com/nothings/stb/blob/master/stb_image.h
 	.webp, .avif, .jp2 - using SAIL
 		https://github.com/HappySeaFox/sail
