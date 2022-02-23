@@ -16,7 +16,7 @@ Press F1 for key shortcuts.
 
 Build on Windows:
 Make a new project in MSVC 2013 (or later)
-Add all sources to project
+Add all sources from src and third_party to the project
 In project properties, link to the following libraries:
 	fftw-3.3.5-dll64				https://fftw.org/download.html
 	sail-0.9.0-portable-msvc-2022-x64-release	https://github.com/HappySeaFox/sail/releases
