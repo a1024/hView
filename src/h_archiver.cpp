@@ -3141,12 +3141,12 @@ void			stack_images()
 #endif
 		return;
 	}
-	open_mediaw((wpath+filenames[0]).c_str());
+	open_mediaw((wpath+filenames[0]).c_str());//open first image
 	int iw2=iw, ih2=ih, idepth2=idepth;
 	int ccount=0;
 	auto buffer=backup_image_alloc_buffer(ccount);
 	backup_image(buffer, ccount);
-	int nframes=(int)filenames.size();
+	int nframes=(int)filenames.size(), nusedframes=1;
 	for(int k=1;k<nframes;++k)
 	{
 #ifndef NO_CONSOLE
@@ -3162,6 +3162,7 @@ void			stack_images()
 			continue;
 		}
 		add_buffers(buffer, image, ccount);
+		++nusedframes;
 	}
 #ifndef NO_CONSOLE
 	printf("\n");
@@ -3170,6 +3171,9 @@ void			stack_images()
 	idepth+=cl2_nframes;
 	restore_image(buffer, ccount);
 	delete[] buffer;
+	float gain=1.f/nusedframes;
+	for(int k=0;k<ccount;++k)//normalize
+		image[k]*=gain;
 #ifndef NO_CONSOLE
 	console_end();
 #endif

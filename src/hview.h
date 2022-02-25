@@ -207,7 +207,7 @@ long			file_sizew(const wchar_t *filename);
 void			open_media();
 bool			open_mediaw(const wchar_t *filename);//sets workfolder, updates title
 bool			save_media_as();
-void			dialog_get_folder(const wchar_t *user_instr, std::wstring &path);
+bool			dialog_get_folder(const wchar_t *user_instr, std::wstring &path);
 void			convert_w2utf8(const wchar_t *src, std::string &dst);
 bool			get_all_image_filenames(std::wstring const &path, std::vector<std::wstring> &filenames);//path ends with slash
 void			open_next();

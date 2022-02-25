@@ -1028,12 +1028,38 @@ HRESULT BasicFileOpen()
     return hr;
 }
 #endif
-void			dialog_get_folder(const wchar_t *user_instr, std::wstring &path)
+bool			dialog_get_folder(const wchar_t *user_instr, std::wstring &path)
 {
-
+	HRESULT hr=OleInitialize(nullptr);
+	if(hr!=S_OK)
+	{
+		OleUninitialize();
+		return false;
+	}
+	IFileOpenDialog *pFileOpenDialog=nullptr;
+	IShellItem *pShellItem=nullptr;
+	LPWSTR fullpath=nullptr;
+	hr=CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pFileOpenDialog));
+	bool success=false;
+	if(SUCCEEDED(hr))
+	{
+		hr=pFileOpenDialog->SetOptions(FOS_PICKFOLDERS|FOS_FORCEFILESYSTEM);
+		hr=pFileOpenDialog->Show(nullptr);
+		success=SUCCEEDED(hr);
+		if(success)
+		{
+			hr=pFileOpenDialog->GetResult(&pShellItem);
+			pShellItem->GetDisplayName(SIGDN_FILESYSPATH, &fullpath);
+			path=fullpath;
+			CoTaskMemFree(fullpath);
+		}
+		pFileOpenDialog->Release();
+	}
+	OleUninitialize();
+	return success;
 
 	//tree structure dialog
-#if 1
+#if 0
 	wchar_t folderpath[MAX_PATH]={};//https://stackoverflow.com/questions/12034943/win32-select-directory-dialog-from-c-c
 	BROWSEINFOW binfo=
 	{
@@ -1058,7 +1084,9 @@ void			dialog_get_folder(const wchar_t *user_instr, std::wstring &path)
             imalloc->Free(result);
             imalloc->Release();
         }
+		return true;
 	}
+	return false;
 #endif
 
 	//wchar_t szFile[MAX_PATH]={'\0'};
