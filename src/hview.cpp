@@ -114,6 +114,10 @@ void			mouse_release()
 	if(mouse_captured)
 		ReleaseCapture(), mouse_captured=false;
 }
+int				get_key_state(int key)
+{
+	return (GetAsyncKeyState(key)>>15)!=0;
+}
 void			center_image()
 {
 	int wndw=w, wndh=h-17;
@@ -189,7 +193,7 @@ void			label_pixels_raw(Point2d const &istart, Point2d const &iend)
 			textColor=SetTextColor(ghMemDC, 0xFFFFFF);
 			bkMode=SetBkMode(ghMemDC, TRANSPARENT);
 		}
-		int maxlum=(1<<idepth)-1;
+		long long maxlum=(1LL<<idepth)-1;
 		//if(zoom>=64)
 		//{
 		//	for(int iy=maximum((int)floor(istart.y), 0), yend=minimum((int)floor(iend.y), ih);iy<yend;++iy)
@@ -213,8 +217,8 @@ void			label_pixels_raw(Point2d const &istart, Point2d const &iend)
 				for(int ix=maximum((int)floor(istart.x), 0), xend=minimum((int)floor(iend.x)+1, iw);ix<xend;++ix)
 				{
 					int kx=image2screen_x_int(ix);
-					auto lum=(int)floor(image[iw*iy+ix]*maxlum+0.5);
-					GUIPrint(ghMemDC, kx, ky, "%d", lum);
+					auto lum=(long long)floor(image[iw*iy+ix]*maxlum+0.5);
+					GUIPrint(ghMemDC, kx, ky, "%lld", lum);
 				}
 			}
 		}
@@ -263,7 +267,7 @@ void			label_pixels_rgba(Point2d const &istart, Point2d const &iend)
 		int bkMode=0;
 		if(zoom<=32)
 			bkMode=SetBkMode(ghMemDC, TRANSPARENT);
-		int maxlum=(1<<idepth)-1;
+		long long maxlum=(1LL<<idepth)-1;
 		for(int iy=maximum((int)floor(istart.y), 0), yend=minimum((int)floor(iend.y)+1, ih);iy<yend;++iy)
 		{
 			int ky=image2screen_y_int(iy);
@@ -272,15 +276,16 @@ void			label_pixels_rgba(Point2d const &istart, Point2d const &iend)
 			{
 				int kx=image2screen_x_int(ix)+3;
 				int idx=(iw*iy+ix)<<2;
-				int lum_r=(int)floor(image[idx  ]*maxlum+0.5),
-					lum_g=(int)floor(image[idx+1]*maxlum+0.5),
-					lum_b=(int)floor(image[idx+2]*maxlum+0.5),
-					lum_a=(int)floor(image[idx+3]*maxlum+0.5);
-				GUIPrint(ghMemDC, kx, ky, "r%d", lum_r);
-				GUIPrint(ghMemDC, kx, ky+13, "g%d", lum_g);
-				GUIPrint(ghMemDC, kx, ky+26, "b%d", lum_b);
+				long long
+					lum_r=(long long)floor(image[idx  ]*maxlum+0.5),
+					lum_g=(long long)floor(image[idx+1]*maxlum+0.5),
+					lum_b=(long long)floor(image[idx+2]*maxlum+0.5),
+					lum_a=(long long)floor(image[idx+3]*maxlum+0.5);
+				GUIPrint(ghMemDC, kx, ky, "r%lld", lum_r);
+				GUIPrint(ghMemDC, kx, ky+13, "g%lld", lum_g);
+				GUIPrint(ghMemDC, kx, ky+26, "b%lld", lum_b);
 				if(zoom>=128)
-					GUIPrint(ghMemDC, kx, ky+39, "a%d", lum_a);
+					GUIPrint(ghMemDC, kx, ky+39, "a%lld", lum_a);
 			}
 		}
 		if(zoom>=64)
@@ -301,7 +306,7 @@ void			copy_pixels(Point2d const &istart, Point2d const &iend)
 	if(zoom>=16&&!FourierDomain)
 	{
 		std::stringstream LOL_1;
-		int maxlum=(1<<idepth)-1;
+		long long maxlum=(1LL<<idepth)-1;
 		LOL_1<<"Depth: "<<idepth<<" bit\r\n";
 		if(imagetype==IM_RGBA)
 		{
@@ -310,11 +315,12 @@ void			copy_pixels(Point2d const &istart, Point2d const &iend)
 				for(int ix=maximum((int)floor(istart.x), 0), xend=minimum((int)floor(iend.x)+1, iw);ix<xend;++ix)
 				{
 					int idx=(iw*iy+ix)<<2;
-					int lum_r=(int)floor(image[idx  ]*maxlum+0.5),
+					long long
+						lum_r=(int)floor(image[idx  ]*maxlum+0.5),
 						lum_g=(int)floor(image[idx+1]*maxlum+0.5),
 						lum_b=(int)floor(image[idx+2]*maxlum+0.5),
 						lum_a=(int)floor(image[idx+3]*maxlum+0.5);
-					sprintf_s(g_buf, g_buf_size, "    %4d %4d %4d %4d", lum_r, lum_g, lum_b, lum_a);
+					sprintf_s(g_buf, g_buf_size, "    %4lld %4lld %4lld %4lld", lum_r, lum_g, lum_b, lum_a);
 					LOL_1<<g_buf;
 				}
 				LOL_1<<"\r\n";
@@ -443,7 +449,7 @@ void			render()
 #endif
 		if(bitmode)
 		{
-			int magitude=(1<<idepth)-1;
+			double magitude=(double)((1LL<<idepth)-1);
 			for(int ky=maximum((int)floor(s_start.y), 0), yend=minimum((int)floor(s_end.y), h);ky<yend;++ky)
 			{
 				int iy=screen2image_y_int(ky);
@@ -681,6 +687,8 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 				"H: Histogram\n"
 				"Ctrl H: Cmd histogram\n"
 				"S: Simple average image stacker\n"
+			//	"Ctrl S: Save as"
+				"L: Remove light pollution from night sky image\n"
 				"F/F11: Toggle fullscreen\n"
 #ifdef FFTW3_H
 				"` (grave accent): toggle Fourier transform\n"
@@ -876,7 +884,21 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 			}
 			break;
 		case 'S'://stack
-			stack_images();
+			if(kb[VK_CONTROL])
+			{
+				save_media_as();
+				kb[VK_SHIFT]=get_key_state(VK_SHIFT);
+				kb[VK_CONTROL]=get_key_state(VK_CONTROL);
+			}
+			else
+			{
+				stack_images();
+				render();
+			}
+			break;
+		case 'L':
+			remove_light_pollution();
+			render();
 			break;
 		case 'E'://export
 			break;
@@ -926,7 +948,7 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 		Rectangle(ghDC, -1, h-17, w+1, h+1);
 		if(mouseinimage)
 		{
-			int maxlum=(1<<idepth)-1;
+			long long maxlum=(1LL<<idepth)-1;
 			if(imagetype==IM_GRAYSCALE||imagetype==IM_BAYER||imagetype==IM_BAYER_SEPARATE)
 			{
 				if(imagetype==IM_BAYER_SEPARATE)
@@ -938,7 +960,7 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 					imy=imy<<1|iy2;
 				}
 				float lum=image[iw*imy+imx];
-				GUIPrint(ghDC, xpos, ypos, "%dx%d, x%g, (%d, %d): Lum=%.6f = %d/%d, contr=%.2lf, %s%s", iw, ih, zoom, imx, imy, lum, (int)(maxlum*lum), maxlum, contrast_gain, imtypestr, bitmode?bitinfo:"");
+				GUIPrint(ghDC, xpos, ypos, "%dx%d, x%g, (%d, %d): Lum=%.6f = %lld/%lld, contr=%.2lf, %s%s", iw, ih, zoom, imx, imy, lum, (long long)(maxlum*lum), maxlum, contrast_gain, imtypestr, bitmode?bitinfo:"");
 
 				//Color16 colorAtMouse;
 				//colorAtMouse.color=(u64)(0xFFFF*image[iw*imy+imx])<<(bayer[(imy&1)<<1|imx&1]<<1);
@@ -948,7 +970,7 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 			{
 				int idx=(iw*imy+imx)<<2;
 				float red=image[idx], green=image[idx+1], blue=image[idx+2], alpha=image[idx+3];
-				GUIPrint(ghDC, xpos, ypos, "%dx%d, x%g, (%d, %d): RGBA=(%.4f, %.4f, %.4f, %.4f) = (%d, %d, %d, %d)/%d, contr=%.2lf, %s%s", iw, ih, zoom, imx, imy, red, green, blue, alpha, (int)(maxlum*red), (int)(maxlum*green), (int)(maxlum*blue), (int)(maxlum*alpha), maxlum, contrast_gain, imtypestr, bitmode?bitinfo:"");
+				GUIPrint(ghDC, xpos, ypos, "%dx%d, x%g, (%d, %d): RGBA=(%.4f, %.4f, %.4f, %.4f) = (%lld, %lld, %lld, %lld)/%lld, contr=%.2lf, %s%s", iw, ih, zoom, imx, imy, red, green, blue, alpha, (long long)(maxlum*red), (long long)(maxlum*green), (long long)(maxlum*blue), (long long)(maxlum*alpha), maxlum, contrast_gain, imtypestr, bitmode?bitinfo:"");
 			}
 			else//unreachable
 				GUIPrint(ghDC, xpos, ypos, "%dx%d, x%g, (%d, %d) INVALID STATE, %s%s", iw, ih, zoom, imx, imy, imtypestr, bitmode?bitinfo:"");

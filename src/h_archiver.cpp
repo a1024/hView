@@ -3100,9 +3100,9 @@ void			archiver_test4()
 
 float*			backup_image_alloc_buffer(int &ccount)//don't forget to delete[] buffer
 {
-	int count=image_size;
-	count<<=2&-(imagetype==IM_RGBA);//only IM_RGBA format has quadruple bytesize
-	auto buffer=new float[count];
+	ccount=image_size;
+	ccount<<=2&-(imagetype==IM_RGBA);//only IM_RGBA format has quadruple bytesize
+	auto buffer=new float[ccount];
 	return buffer;
 }
 void			backup_image(float *buffer, int ccount)
@@ -3171,6 +3171,126 @@ void			stack_images()
 	restore_image(buffer, ccount);
 	delete[] buffer;
 #ifndef NO_CONSOLE
+	console_end();
+#endif
+}
+
+void			average_filter_mirror(const float *src, float *dst, int count, int stride, int fsize)
+{
+#ifndef NO_CONSOLE
+	static int call=0;
+	printf("\rCall %d...\t\t", call);
+	++call;
+#endif
+	GEN_ASSERT(fsize<count);
+	int reach=(fsize>>1)*stride;
+	float acc=0, gain=1.f/fsize;
+	for(int k=-fsize*stride;k<0;k+=stride)//initialize accumulator
+	{
+		int idx=abs(k);
+		acc+=src[idx];
+	}
+	for(int k=0, end=count*stride, last=end-stride;k<end;k+=stride)
+	{
+		int x1=k-reach, x2=k+reach;
+		x1=abs(x1);//mirror padding
+		x2=last-abs(x2-last);
+		acc+=src[x2]-src[x1];
+		dst[k]=acc*gain;
+	}
+}
+/*void			average_filter_mirror_rgb(const float *src, float *dst, int count, int stride, int fsize)
+{
+#ifndef NO_CONSOLE
+	static int call=0;
+	printf("\rCall %d\t\t", call);
+	++call;
+#endif
+	GEN_ASSERT(fsize<count);
+	int reach=(fsize>>1)*stride;
+	float acc_r=0, acc_g=0, acc_b=0, gain=1.f/fsize;
+	for(int k=-fsize*stride;k<0;k+=stride)//initialize accumulator
+	{
+		int idx=abs(k)<<2;
+		acc_r+=src[idx  ];
+		acc_g+=src[idx+stride];
+		acc_b+=src[idx+(stride<<1)];
+	}
+	for(int k=0, end=count*stride, last=end-stride;k<end;k+=stride)
+	{
+		int x1=k-reach, x2=k+reach;
+		x1=abs(x1);//mirror padding
+		x2=last-abs(x2-last);
+		x1<<=2, x2<<=2;
+		acc_r+=src[x2]-src[x1];
+		acc_g+=src[x2+stride]-src[x1+stride];
+		acc_b+=src[x2+(stride<<1)]-src[x1+(stride<<1)];
+		dst[k]=acc_r*gain;
+		dst[k+stride]=acc_g*gain;
+		dst[k+(stride<<1)]=acc_b*gain;
+		dst[k+stride*3]=0;
+	}
+}//*/
+void			remove_light_pollution()//only for images of starry night sky
+{
+#ifndef NO_CONSOLE
+	console_start(80, 2000);
+	printf("Light pollution remover\n");
+	printf("Size %dx%d (%d calls)\n", iw, ih, (imagetype==IM_RGBA?3:1)*(iw+ih));
+#endif
+	int ccount=0;
+	auto buffer=backup_image_alloc_buffer(ccount);
+	memset(buffer, 0, ccount*sizeof(float));
+
+	int fsize=(int)(sqrt(iw*ih)*0.1);
+	//auto filt=new float[fsize];
+	//float gain=0;
+	//for(int k=0;k<fsize;++k)//Gaussian filter
+	//{
+	//	float x=(k/((fsize-1)*0.5f)-1)*3;
+	//	filt[k]=exp(-x*x);
+	//	gain+=filt[k];
+	//}
+	//gain=1/gain;
+	//for(int k=0;k<fsize;++k)
+	//	filt[k]*=gain;
+
+	if(imagetype==IM_RGBA)//apply box blur
+	{
+		for(int ky=0;ky<ih;++ky)
+		{
+			int idx=(iw<<2)*ky;
+			average_filter_mirror(image+idx, buffer+idx, iw, 4, fsize);
+			average_filter_mirror(image+idx+1, buffer+idx+1, iw, 4, fsize);
+			average_filter_mirror(image+idx+2, buffer+idx+2, iw, 4, fsize);
+		}
+		for(int kx=0;kx<iw;++kx)
+		{
+			int idx=kx<<2;
+			average_filter_mirror(image+idx, buffer+idx, ih, iw<<2, fsize);
+			average_filter_mirror(image+idx+1, buffer+idx+1, ih, iw<<2, fsize);
+			average_filter_mirror(image+idx+2, buffer+idx+2, ih, iw<<2, fsize);
+		}
+	}
+	else
+	{
+		for(int ky=0;ky<ih;++ky)
+			average_filter_mirror(image+iw*ky, buffer+iw*ky, iw, 1, fsize);
+		for(int kx=0;kx<iw;++kx)
+			average_filter_mirror(image+kx, buffer+kx, ih, iw, fsize);
+	}
+	for(int k=0;k<ccount;++k)//subtract blurred buffer
+	{
+		image[k]-=buffer[k];
+		if(image[k]<0)
+			image[k]=0;
+		//image[k]=abs(image[k]);
+	}
+
+	delete[] buffer;
+#ifndef NO_CONSOLE
+	printf("\nDone.\n");
+	console_pause();
 	console_end();
 #endif
 }

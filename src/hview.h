@@ -22,12 +22,14 @@
 //SAIL			https://github.com/HappySeaFox/sail/releases	for WEBP, AVIF & JP2
 //LIBHEIF		https://github.com/strukturag/libheif			for HEIF
 //LIBJXL		https://gitlab.com/wg1/jpeg-xl					for JXL
+//LIBTIFF		https://gitlab.com/libtiff/libtiff				for TIF
 
 
 	#define		HVIEW_INCLUDE_FFTW
 	#define		HVIEW_INCLUDE_SAIL
 	#define		HVIEW_INCLUDE_LIBHEIF
 	#define		HVIEW_INCLUDE_LIBJXL
+	#define		HVIEW_INCLUDE_LIBTIFF
 
 
 #ifdef HVIEW_INCLUDE_FFTW
@@ -53,6 +55,8 @@ enum			ImageType
 extern ImageType imagetype;
 extern char		bayer[4];//shift ammounts for the 4 Bayer mosaic components, -1 for grayscale
 extern int		idepth;
+
+extern double	contrast_gain, contrast_offset;
 
 extern bool		bitmode;
 extern int		bitplane;
@@ -202,6 +206,7 @@ inline bool collinear(Point2d const &a, Point2d const &b, Point2d const &c)
 long			file_sizew(const wchar_t *filename);
 void			open_media();
 bool			open_mediaw(const wchar_t *filename);//sets workfolder, updates title
+bool			save_media_as();
 void			dialog_get_folder(const wchar_t *user_instr, std::wstring &path);
 void			convert_w2utf8(const wchar_t *src, std::string &dst);
 bool			get_all_image_filenames(std::wstring const &path, std::vector<std::wstring> &filenames);//path ends with slash
@@ -244,6 +249,7 @@ void			archiver_test2();
 void			archiver_test3();
 void			archiver_test4();
 void			stack_images();
+void			remove_light_pollution();
 
 //image operations
 short*			get_image();//delete[] the returned buffer

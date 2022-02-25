@@ -76,7 +76,10 @@ void			console_end()
 }
 void			console_pause()
 {
-	system("pause");
+	printf("Enter 0 to continue... ");
+	int k=0;
+	scanf_s("%d", &k, 1);
+	//system("pause");
 }
 void			console_buffer_size(short x, short y)
 {
