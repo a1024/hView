@@ -1,6 +1,6 @@
 Download/build these libraries (as 64-bit) to run the provided hView executable:
 
-1) FFTW:	for DFT
+1) FFTW:	for DFT (needs debugging)
 https://fftw.org/install/windows.html
 libfftw3-3.dll
 
@@ -35,3 +35,10 @@ sail_extra_resvg.dll
 https://gitlab.com/wg1/jpeg-xl
 libjxl.dll
 libjxl_threads.dll
+
+5) BPG
+https://github.com/asimba/pybpgviewer
+bpgdec.dll
+
+6) For BPG
+libgree.dll

@@ -9,6 +9,8 @@ An image viewer that opens:
 		https://gitlab.com/libtiff/libtiff
 	.webp, .avif, .jp2 - using SAIL
 		https://github.com/HappySeaFox/sail
+	.bpg - using bpgdec.dll from pubpgviewer
+		https://github.com/asimba/pybpgviewer
 	.heic - using libheif
 		https://github.com/strukturag/libheif
 	.jxl - using libjxl
