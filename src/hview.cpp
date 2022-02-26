@@ -23,16 +23,12 @@
 #endif
 static const char file[]=__FILE__;
 
-//dependencies
-//FFTW3			https://fftw.org/download.html
-//SAIL			https://github.com/HappySeaFox/sail/releases	for WEBP
-//LIBHEIF		https://github.com/strukturag/libheif			for HEIF
-
 int				w=0, h=0, *rgb=nullptr, rgbn=0,
 				iw=0, ih=0, image_size=0;//image dimensions
 float			*image=nullptr;
 ImageType		imagetype=IM_RGBA;
 char			bayer[4]={};//shift ammounts for the 4 Bayer mosaic components, -1 for grayscale
+const char		bayer_labels[]="BGRA";
 int				idepth=0;
 
 bool			bitmode=false;//draw standalone bitplane
@@ -681,6 +677,7 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 				"R: 1:1 zoom & reset brightness\n"
 				"C: Center image\n"
 				"+/-: Adjust brightness\n"
+				"N: Normalize\n"
 				"B: Split/join Bayer mosaic\n"
 				"Ctrl B: Debayer\n"
 				"G: Toggle between Bayer and grayscale\n"
@@ -714,9 +711,6 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 				double MBsize=(double)bitsize/(8*1024*1024);
 				if(imagetype==IM_BAYER||imagetype==IM_BAYER_SEPARATE)
 				{
-					char labels[]="BGRA";
-					//char labels[]="RGB";
-					//int c='B'<<16|'G'<<8|'R';
 					messageboxa(ghWnd, "Properties",
 						"Width: %d\n"
 						"Height: %d\n"
@@ -727,8 +721,8 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 						"File size: %d bytes = %.2lf KB\n"
 						"Uncompressed size: %lld bits = %.2lf MB\n",
 						iw, ih, idepth,
-						labels[bayer[0]>>3], labels[bayer[1]>>3],
-						labels[bayer[2]>>3], labels[bayer[3]>>3],
+						bayer_labels[bayer[0]>>3], bayer_labels[bayer[1]>>3],
+						bayer_labels[bayer[2]>>3], bayer_labels[bayer[3]>>3],
 						filesize, (double)filesize/1024,
 						bitsize, MBsize);
 				}
@@ -900,6 +894,27 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 			remove_light_pollution();
 			render();
 			break;
+		case 'N':
+			{
+				int ccount=image_size;
+				ccount<<=(imagetype==IM_RGBA)<<1;
+				float vmin=image[0], vmax=image[0];
+				for(int k=1;k<ccount;++k)
+				{
+					if(vmin>image[k])
+						vmin=image[k];
+					if(vmax<image[k])
+						vmax=image[k];
+				}
+				if(vmin<vmax)
+				{
+					float gain=1/(vmax-vmin);
+					for(int k=0;k<ccount;++k)
+						image[k]=gain*(image[k]-vmin);
+				}
+			}
+			render();
+			break;
 		case 'E'://export
 			break;
 		case 'F':case VK_F11://fullscreen
@@ -960,7 +975,10 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 					imy=imy<<1|iy2;
 				}
 				float lum=image[iw*imy+imx];
-				GUIPrint(ghDC, xpos, ypos, "%dx%d, x%g, (%d, %d): Lum=%.6f = %lld/%lld, contr=%.2lf, %s%s", iw, ih, zoom, imx, imy, lum, (long long)(maxlum*lum), maxlum, contrast_gain, imtypestr, bitmode?bitinfo:"");
+				if(imagetype==IM_BAYER||imagetype==IM_BAYER_SEPARATE)
+					GUIPrint(ghDC, xpos, ypos, "%dx%d, x%g, (%d, %d): Lum=%.6f = %lld/%lld, contr=%.2lf, %s %c%c%c%c%s", iw, ih, zoom, imx, imy, lum, (long long)(maxlum*lum), maxlum, contrast_gain, imtypestr, bayer_labels[bayer[0]>>3], bayer_labels[bayer[1]>>3], bayer_labels[bayer[2]>>3], bayer_labels[bayer[3]>>3], bitmode?bitinfo:"");
+				else
+					GUIPrint(ghDC, xpos, ypos, "%dx%d, x%g, (%d, %d): Lum=%.6f = %lld/%lld, contr=%.2lf, %s%s", iw, ih, zoom, imx, imy, lum, (long long)(maxlum*lum), maxlum, contrast_gain, imtypestr, bitmode?bitinfo:"");
 
 				//Color16 colorAtMouse;
 				//colorAtMouse.color=(u64)(0xFFFF*image[iw*imy+imx])<<(bayer[(imy&1)<<1|imx&1]<<1);

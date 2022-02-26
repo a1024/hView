@@ -17,9 +17,11 @@
 #include		"generic.h"
 #include		"hview.h"
 #include		"huff.h"
+#include		<stdint.h>
 #define			STBI_WINDOWS_UTF8
 #define			STB_IMAGE_IMPLEMENTATION
-#include		"stb_image.h"
+#define			TINY_DNG_LOADER_IMPLEMENTATION
+#include		"tiny_dng_loader.h"
 #include		"lodepng.h"
 #ifdef HVIEW_INCLUDE_SAIL
 #include		<sail/sail.h>
@@ -45,7 +47,20 @@
 #include		<libtiff/tiffio.h>
 #pragma			comment(lib, "libtiff-5.lib")
 #endif
-//#include		<Shlobj.h>
+#ifdef HVIEW_INCLUDE_LIBBPG
+extern "C"
+{
+#include		<libbpgdec.h>
+}
+#include		"libfree.h"
+#pragma			comment(lib, "bpgdec.lib")
+#pragma			comment(lib, "libfree.lib")
+//extern "C"
+//{
+//#include		<libbpg.h>
+//}
+//#pragma		comment(lib, "bpg.lib")
+#endif
 #define STRICT_TYPED_ITEMIDS
 #include		<shlobj.h>
 #include		<objbase.h>      // For COM headers
@@ -175,7 +190,9 @@ int				wcscmp_ci(const wchar_t *s1, const wchar_t *s2)//case-insensitive only fo
 	EXT(WEBP)\
 	EXT(AVIF)\
 	EXT(HEIC)\
+	EXT(BPG)\
 	EXT(JXL)\
+	EXT(DNG)\
 	EXT(HUF)
 enum			Extension
 {
@@ -299,23 +316,6 @@ const char*		sail_error2str(int e)
 #define			LIBHEIF_CHECK(ERROR)	(!(ERROR).code||log_error(file, __LINE__, (ERROR).message))
 #endif
 #ifdef HVIEW_INCLUDE_LIBJXL
-//void*			libjxl_alloc(void* opaque, size_t size)
-//{
-//	return malloc(size);
-//}
-//void			libjxl_free(void* opaque, void* address)
-//{
-//	free(address);
-//}
-//JxlMemoryManager libjxl_memman={nullptr, libjxl_alloc, libjxl_free};
-//bool			libjxl_ready=false;
-//void			prep_libjxl()
-//{
-//	if(!libjxl_ready)
-//	{
-//		libjxl_ready=true;
-//	}
-//}
 const char*		libjxldec_err2str(int e)
 {
 	const char *a="<Unknown error>";
@@ -541,6 +541,67 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 		}
 		break;
 #endif
+#ifdef HVIEW_INCLUDE_LIBBPG
+	case EXT_BPG:
+		{
+#if 1
+			//LOG_ERROR("Warning: Memory leak");
+			stbi_convert_wchar_to_utf8(g_buf, g_buf_size, filename);
+			int iw2=0, ih2=0;
+			auto original_image=bpg_to_rgba(g_buf, &iw2, &ih2);
+			if(!original_image)
+				return false;
+			
+			assign_from_RGBA8((int*)original_image, iw2, ih2);//memory leak
+			gcc_free_memory(original_image);
+		//	free(original_image);//CRASH
+#endif
+#if 0
+#define		LIBBPG_ASSERT(ERROR)	(!(ERROR)||log_error(file, __LINE__, "BPG library: %d", ERROR))
+			std::vector<byte> data;
+			read_binary(filename, data);
+			if(!data.size())//file may not exist
+				return false;
+
+			BPGDecoderContext *decoder=bpg_decoder_open();
+			int error=bpg_decoder_decode(decoder, data.data(), (int)data.size());	LIBBPG_ASSERT(error);
+			BPGImageInfo info={};
+			error=bpg_decoder_get_info(decoder, &info);		LIBBPG_ASSERT(error);
+
+			iw=info.width, ih=info.height, image_size=iw*ih;
+			idepth=info.bit_depth;
+			image=(float*)realloc(image, image_size*sizeof(float)<<2);
+			int count=iw<<2;
+			if(info.bit_depth>8)
+			{
+				bpg_decoder_start(decoder, BPG_OUTPUT_FORMAT_RGBA64);
+				auto buffer=new unsigned short[count];
+				float gain=1.f/((1<<idepth)-1);
+				for(int ky=0;ky<ih;++ky)
+				{
+					error=bpg_decoder_get_line(decoder, buffer);	LIBBPG_ASSERT(error);
+					for(int kx=0;kx<count;++kx)
+						image[count*ky+kx]=gain*buffer[kx];
+				}
+				delete[] buffer;
+			}
+			else
+			{
+				bpg_decoder_start(decoder, BPG_OUTPUT_FORMAT_RGBA32);
+				auto buffer=new unsigned char[count];
+				float gain=1.f/((1<<idepth)-1);
+				for(int ky=0;ky<ih;++ky)
+				{
+					error=bpg_decoder_get_line(decoder, buffer);	LIBBPG_ASSERT(error);
+					for(int kx=0;kx<count;++kx)
+						image[count*ky+kx]=gain*buffer[kx];
+				}
+				delete[] buffer;
+			}
+#endif
+		}
+		break;
+#endif
 #ifdef HVIEW_INCLUDE_LIBTIFF
 	case EXT_TIF:
 	case EXT_TIFF:
@@ -669,6 +730,44 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 		}
 		break;
 #endif
+	case EXT_DNG:
+		{
+			stbi_convert_wchar_to_utf8(g_buf, g_buf_size, filename);
+			std::string warn, err;
+			std::vector<tinydng::DNGImage> images;
+			std::vector<tinydng::FieldInfo> custom_field_lists;
+			tinydng::LoadDNG(g_buf, custom_field_lists, &images, &warn, &err);
+			if(err.size())
+				LOG_ERROR("DNG loader error: %s", err.c_str());
+			if(warn.size())
+				LOG_ERROR("DNG loader warning: %s", warn.c_str());
+			if(!images.size())
+				return false;
+			auto &dng=images[0];
+			switch(dng.bits_per_sample)
+			{
+			case 16:
+				{
+					auto buffer=(unsigned short*)dng.data.data();
+					int size=dng.width*dng.height;
+					image=(float*)realloc(image, size*sizeof(float));
+					float gain=1.f/0xFFFF;
+					for(int k=0;k<size;++k)
+						image[k]=gain*buffer[k];
+				}
+				break;
+			default:
+				LOG_ERROR("Error: bit depth = %d", dng.bits_per_sample);
+				return false;
+			}
+			bayer[0]=(2-dng.cfa_pattern[0][0])<<3, bayer[1]=(2-dng.cfa_pattern[0][1])<<3;
+			bayer[2]=(2-dng.cfa_pattern[1][0])<<3, bayer[3]=(2-dng.cfa_pattern[1][1])<<3;
+			//memcpy(bayer, dng.cfa_plane_color, 4);
+			iw=dng.width, ih=dng.height, image_size=iw*ih;
+			idepth=dng.bits_per_sample_original;
+			imagetype=IM_BAYER;
+		}
+		break;
 	default://ordinary image
 		{
 			stbi_convert_wchar_to_utf8(g_buf, g_buf_size, filename);
@@ -840,194 +939,6 @@ bool			save_media_as()
 	return false;
 }
 
-
-#if 0
-#pragma comment(linker, "\"/manifestdependency:type='Win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
-
-const COMDLG_FILTERSPEC c_rgSaveTypes[] =
-{
-    {L"Word Document (*.doc)",       L"*.doc"},
-    {L"Web Page (*.htm; *.html)",    L"*.htm;*.html"},
-    {L"Text Document (*.txt)",       L"*.txt"},
-    {L"All Documents (*.*)",         L"*.*"}
-};
-
-// Indices of file types
-#define INDEX_WORDDOC 1
-#define INDEX_WEBPAGE 2
-#define INDEX_TEXTDOC 3
-
-// Controls
-#define CONTROL_GROUP           2000
-#define CONTROL_RADIOBUTTONLIST 2
-#define CONTROL_RADIOBUTTON1    1
-#define CONTROL_RADIOBUTTON2    2       // It is OK for this to have the same ID as CONTROL_RADIOBUTTONLIST,
-                                        // because it is a child control under CONTROL_RADIOBUTTONLIST
-
-// IDs for the Task Dialog Buttons
-#define IDC_BASICFILEOPEN                       100
-#define IDC_ADDITEMSTOCUSTOMPLACES              101
-#define IDC_ADDCUSTOMCONTROLS                   102
-#define IDC_SETDEFAULTVALUESFORPROPERTIES       103
-#define IDC_WRITEPROPERTIESUSINGHANDLERS        104
-#define IDC_WRITEPROPERTIESWITHOUTUSINGHANDLERS 105
-
-/* File Dialog Event Handler *****************************************************************************************************/
-
-class CDialogEventHandler : public IFileDialogEvents,
-                            public IFileDialogControlEvents
-{
-public:
-    // IUnknown methods
-    IFACEMETHODIMP QueryInterface(REFIID riid, void** ppv)
-    {
-        static const QITAB qit[] = {
-            QITABENT(CDialogEventHandler, IFileDialogEvents),
-            QITABENT(CDialogEventHandler, IFileDialogControlEvents),
-            { 0 },
-#pragma warning(suppress:4838)
-        };
-        return QISearch(this, qit, riid, ppv);
-    }
-
-    IFACEMETHODIMP_(ULONG) AddRef()
-    {
-        return InterlockedIncrement(&_cRef);
-    }
-
-    IFACEMETHODIMP_(ULONG) Release()
-    {
-        long cRef = InterlockedDecrement(&_cRef);
-        if (!cRef)
-            delete this;
-        return cRef;
-    }
-
-    // IFileDialogEvents methods
-    IFACEMETHODIMP OnFileOk(IFileDialog *) { return S_OK; };
-    IFACEMETHODIMP OnFolderChange(IFileDialog *) { return S_OK; };
-    IFACEMETHODIMP OnFolderChanging(IFileDialog *, IShellItem *) { return S_OK; };
-    IFACEMETHODIMP OnHelp(IFileDialog *) { return S_OK; };
-    IFACEMETHODIMP OnSelectionChange(IFileDialog *) { return S_OK; };
-    IFACEMETHODIMP OnShareViolation(IFileDialog *, IShellItem *, FDE_SHAREVIOLATION_RESPONSE *) { return S_OK; };
-    IFACEMETHODIMP OnTypeChange(IFileDialog *pfd);
-    IFACEMETHODIMP OnOverwrite(IFileDialog *, IShellItem *, FDE_OVERWRITE_RESPONSE *) { return S_OK; };
-
-    // IFileDialogControlEvents methods
-    IFACEMETHODIMP OnItemSelected(IFileDialogCustomize *pfdc, DWORD dwIDCtl, DWORD dwIDItem);
-    IFACEMETHODIMP OnButtonClicked(IFileDialogCustomize *, DWORD) { return S_OK; };
-    IFACEMETHODIMP OnCheckButtonToggled(IFileDialogCustomize *, DWORD, BOOL) { return S_OK; };
-    IFACEMETHODIMP OnControlActivating(IFileDialogCustomize *, DWORD) { return S_OK; };
-
-    CDialogEventHandler() : _cRef(1) { };
-private:
-    ~CDialogEventHandler() { };
-    long _cRef;
-};
-// Instance creation helper
-HRESULT CDialogEventHandler_CreateInstance(REFIID riid, void **ppv)
-{
-    *ppv = NULL;
-    CDialogEventHandler *pDialogEventHandler = new (std::nothrow) CDialogEventHandler();
-    HRESULT hr = pDialogEventHandler ? S_OK : E_OUTOFMEMORY;
-    if (SUCCEEDED(hr))
-    {
-        hr = pDialogEventHandler->QueryInterface(riid, ppv);
-        pDialogEventHandler->Release();
-    }
-    return hr;
-}
-HRESULT BasicFileOpen()
-{
-    // CoCreate the File Open Dialog object.
-    IFileDialog *pfd = NULL;
-    HRESULT hr = CoCreateInstance(CLSID_FileOpenDialog, 
-                      NULL, 
-                      CLSCTX_INPROC_SERVER, 
-                      IID_PPV_ARGS(&pfd));
-    if (SUCCEEDED(hr))
-    {
-        // Create an event handling object, and hook it up to the dialog.
-        IFileDialogEvents *pfde = NULL;
-        hr = CDialogEventHandler_CreateInstance(IID_PPV_ARGS(&pfde));
-        if (SUCCEEDED(hr))
-        {
-            // Hook up the event handler.
-            DWORD dwCookie;
-            hr = pfd->Advise(pfde, &dwCookie);
-            if (SUCCEEDED(hr))
-            {
-                // Set the options on the dialog.
-                DWORD dwFlags;
-
-                // Before setting, always get the options first in order 
-                // not to override existing options.
-                hr = pfd->GetOptions(&dwFlags);
-                if (SUCCEEDED(hr))
-                {
-                    // In this case, get shell items only for file system items.
-                    hr = pfd->SetOptions(dwFlags | FOS_FORCEFILESYSTEM);
-                    if (SUCCEEDED(hr))
-                    {
-                        // Set the file types to display only. 
-                        // Notice that this is a 1-based array.
-                        hr = pfd->SetFileTypes(ARRAYSIZE(c_rgSaveTypes), c_rgSaveTypes);
-                        if (SUCCEEDED(hr))
-                        {
-                            // Set the selected file type index to Word Docs for this example.
-                            hr = pfd->SetFileTypeIndex(INDEX_WORDDOC);
-                            if (SUCCEEDED(hr))
-                            {
-                                // Set the default extension to be ".doc" file.
-                                hr = pfd->SetDefaultExtension(L"doc;docx");
-                                if (SUCCEEDED(hr))
-                                {
-                                    // Show the dialog
-                                    hr = pfd->Show(NULL);
-                                    if (SUCCEEDED(hr))
-                                    {
-                                        // Obtain the result once the user clicks 
-                                        // the 'Open' button.
-                                        // The result is an IShellItem object.
-                                        IShellItem *psiResult;
-                                        hr = pfd->GetResult(&psiResult);
-                                        if (SUCCEEDED(hr))
-                                        {
-                                            // We are just going to print out the 
-                                            // name of the file for sample sake.
-                                            PWSTR pszFilePath = NULL;
-                                            hr = psiResult->GetDisplayName(SIGDN_FILESYSPATH, 
-                                                               &pszFilePath);
-                                            if (SUCCEEDED(hr))
-                                            {
-                                                TaskDialog(NULL,
-                                                           NULL,
-                                                           L"CommonFileDialogApp",
-                                                           pszFilePath,
-                                                           NULL,
-                                                           TDCBF_OK_BUTTON,
-                                                           TD_INFORMATION_ICON,
-                                                           NULL);
-                                                CoTaskMemFree(pszFilePath);
-                                            }
-                                            psiResult->Release();
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                // Unhook the event handler.
-                pfd->Unadvise(dwCookie);
-            }
-            pfde->Release();
-        }
-        pfd->Release();
-    }
-    return hr;
-}
-#endif
 bool			dialog_get_folder(const wchar_t *user_instr, std::wstring &path)
 {
 	HRESULT hr=OleInitialize(nullptr);

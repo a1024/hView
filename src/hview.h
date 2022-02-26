@@ -23,6 +23,7 @@
 //LIBHEIF		https://github.com/strukturag/libheif			for HEIF
 //LIBJXL		https://gitlab.com/wg1/jpeg-xl					for JXL
 //LIBTIFF		https://gitlab.com/libtiff/libtiff				for TIF
+//LIBBPG		https://github.com/retsyo/libbpg-py				for BPG
 
 
 	#define		HVIEW_INCLUDE_FFTW
@@ -30,6 +31,7 @@
 	#define		HVIEW_INCLUDE_LIBHEIF
 	#define		HVIEW_INCLUDE_LIBJXL
 	#define		HVIEW_INCLUDE_LIBTIFF
+	#define		HVIEW_INCLUDE_LIBBPG
 
 
 #ifdef HVIEW_INCLUDE_FFTW
