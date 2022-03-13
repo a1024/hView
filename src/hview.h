@@ -252,6 +252,7 @@ void			archiver_test3();
 void			archiver_test4();
 void			stack_images();
 void			remove_light_pollution();
+void			equalize();
 
 //image operations
 short*			get_image();//delete[] the returned buffer

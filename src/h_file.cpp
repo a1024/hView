@@ -545,16 +545,14 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 	case EXT_BPG:
 		{
 #if 1
-			//LOG_ERROR("Warning: Memory leak");
 			stbi_convert_wchar_to_utf8(g_buf, g_buf_size, filename);
 			int iw2=0, ih2=0;
 			auto original_image=bpg_to_rgba(g_buf, &iw2, &ih2);
 			if(!original_image)
 				return false;
 			
-			assign_from_RGBA8((int*)original_image, iw2, ih2);//memory leak
+			assign_from_RGBA8((int*)original_image, iw2, ih2);
 			gcc_free_memory(original_image);
-		//	free(original_image);//CRASH
 #endif
 #if 0
 #define		LIBBPG_ASSERT(ERROR)	(!(ERROR)||log_error(file, __LINE__, "BPG library: %d", ERROR))

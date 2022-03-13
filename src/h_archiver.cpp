@@ -1421,7 +1421,8 @@ void			PLHaar2D(const short *src, int width, int height, int bias, short *dst)
 		}
 	}
 	memcpy(dst, buffer?t1:t0, imsize<<1);//*/
-	delete[] t0, t1;
+	delete[] t0;
+	delete[] t1;
 }
 void			invPLHaar2D(const short *src, int width, int height, int bias, short *dst)
 {
@@ -1449,7 +1450,8 @@ void			invPLHaar2D(const short *src, int width, int height, int bias, short *dst
 		std::swap(t0, t1);
 	}
 	memcpy(dst, t0, imsize<<1);
-	delete[] t0, t1;
+	delete[] t0;
+	delete[] t1;
 }
 
 //temp: of size ceil(count*0.5)*3 shorts
@@ -1597,7 +1599,8 @@ void			ICER_IDWT1D(short *buffer, int count, ICER_FilterType filtertype, int nst
 	short *temp=new short[tsize];
 	for(int it=nsizes-1;it>=0;--it)
 		ICER_IDWT_run(buffer, temp, filter, 1, sizes[it]);
-	delete[] sizes, temp;
+	delete[] sizes;
+	delete[] temp;
 }
 void			ICER_DWT2D(short *buffer, int bw, int bh, ICER_FilterType filtertype, int nstages)
 {
@@ -1652,7 +1655,8 @@ void			ICER_IDWT2D(short *buffer, int bw, int bh, ICER_FilterType filtertype, in
 		for(int ky=0;ky<h2;++ky)//horizontal IDWT
 			ICER_IDWT_run(buffer+bw*ky, temp, filter, 1, w2);
 	}
-	delete[] sizes, temp;
+	delete[] sizes;
+	delete[] temp;
 }
 
 void			encode_zigzag(short *buffer, int imsize)
@@ -1979,7 +1983,8 @@ void			archiver_test3()
 		s2[imsize+k]=(short)floor(b0[k]+0.5);
 	for(int k=0;k<imsize;++k)
 		s2[(imsize<<1)+k]=(short)floor(b1[k]+0.5);
-	delete[] b0, b1;
+	delete[] b0;
+	delete[] b1;
 	set_image(s2, width, height*3, depth, IM_GRAYSCALE);
 	delete[] s2;//*/
 #endif
@@ -2610,7 +2615,8 @@ void			dwt2_2d_inv(float *buffer, int bw, int bh, int nstages)
 		for(int ky=0;ky<h2;++ky)//horizontal IDWT
 			dwt2_1d_inv(buffer+bw*ky, w2, 1, temp);
 	}
-	delete[] sizes, temp;
+	delete[] sizes;
+	delete[] temp;
 }
 
 void			print_subimage(float *buffer, int bw, int bh, int x0, int y0, int dx, int dy, int chars, int decimals)
@@ -2653,7 +2659,8 @@ void		dct_init(float *&weights, float *&temp, int size, bool inv)
 }
 void		dct_finish(float *&weights, float *&temp)
 {
-	delete[] weights, temp;
+	delete[] weights;
+	delete[] temp;
 	weights=temp=nullptr;
 }
 void		dct_apply_1D(float *data, const float *weights, float *temp, int size, int stride)
@@ -3297,4 +3304,85 @@ void			remove_light_pollution()//only for images of starry night sky
 	console_pause();
 	console_end();
 #endif
+}
+
+inline int		clamp(int lo, int x, int hi)
+{
+	if(x<lo)
+		x=lo;
+	if(x>hi)
+		x=hi;
+	return x;
+}
+void			calc_histogram(float *buffer, int bw, int bh, int x1, int x2, int y1, int y2, int xstride, int ystride, int nlevels, int *hist)
+{
+	memset(hist, 0, nlevels*sizeof(int));
+	for(int ky=y1;ky<y2;ky+=ystride)
+	{
+		auto row=buffer+bw*ky;
+		for(int kx=x1;kx<x2;kx+=xstride)
+		{
+			int val=int(row[kx]*(nlevels-1));
+			val=clamp(0, val, nlevels-1);
+			++hist[val];
+		}
+	}
+}
+void			equalize()
+{
+	int NLEVELS=1<<idepth;
+	int bw=0, bh=0, xstride=0, ystride=0, nch=0, skip_alpha=0;
+	float *buffer[4]={nullptr};
+	switch(imagetype)
+	{
+	case IM_GRAYSCALE:
+		bw=iw, bh=ih, xstride=1, ystride=1, nch=1, skip_alpha=-1;
+		buffer[0]=image;
+		break;
+	case IM_RGBA://4 floats per pixel (quad width)
+		bw=iw<<2, bh=ih, xstride=4, ystride=1, nch=4, skip_alpha=3;
+		buffer[0]=image;
+		buffer[1]=image+1;
+		buffer[2]=image+2;
+		buffer[3]=image+3;
+		break;
+	case IM_BAYER:
+	case IM_BAYER_SEPARATE://stored same as bayer, channels are shown separately
+		bw=iw, bh=ih, xstride=2, ystride=2, nch=4, skip_alpha=-1;
+		buffer[0]=image;
+		buffer[1]=image+1;
+		buffer[2]=image+iw;
+		buffer[3]=image+iw+1;
+		break;
+	case IM_UNINITIALIZED:
+	default:
+		return;
+	}
+	int hist_w=bw/xstride, hist_h=bh/ystride, hist_size=hist_w*hist_h;
+	auto hist=new int[hist_size];
+	auto CDF=new float[hist_size];
+	for(int kc=0;kc<nch;++kc)
+	{
+		if(kc==skip_alpha)
+			continue;
+		calc_histogram(buffer[kc], bw, bh, 0, bw, 0, bh, xstride, ystride, NLEVELS, hist);
+		int sum=0;
+		float gain=1.f/hist_size;
+		for(int kv=0;kv<NLEVELS;++kv)//integrate PDF
+		{
+			CDF[kv]=gain*(float)sum;
+			sum+=hist[kv];
+		}
+		for(int ky=0;ky<bh;ky+=ystride)
+		{
+			auto row=buffer[kc]+bw*ky;
+			for(int kx=0;kx<bw;kx+=xstride)
+			{
+				int val=int(row[kx]*(NLEVELS-1));
+				val=clamp(0, val, NLEVELS-1);
+				row[kx]=CDF[val];
+			}
+		}
+	}
+	delete[] hist;
 }

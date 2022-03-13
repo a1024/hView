@@ -683,8 +683,9 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 				"G: Toggle between Bayer and grayscale\n"
 				"H: Histogram\n"
 				"Ctrl H: Cmd histogram\n"
+				"E: Equalize\n"
 				"S: Simple average image stacker\n"
-			//	"Ctrl S: Save as"
+				"Ctrl S: Save as"
 				"L: Remove light pollution from night sky image\n"
 				"F/F11: Toggle fullscreen\n"
 #ifdef FFTW3_H
@@ -915,7 +916,9 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 			}
 			render();
 			break;
-		case 'E'://export
+		case 'E'://equalize
+			equalize();
+			render();
 			break;
 		case 'F':case VK_F11://fullscreen
 			if(fullscreen)//exit fullscreen
@@ -999,8 +1002,11 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 	print_errors(ghDC);//
 	return DefWindowProcA(hWnd, message, wParam, lParam);
 }
+//void			debug_test();
 int				__stdcall WinMain(HINSTANCE__ *hInstance, HINSTANCE__ *hPrevInstance, char *lpCmdLine, int nCmdShow)
 {
+	//debug_test();//
+
 	ghInstance=hInstance;
 	tagWNDCLASSEXA wndClassEx=
 	{

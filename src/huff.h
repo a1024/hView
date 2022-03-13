@@ -14,6 +14,7 @@
 //You should have received a copy of the GNU General Public License
 //along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+#pragma once
 #ifndef HUFF_H
 #define HUFF_H
 #include		<vector>
@@ -91,12 +92,13 @@ short*			unpack_r10(const byte* src, int width, int height);
 short*			unpack_r12(const byte* src, int width, int height);
 namespace		huff
 {
-	int			compress(const short *buffer, int bw, int bh, int depth, int bayer, std::vector<int> &data);
-	int			compress_v2(const short *buffer, int bw, int bh, int depth, int bayer, std::vector<int> &data);
-	int			compress_v5(const short *buffer, int bw, int bh, int depth, int bayer, std::vector<int> &data);
-	int			pack_raw(const byte *buffer, int bw, int bh, int depth, int bayer, std::vector<int> &data);//depth: 10 or 12
+	int			compress	(const short *buffer, int bw, int bh, int depth, int bayer, std::vector<int> &data);
+	int			compress_v2	(const short *buffer, int bw, int bh, int depth, int bayer, std::vector<int> &data);//unfinished
+	int			compress_v5	(const short *buffer, int bw, int bh, int depth, int bayer, std::vector<int> &data);
+	int			pack_raw	(const byte *buffer, int bw, int bh, int depth, int bayer, std::vector<int> &data);//depth: 10 or 12
 	int			pack_r10_g12(const byte *buffer, int bw, int bh, int denoise, std::vector<int> &data);
 	int			pack_r12_g14(const byte *buffer, int bw, int bh, int denoise, std::vector<int> &data);
+	int			compress_v7(const float *buffer, int bw, int bh, int bayer, int depth, int nFrames, unsigned char *&dst, unsigned long long &dst_size, unsigned long long &dst_cap);
 	bool		decompress(const byte *data, int bytesize, RequestedFormat format, void **pbuffer, int &bw, int &bh, int &depth, char *bayer_sh);//realloc will be used on buffer
 }
 #endif//HUFF_H
