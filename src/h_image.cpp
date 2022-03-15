@@ -346,14 +346,30 @@ void			applyFFT()
 #endif
 }
 
-void			calculate_histogram(const float *buffer, int imsize, int nlevels, int *histogram)
+void			calculate_histogram(const float *buffer, int width, int height, int xstride, int ystride, int nlevels, int *histogram, bool zerobuffer, int *histmax)
 {
-	double normal=nlevels-1;
-	memset(histogram, 0, nlevels<<2);
-	for(int k=0;k<imsize;++k)
+	int normal=nlevels-1;
+	if(zerobuffer)
+		memset(histogram, 0, nlevels<<2);
+	for(int ky=0;ky<height;ky+=ystride)
 	{
-		int level=int(buffer[k]*normal);
-		++histogram[level];
+		auto row=buffer+width*ky;
+		for(int kx=0;kx<width;kx+=xstride)
+		{
+			int level=int(row[kx]*normal);
+			if(level<0)
+				level=0;
+			if(level>normal)
+				level=normal;
+			++histogram[level];
+		}
+	}
+	if(histmax)
+	{
+		*histmax=0;
+		for(int k=0;k<nlevels;++k)
+			if(*histmax<histogram[k])
+				*histmax=histogram[k];
 	}
 }
 void			reset_histogram()
@@ -370,13 +386,27 @@ void			toggle_histogram()
 	if(histOn)
 	{
 		int nlevels=1<<idepth;
-		histogram=new int[nlevels];
-		calculate_histogram(image, image_size, nlevels, histogram);
-
-		histmax=0;
-		for(int k=0;k<nlevels;++k)
-			if(histmax<histogram[k])
-				histmax=histogram[k];
+		switch(imagetype)
+		{
+		case IM_GRAYSCALE:
+			histogram=new int[nlevels];
+			calculate_histogram(image, iw, ih, 1, 1, nlevels, histogram, true, &histmax_r);
+			break;
+		case IM_RGBA:
+			histogram=new int[nlevels*3];
+			calculate_histogram(image  , iw<<2, ih, 4, 1, nlevels, histogram, true, &histmax_r);
+			calculate_histogram(image+1, iw<<2, ih, 4, 1, nlevels, histogram+nlevels, true, &histmax_g);
+			calculate_histogram(image+2, iw<<2, ih, 4, 1, nlevels, histogram+(nlevels<<1), true, &histmax_b);
+			break;
+		case IM_BAYER:
+		case IM_BAYER_SEPARATE:
+			histogram=new int[nlevels*3];
+			calculate_histogram(image, iw, ih, 2, 2, nlevels, histogram, true, nullptr);//TODO: support other Bayer matrices
+			calculate_histogram(image+1, iw, ih, 2, 2, nlevels, histogram+nlevels, true, &histmax_r);
+			calculate_histogram(image+iw, iw, ih, 2, 2, nlevels, histogram+(nlevels<<1), true, &histmax_b);
+			calculate_histogram(image+iw+1, iw, ih, 2, 2, nlevels, histogram, false, &histmax_g);
+			break;
+		}
 	}
 	else
 	{
@@ -388,12 +418,16 @@ void			cmd_histogram()
 {
 	int nlevels=1<<idepth;
 	console_start(80, 1000+nlevels);
-
-	int *histogram=new int[nlevels];
-	calculate_histogram(image, image_size, nlevels, histogram);//imagetype
-	print_histogram(histogram, nlevels, image_size, nullptr);
+	if(imagetype==IM_GRAYSCALE)
+	{
+		int *histogram=new int[nlevels];
+		calculate_histogram(image, iw, ih, 1, 1, nlevels, histogram, true, nullptr);
+		print_histogram(histogram, nlevels, image_size, nullptr);
+		delete[] histogram;
+	}
+	else
+		printf("TODO: CMD histogram of non-grayscale images\n");
 
 	console_pause();
 	console_end();
-	delete[] histogram;
 }

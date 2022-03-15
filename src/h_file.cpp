@@ -780,6 +780,11 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 			free(original_image);
 		}
 	}
+	if(histOn)
+	{
+		toggle_histogram();
+		toggle_histogram();
+	}
 
 	//center_image();
 	render();

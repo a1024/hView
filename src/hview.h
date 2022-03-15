@@ -64,7 +64,7 @@ extern bool		bitmode;
 extern int		bitplane;
 
 extern bool		histOn;
-extern int		*histogram, histmax;//size of 1<<idepth
+extern int		*histogram, histmax_r, histmax_g, histmax_b;//size of 1<<idepth
 
 #ifdef FFTW3_H
 extern bool		FourierDomain;//if true, show the image in fft_in_planes, otherwise ordinary image
@@ -252,7 +252,7 @@ void			archiver_test3();
 void			archiver_test4();
 void			stack_images();
 void			remove_light_pollution();
-void			equalize();
+void			equalize(bool super);
 
 //image operations
 short*			get_image();//delete[] the returned buffer

@@ -2723,7 +2723,40 @@ int				count_pot(int x)
 void			archiver_test4()
 {
 	//console_start_good();
+
+	//variable resolution experiment
 #if 1
+	int dimx[]={0, iw/3, iw*2/3, iw}, dimy[]={0, ih/3, ih*2/3, ih};
+	switch(imagetype)
+	{
+	case IM_GRAYSCALE:
+		for(int kb=0;kb<9;++kb)
+		{
+			if(kb==4)
+				continue;
+			int kbx=kb%3, kby=kb/3;
+			for(int ky=dimy[kby];ky+1<dimy[kby+1];ky+=2)
+			{
+				for(int kx=dimx[kbx];kx+1<dimx[kbx+1];kx+=2)
+				{
+					image[iw*ky+kx]=0.25f*(image[iw*ky+kx]+image[iw*ky+kx+1]+image[iw*ky+kx+iw]+image[iw*ky+kx+iw+1]);
+					image[iw*ky+kx+1]=image[iw*ky+kx];
+					image[iw*ky+kx+iw]=image[iw*ky+kx];
+					image[iw*ky+kx+iw+1]=image[iw*ky+kx];
+				}
+			}
+		}
+		break;
+	case IM_RGBA:
+		break;
+	case IM_BAYER:
+	case IM_BAYER_SEPARATE:
+		break;
+	}
+	render();
+#endif
+
+#if 0
 	static bool temp=false;
 	int pw=count_pot(iw), ph=count_pot(ih);
 	int pot_count=minimum(pw, ph);
@@ -3190,8 +3223,8 @@ void			average_filter_mirror(const float *src, float *dst, int count, int stride
 {
 #ifndef NO_CONSOLE
 	static int call=0;
-	printf("\rCall %d...\t\t", call);
 	++call;
+	printf("\rCall %d...\t\t", call);
 #endif
 	GEN_ASSERT(fsize<count);
 	int reach=(fsize>>1)*stride;
@@ -3328,9 +3361,14 @@ void			calc_histogram(float *buffer, int bw, int bh, int x1, int x2, int y1, int
 		}
 	}
 }
-void			equalize()
+struct			HistInfo
 {
-	int NLEVELS=1<<idepth;
+	float CDF, PDF, val;
+	int collisioncount, idx;
+};
+void			equalize(bool super)
+{
+	int nlevels=1<<idepth;
 	int bw=0, bh=0, xstride=0, ystride=0, nch=0, skip_alpha=0;
 	float *buffer[4]={nullptr};
 	switch(imagetype)
@@ -3358,31 +3396,118 @@ void			equalize()
 	default:
 		return;
 	}
-	int hist_w=bw/xstride, hist_h=bh/ystride, hist_size=hist_w*hist_h;
-	auto hist=new int[hist_size];
-	auto CDF=new float[hist_size];
-	for(int kc=0;kc<nch;++kc)
+	int info_w=bw/xstride, info_h=bh/ystride, npixels=info_w*info_h;
+	if(super)
 	{
-		if(kc==skip_alpha)
-			continue;
-		calc_histogram(buffer[kc], bw, bh, 0, bw, 0, bh, xstride, ystride, NLEVELS, hist);
-		int sum=0;
-		float gain=1.f/hist_size;
-		for(int kv=0;kv<NLEVELS;++kv)//integrate PDF
+		auto info=new HistInfo[npixels];
+		for(int kc=0;kc<nch;++kc)
 		{
-			CDF[kv]=gain*(float)sum;
-			sum+=hist[kv];
-		}
-		for(int ky=0;ky<bh;ky+=ystride)
-		{
-			auto row=buffer[kc]+bw*ky;
-			for(int kx=0;kx<bw;kx+=xstride)
+			if(kc==skip_alpha)
+				continue;
+
+			memset(info, 0, npixels*sizeof(HistInfo));
+			for(int ky=0, kd=0;ky<bh;ky+=ystride)//fill info
 			{
-				int val=int(row[kx]*(NLEVELS-1));
-				val=clamp(0, val, NLEVELS-1);
-				row[kx]=CDF[val];
+				auto row=buffer[kc]+bw*ky;
+				for(int kx=0;kx<bw;kx+=xstride, ++kd)
+				{
+					info[kd].idx=kd;
+					info[kd].val=row[kx];
+				}
+			}
+			std::sort(info, info+npixels, [](HistInfo const &left, HistInfo const &right)
+			{
+				return left.val<right.val;
+			});
+
+			int collisioncount=0;
+			float diff=info[0].val, sum=0;
+			info[0].PDF=diff?1/diff:0;
+			for(int k=1;k<npixels;++k)//calculate CDF
+			{
+				diff=info[k].val-info[k-1].val;
+				info[k].PDF=diff?1/diff:0;
+				info[k].CDF=sum;
+				info[k].collisioncount=collisioncount;
+				if(diff)
+					sum+=info[k].PDF;
+				else
+					++collisioncount;
+			}
+
+			//diff=0;
+			//for(int k=1;k<npixels;++k)//replace each collision in CDF with total sum	X
+			//{
+			//	if(!info[k].PDF)
+			//		diff+=sum;
+			//	info[k].CDF+=diff;
+			//}
+			//sum+=diff;
+
+			float gain=1/sum;
+			for(int k=1;k<npixels;++k)//normalize CDF
+				info[k].CDF*=gain;
+
+			for(int ky=0, kd=0;ky<bh;ky+=ystride)//substitute values
+			{
+				auto row=buffer[kc]+bw*ky;
+				for(int kx=0;kx<bw;kx+=xstride, ++kd)
+				{
+					float val=row[kx];
+					int lk=0, rk=npixels-1;//binary search
+					while(lk<=rk)
+					{
+						int k=(lk+rk)>>1;
+						if(info[k].CDF<val)
+							lk=k+1;
+						else if(info[k].CDF>val)
+							rk=k-1;
+						else
+							break;
+					}
+					int idx=lk+(lk<npixels&&info[lk].CDF<val);//points at first element greater than val
+					if(idx)
+					{
+						auto v0=info[idx-1].CDF, v1=info[idx].CDF;
+						if(v0<v1)
+							row[kx]=v0+(val-v0)/(v1-v0);
+						else
+							row[kx]=v0;
+					}
+					else
+						row[kx]=info[idx].CDF;
+				}
 			}
 		}
 	}
-	delete[] hist;
+	else
+	{
+		auto hist=new int[nlevels];
+		auto CDF=new float[nlevels];
+		for(int kc=0;kc<nch;++kc)
+		{
+			if(kc==skip_alpha)
+				continue;
+			calc_histogram(buffer[kc], bw, bh, 0, bw, 0, bh, xstride, ystride, nlevels, hist);
+			int sum=0;
+			float gain=1.f/npixels;
+			for(int kv=0;kv<nlevels;++kv)//integrate PDF
+			{
+				CDF[kv]=gain*(float)sum;
+				sum+=hist[kv];
+			}
+			for(int ky=0;ky<bh;ky+=ystride)
+			{
+				auto row=buffer[kc]+bw*ky;
+				for(int kx=0;kx<bw;kx+=xstride)
+				{
+					int val=int(row[kx]*(nlevels-1));
+					val=clamp(0, val, nlevels-1);
+					row[kx]=CDF[val];
+				}
+			}
+		}
+		delete[] hist;
+		delete[] CDF;
+	}
 }

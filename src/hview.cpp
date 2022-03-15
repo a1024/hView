@@ -35,7 +35,7 @@ bool			bitmode=false;//draw standalone bitplane
 int				bitplane=0;//see bitmode
 
 bool			histOn=false;
-int				*histogram=nullptr, histmax=0;
+int				*histogram=nullptr, histmax_r=0, histmax_g=0, histmax_b=0;
 
 #ifdef FFTW3_H
 bool			FourierDomain=false;
@@ -339,6 +339,24 @@ void			copy_pixels(Point2d const &istart, Point2d const &iend)
 	}
 }
 Point2d s_start, s_end, istart, iend;
+void			draw_histogram(int *hist, int nlevels, int hist_amplitude, int color, int y1, int y2)
+{
+	auto p2=(unsigned char*)&color;
+	int wndw=w;
+	for(int kx=0;kx<w;++kx)
+	{
+		//int idx=kx*(nlevels-1)/(wndw-1);
+		int idx=kx*nlevels/wndw;
+		int freq=y1+hist[idx]*(y2-y1)/hist_amplitude;
+		for(int ky=y1;ky<freq;++ky)
+		{
+			auto p=(unsigned char*)(rgb+w*ky+kx);
+			p[0]+=(p2[0]-(int)p[0])>>1;
+			p[1]+=(p2[1]-(int)p[1])>>1;
+			p[2]+=(p2[2]-(int)p[2])>>1;
+		}
+	}
+}
 void			render()
 {
 	memset(rgb, 0xFF, rgbn<<2);
@@ -564,19 +582,28 @@ void			render()
 		}
 		if(histOn)//draw histogram
 		{
-			int nlevels=1<<idepth, wndw=w, wndh=h-17;
-			for(int kx=0;kx<w;++kx)
+			int nlevels=1<<idepth;
+			switch(imagetype)
 			{
-				int idx=kx*(nlevels-1)/(wndw-1);
-				int freq=histogram[idx]*wndh/histmax;
-				for(int ky=0;ky<freq;++ky)
+			case IM_GRAYSCALE:
+				if(h>17)
+					draw_histogram(histogram, nlevels, histmax_r, 0xFF00FF, 0, h-17);
+				break;
+			case IM_RGBA:
+			case IM_BAYER:
+			case IM_BAYER_SEPARATE:
+				if(h>17)
 				{
-					//rgb[w*ky+kx]=0xFFFF00FF;
-					auto p=(unsigned char*)(rgb+w*ky+kx);
-					p[0]+=(0xFF-(int)p[0])>>1;
-					p[1]+=(0x00-(int)p[1])>>1;
-					p[2]+=(0xFF-(int)p[2])>>1;
+					int histmax=histmax_r, windh=h-17;
+					if(histmax<histmax_g)
+						histmax=histmax_g;
+					if(histmax<histmax_b)
+						histmax=histmax_b;
+					draw_histogram(histogram, nlevels, histmax, 0xFF0000, 0, windh/3);
+					draw_histogram(histogram+nlevels, nlevels, histmax, 0x00FF00, windh/3, windh*2/3);
+					draw_histogram(histogram+(nlevels<<1), nlevels, histmax, 0x0000FF, windh*2/3, windh);
 				}
+				break;
 			}
 		}
 	}
@@ -684,6 +711,7 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 				"H: Histogram\n"
 				"Ctrl H: Cmd histogram\n"
 				"E: Equalize\n"
+				"Ctrl E: Equalize (HQ)\n"
 				"S: Simple average image stacker\n"
 				"Ctrl S: Save as"
 				"L: Remove light pollution from night sky image\n"
@@ -917,7 +945,12 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 			render();
 			break;
 		case 'E'://equalize
-			equalize();
+			equalize(kb[VK_CONTROL]);
+			if(histOn)
+			{
+				toggle_histogram();
+				toggle_histogram();
+			}
 			render();
 			break;
 		case 'F':case VK_F11://fullscreen

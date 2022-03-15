@@ -1238,7 +1238,7 @@ void			debug_test()
 //	guide=buffer;
 	int nFrames=1, depth=1;
 	huff::compress_v7(buffer, iw, ih, 0, depth, nFrames, dst, dst_size, dst_cap);
-	
+
 	float gain=1/(float)(((1<<depth)-1)*nFrames);
 	for(int ky=0, kd=0;ky<ih;ky+=2)//interleave Bayer channels
 	{
@@ -2068,12 +2068,15 @@ namespace		huff
 		header->version=7;//ACC-ANS
 		header->width=bw>>1;	//image size = header->width * header->height * 4*sizeof(float) bytes
 		header->height=bh>>1;
-		*(int*)header->bayerInfo=bayer;
+		*(int*)header->bayerInfo=bayer;//bayer can be "GRBG" or zero in case of red-only
 		header->nLevels=1<<depth;
 		//header->nLevels=4*sizeof(float);//bytespersymbol
 		dst_size+=sizeof(HuffHeader);
 		time_mark("header");
-		rans4_encode(temp, imSize/4, 4*sizeof(float), dst, dst_size, dst_cap, false);
+		if(bayer)
+			rans4_encode(temp, imSize/4, 4*sizeof(float), dst, dst_size, dst_cap, false);
+		else
+			rans4_encode(temp, imSize, sizeof(float), dst, dst_size, dst_cap, false);
 		time_mark("rANS_enc");
 #ifndef __ANDROID__
 		free(temp);//CRASHES when freeing temp where it was allocated
@@ -2376,10 +2379,20 @@ namespace		huff
 		else if(header->version==7)//ACC-ANS
 		{
 			is_float=true;
-			dst=(short*)malloc(imSize*4*sizeof(float));//sic
-			auto src=(byte*)header->histogram;
-			unsigned long long src_idx=0, src_size=bytesize-sizeof(HuffHeader);
-			rans4_decode(src, src_idx, src_size, dst, imSize, 4*sizeof(float), false);
+			if(*(int*)header->bayerInfo)
+			{
+				dst=(short*)malloc(imSize*4*sizeof(float));//sic
+				auto src=(byte*)header->histogram;
+				unsigned long long src_idx=0, src_size=bytesize-sizeof(HuffHeader);
+				rans4_decode(src, src_idx, src_size, dst, imSize, 4*sizeof(float), false);
+			}
+			else
+			{
+				dst=(short*)malloc(imSize*sizeof(float));//sic
+				auto src=(byte*)header->histogram;
+				unsigned long long src_idx=0, src_size=bytesize-sizeof(HuffHeader);
+				rans4_decode(src, src_idx, src_size, dst, imSize, sizeof(float), false);
+			}
 		}
 		else if(header->version==10)//uncompressed raw10
 		{
@@ -2457,7 +2470,10 @@ namespace		huff
 			if(is_float)
 			{
 				int w0=bw;
-				bw<<=1, bh<<=1;
+				if(*(int*)header->bayerInfo)
+					bw<<=1, bh<<=1;
+				else
+					w0>>=1;
 				b2=realloc(*pbuffer, imSize*4*sizeof(float));
 				if(b2)
 					*pbuffer=b2;
