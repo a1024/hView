@@ -60,6 +60,8 @@ extern int		idepth;
 
 extern double	contrast_gain, contrast_offset;
 
+extern bool		imagecentered;
+
 extern bool		bitmode;
 extern int		bitplane;
 

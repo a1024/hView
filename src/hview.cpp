@@ -31,6 +31,8 @@ char			bayer[4]={};//shift ammounts for the 4 Bayer mosaic components, -1 for gr
 const char		bayer_labels[]="BGRA";
 int				idepth=0;
 
+bool			imagecentered=false;
+
 bool			bitmode=false;//draw standalone bitplane
 int				bitplane=0;//see bitmode
 
@@ -127,6 +129,7 @@ void			center_image()
 	invzoom=1/zoom;
 	wpx=(iw-wndw*invzoom)*0.5;//center image
 	wpy=(ih-wndh*invzoom)*0.5;
+	imagecentered=true;
 }
 typedef unsigned long long u64;
 union			Color16
@@ -633,7 +636,7 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 					invzoom=1/zoom;
 				}
 				h=h2, w=w2, rgbn=w*h;
-				if(autozoom==AUTOZOOM_CENTER&&iw&&ih)
+				if((imagecentered||autozoom==AUTOZOOM_CENTER)&&iw&&ih)
 					center_image();
 				if(hBitmap)
 				{
@@ -658,6 +661,7 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 			wpx-=(mx2-mx)*invzoom;
 			wpy-=(my2-my)*invzoom;
 			mx=mx2, my=my2;
+			imagecentered=false;
 			render();
 		}
 		else
@@ -690,6 +694,7 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 			if(zoom>1-tolerance&&zoom<1+tolerance)
 				zoom=1;
 			invzoom=1/zoom;
+			imagecentered=false;
 			render();
 		}
 		break;
@@ -1012,9 +1017,9 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 				}
 				float lum=image[iw*imy+imx];
 				if(imagetype==IM_BAYER||imagetype==IM_BAYER_SEPARATE)
-					GUIPrint(ghDC, xpos, ypos, "%dx%d, x%g, (%d, %d): Lum=%.6f = %lld/%lld, contr=%.2lf, %s %c%c%c%c%s", iw, ih, zoom, imx, imy, lum, (long long)(maxlum*lum), maxlum, contrast_gain, imtypestr, bayer_labels[bayer[0]>>3], bayer_labels[bayer[1]>>3], bayer_labels[bayer[2]>>3], bayer_labels[bayer[3]>>3], bitmode?bitinfo:"");
+					GUIPrint(ghDC, xpos, ypos, "%dx%d, x%g, (%d, %d): Lum=%.6f = %lld/%lld, contr=%.2lf, %s %c%c%c%c%s%s", iw, ih, zoom, imx, imy, lum, (long long)(maxlum*lum), maxlum, contrast_gain, imtypestr, bayer_labels[bayer[0]>>3], bayer_labels[bayer[1]>>3], bayer_labels[bayer[2]>>3], bayer_labels[bayer[3]>>3], bitmode?bitinfo:"", imagecentered?" CENTER":"");
 				else
-					GUIPrint(ghDC, xpos, ypos, "%dx%d, x%g, (%d, %d): Lum=%.6f = %lld/%lld, contr=%.2lf, %s%s", iw, ih, zoom, imx, imy, lum, (long long)(maxlum*lum), maxlum, contrast_gain, imtypestr, bitmode?bitinfo:"");
+					GUIPrint(ghDC, xpos, ypos, "%dx%d, x%g, (%d, %d): Lum=%.6f = %lld/%lld, contr=%.2lf, %s%s%s", iw, ih, zoom, imx, imy, lum, (long long)(maxlum*lum), maxlum, contrast_gain, imtypestr, bitmode?bitinfo:"", imagecentered?" CENTER":"");
 
 				//Color16 colorAtMouse;
 				//colorAtMouse.color=(u64)(0xFFFF*image[iw*imy+imx])<<(bayer[(imy&1)<<1|imx&1]<<1);
@@ -1024,13 +1029,13 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 			{
 				int idx=(iw*imy+imx)<<2;
 				float red=image[idx], green=image[idx+1], blue=image[idx+2], alpha=image[idx+3];
-				GUIPrint(ghDC, xpos, ypos, "%dx%d, x%g, (%d, %d): RGBA=(%.4f, %.4f, %.4f, %.4f) = (%lld, %lld, %lld, %lld)/%lld, contr=%.2lf, %s%s", iw, ih, zoom, imx, imy, red, green, blue, alpha, (long long)(maxlum*red), (long long)(maxlum*green), (long long)(maxlum*blue), (long long)(maxlum*alpha), maxlum, contrast_gain, imtypestr, bitmode?bitinfo:"");
+				GUIPrint(ghDC, xpos, ypos, "%dx%d, x%g, (%d, %d): RGBA=(%.4f, %.4f, %.4f, %.4f) = (%lld, %lld, %lld, %lld)/%lld, contr=%.2lf, %s%s%s", iw, ih, zoom, imx, imy, red, green, blue, alpha, (long long)(maxlum*red), (long long)(maxlum*green), (long long)(maxlum*blue), (long long)(maxlum*alpha), maxlum, contrast_gain, imtypestr, bitmode?bitinfo:"", imagecentered?" CENTER":"");
 			}
 			else//unreachable
-				GUIPrint(ghDC, xpos, ypos, "%dx%d, x%g, (%d, %d) INVALID STATE, %s%s", iw, ih, zoom, imx, imy, imtypestr, bitmode?bitinfo:"");
+				GUIPrint(ghDC, xpos, ypos, "%dx%d, x%g, (%d, %d) INVALID STATE, %s%s%s", iw, ih, zoom, imx, imy, imtypestr, bitmode?bitinfo:"", imagecentered?" CENTER":"");
 		}
 		else
-			GUIPrint(ghDC, xpos, ypos, "%dx%d, x%g, (%d, %d), %s%s", iw, ih, zoom, imx, imy, imtypestr, bitmode?bitinfo:"");
+			GUIPrint(ghDC, xpos, ypos, "%dx%d, x%g, (%d, %d), %s%s%s", iw, ih, zoom, imx, imy, imtypestr, bitmode?bitinfo:"", imagecentered?" CENTER":"");
 	}
 	print_errors(ghDC);//
 	return DefWindowProcA(hWnd, message, wParam, lParam);

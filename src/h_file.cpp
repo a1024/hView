@@ -786,7 +786,8 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 		toggle_histogram();
 	}
 
-	//center_image();
+	if(imagecentered&&iw&&ih)
+		center_image();
 	render();
 	return true;
 }
