@@ -14,8 +14,14 @@
 //You should have received a copy of the GNU General Public License
 //along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+#pragma once
 #ifndef GENERIC_H
 #define GENERIC_H
+
+#define	NOCRYPT
+#define	_WS2DEF_
+#define	_WINSOCKAPI_
+#define _WINSOCK2API_
 #include		<Windows.h>
 #include		<string>
 

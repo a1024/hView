@@ -14,6 +14,7 @@
 //You should have received a copy of the GNU General Public License
 //along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+#pragma once
 #ifndef HVIEW_H
 #define HVIEW_H
 
@@ -32,6 +33,8 @@
 	#define		HVIEW_INCLUDE_LIBJXL
 	#define		HVIEW_INCLUDE_LIBTIFF
 	#define		HVIEW_INCLUDE_LIBBPG
+//	#define		HVIEW_INCLUDE_TINYDNGLOADER//superceeded by libraw
+	#define		HVIEW_INCLUDE_LIBRAW
 
 
 #ifdef HVIEW_INCLUDE_FFTW
@@ -254,7 +257,7 @@ void			archiver_test3();
 void			archiver_test4();
 void			stack_images();
 void			remove_light_pollution();
-void			equalize(bool super);
+void			equalize(int super);
 
 //image operations
 short*			get_image();//delete[] the returned buffer

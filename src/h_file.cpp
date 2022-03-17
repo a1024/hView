@@ -18,10 +18,30 @@
 #include		"hview.h"
 #include		"huff.h"
 #include		<stdint.h>
+#include		<vector>
+#include		<string>
+#include		<fstream>
+#include		<assert.h>
+#include		<sys/stat.h>
+
+#define STRICT_TYPED_ITEMIDS
+#include		<shlobj.h>
+#include		<objbase.h>      // For COM headers
+#include		<shobjidl.h>     // for IFileDialogEvents and IFileDialogControlEvents
+#include		<shlwapi.h>
+#include		<knownfolders.h> // for KnownFolder APIs/datatypes/function headers
+#include		<propvarutil.h>  // for PROPVAR-related functions
+#include		<propkey.h>      // for the Property key APIs/datatypes
+#include		<propidl.h>      // for the Property System APIs
+#include		<strsafe.h>      // for StringCchPrintfW
+#include		<shtypes.h>      // for COMDLG_FILTERSPEC
+#include		<new>
+
 #define			STBI_WINDOWS_UTF8
 #define			STB_IMAGE_IMPLEMENTATION
-#define			TINY_DNG_LOADER_IMPLEMENTATION
-#include		"tiny_dng_loader.h"
+#include		"stb_image.h"
+//#define		TINY_DNG_LOADER_IMPLEMENTATION
+//#include		"tiny_dng_loader.h"
 #include		"lodepng.h"
 #ifdef HVIEW_INCLUDE_SAIL
 #include		<sail/sail.h>
@@ -61,24 +81,11 @@ extern "C"
 //}
 //#pragma		comment(lib, "bpg.lib")
 #endif
-#define STRICT_TYPED_ITEMIDS
-#include		<shlobj.h>
-#include		<objbase.h>      // For COM headers
-#include		<shobjidl.h>     // for IFileDialogEvents and IFileDialogControlEvents
-#include		<shlwapi.h>
-#include		<knownfolders.h> // for KnownFolder APIs/datatypes/function headers
-#include		<propvarutil.h>  // for PROPVAR-related functions
-#include		<propkey.h>      // for the Property key APIs/datatypes
-#include		<propidl.h>      // for the Property System APIs
-#include		<strsafe.h>      // for StringCchPrintfW
-#include		<shtypes.h>      // for COMDLG_FILTERSPEC
-#include		<new>
+#ifdef HVIEW_INCLUDE_LIBRAW
+#include		<libraw/libraw.h>
+#pragma			comment(lib, "libraw.lib")
+#endif
 
-#include		<vector>
-#include		<string>
-#include		<fstream>
-#include		<assert.h>
-#include		<sys/stat.h>
 const char		file[]=__FILE__;
 const wchar_t	doublequote=L'\"';
 void			assign_path(std::wstring const &text, int start, int end, std::wstring &pathret)//pathret can be text
@@ -177,22 +184,18 @@ int				wcscmp_ci(const wchar_t *s1, const wchar_t *s2)//case-insensitive only fo
 }
 
 #define			EXT_LIST	\
-	EXT(JPG)\
-	EXT(JPEG)\
+	EXT(JPG) EXT(JPEG)\
 	EXT(PNG)\
-	EXT(BMP)\
-	EXT(DIB)\
+	EXT(BMP) EXT(DIB)\
 	EXT(GIF)\
-	EXT(TIF)\
-	EXT(TIFF)\
-	EXT(JP2)\
-	EXT(J2K)\
+	EXT(TIF) EXT(TIFF)\
+	EXT(JP2) EXT(J2K)\
 	EXT(WEBP)\
 	EXT(AVIF)\
 	EXT(HEIC)\
 	EXT(BPG)\
 	EXT(JXL)\
-	EXT(DNG)\
+	EXT(CRW) EXT(CR2) EXT(NEF) EXT(REF) EXT(DNG) EXT(MOS) EXT(KDC) EXT(DCR)\
 	EXT(HUF)
 enum			Extension
 {
@@ -364,10 +367,41 @@ const char*		libjxlenc_err2str(int e)
 #ifdef HVIEW_INCLUDE_LIBTIFF
 #define			LIBTIFF_CHECK(RESULT)	((RESULT)==1||log_error(file, __LINE__, "TIFF library: %d", RESULT))
 #endif
+#ifdef HVIEW_INCLUDE_LIBRAW
+#if 0
+const char*		libraw_err2str(int e)
+{
+	const char *a="<Unknown error>";
+	switch(e)
+	{
+#define	CASE(LABEL)	case LABEL:a=#LABEL;break;
+		CASE(LIBRAW_SUCCESS)
+		CASE(LIBRAW_UNSPECIFIED_ERROR)
+		CASE(LIBRAW_FILE_UNSUPPORTED)
+		CASE(LIBRAW_REQUEST_FOR_NONEXISTENT_IMAGE)
+		CASE(LIBRAW_OUT_OF_ORDER_CALL)
+		CASE(LIBRAW_NO_THUMBNAIL)
+		CASE(LIBRAW_UNSUPPORTED_THUMBNAIL)
+		CASE(LIBRAW_INPUT_CLOSED)
+		CASE(LIBRAW_NOT_IMPLEMENTED)
+		CASE(LIBRAW_UNSUFFICIENT_MEMORY)
+		CASE(LIBRAW_DATA_ERROR)
+		CASE(LIBRAW_IO_ERROR)
+		CASE(LIBRAW_CANCELLED_BY_CALLBACK)
+		CASE(LIBRAW_BAD_CROP)
+		CASE(LIBRAW_TOO_BIG)
+		CASE(LIBRAW_MEMPOOL_OVERFLOW)
+#undef	CASE
+	}
+	return a;
+}
+#endif
+#define			LIBRAW_CHECK(ERROR)		((ERROR)==LIBRAW_SUCCESS||log_error(file, __LINE__, "Libraw error %d: %s", ERROR, libraw_strerror(ERROR)))
+#endif
 void			assign_from_RGBA8(const int *src, int iw2, int ih2)
 {
 	iw=iw2, ih=ih2, image_size=iw*ih;
-	void *buf=realloc(image, image_size*4*sizeof(float));
+	auto buf=realloc(image, image_size*4*sizeof(float));
 	if(!buf)
 	{
 		LOG_ERROR("realloc returned null");
@@ -728,6 +762,112 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 		}
 		break;
 #endif
+#ifdef HVIEW_INCLUDE_LIBRAW
+	case EXT_CRW:
+	case EXT_CR2:
+	case EXT_NEF:
+	case EXT_REF:
+	case EXT_DNG:
+	case EXT_MOS:
+	case EXT_KDC:
+	case EXT_DCR:
+		{
+			//stbi_convert_wchar_to_utf8(g_buf, g_buf_size, filename);
+
+			auto decoder=libraw_init(0);
+			if(!decoder)
+			{
+				LOG_ERROR("Failed to initialize libraw decoder");
+				return false;
+			}
+			int error=libraw_open_wfile(decoder, filename);	LIBRAW_CHECK(error);
+			//int error=libraw_open_file(decoder, g_buf);	LIBRAW_CHECK(error);
+
+			error=libraw_unpack(decoder);	LIBRAW_CHECK(error);
+
+			int iw2=decoder->sizes.raw_width;
+			int ih2=decoder->sizes.raw_height;
+			int count=iw2*ih2;
+			auto buf=realloc(image, count*4*sizeof(float));
+			if(!buf)
+			{
+				LOG_ERROR("realloc returned null");
+				return false;
+			}
+			idepth=ceil_log2(decoder->color.maximum);
+			iw=iw2, ih=ih2, image_size=count;
+			image=(float*)buf;
+			char color_sh[]={16, 8, 0, 8};//RGBG
+			bayer[0]=color_sh[libraw_COLOR(decoder, 0, 0)];
+			bayer[1]=color_sh[libraw_COLOR(decoder, 0, 1)];
+			bayer[2]=color_sh[libraw_COLOR(decoder, 1, 0)];
+			bayer[3]=color_sh[libraw_COLOR(decoder, 1, 1)];
+			auto src=decoder->rawdata.raw_image;
+			float gain=1.f/((1<<idepth)-1);
+			switch(decoder->sizes.flip)
+			{
+			case 0:
+				for(int k=0;k<image_size;++k)
+					image[k]=gain*src[k];
+				break;
+			case 3://upside-down
+				std::swap(bayer[0], bayer[2]);
+				std::swap(bayer[1], bayer[3]);
+				for(int ky=0;ky<ih;++ky)
+				{
+					for(int kx=0;kx<iw;++kx)
+						image[iw*ky+kx]=gain*src[iw*(ih-1-ky)+kx];
+				}
+				break;
+			case 5://90 degrees CCW
+				{
+					char temp=bayer[0];
+					bayer[0]=bayer[1];
+					bayer[1]=bayer[3];
+					bayer[3]=bayer[2];
+					bayer[2]=temp;
+					std::swap(iw, ih);
+					for(int ky=0;ky<ih;++ky)
+					{
+						for(int kx=0;kx<iw;++kx)
+							image[iw*ky+kx]=gain*src[ih*kx+ih-1-ky];
+					}
+				}
+				break;
+			case 6://90 degrees CW
+				{
+					char temp=bayer[0];
+					bayer[0]=bayer[2];
+					bayer[2]=bayer[3];
+					bayer[3]=bayer[1];
+					bayer[1]=temp;
+					std::swap(iw, ih);
+					for(int ky=0;ky<ih;++ky)
+					{
+						for(int kx=0;kx<iw;++kx)
+							image[iw*ky+kx]=gain*src[ih*(iw-1-kx)+ky];
+					}
+				}
+				break;
+			}
+			//for(int ky=0, ks=0;ky<ih;ky+=2)
+			//{
+			//	auto row=image+iw*ky;
+			//	for(int kx=0;kx<iw;kx+=2, ks+=4)
+			//	{
+			//		row[kx]=gain*src[ks];
+			//		row[kx+1]=gain*src[ks+1];
+			//		row[kx+iw]=gain*src[ks+2];
+			//		row[kx+iw+1]=gain*src[ks+3];
+			//	}
+			//}
+			libraw_free_image(decoder);
+			libraw_close(decoder);
+			imagetype=IM_BAYER;
+		}
+		break;
+#endif
+#ifdef HVIEW_INCLUDE_TINYDNGLOADER
 	case EXT_DNG:
 		{
 			stbi_convert_wchar_to_utf8(g_buf, g_buf_size, filename);
@@ -766,6 +906,7 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 			imagetype=IM_BAYER;
 		}
 		break;
+#endif
 	default://ordinary image
 		{
 			stbi_convert_wchar_to_utf8(g_buf, g_buf_size, filename);

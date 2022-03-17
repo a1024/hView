@@ -3366,7 +3366,7 @@ struct			HistInfo
 	float CDF, PDF, val;
 	int collisioncount, idx;
 };
-void			equalize(bool super)
+void			equalize(int super)
 {
 	int nlevels=1<<idepth;
 	int bw=0, bh=0, xstride=0, ystride=0, nch=0, skip_alpha=0;

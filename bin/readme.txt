@@ -1,4 +1,4 @@
-Download/build these libraries (as 64-bit) to run the provided hView executable:
+Download/build these libraries (as 64-bit) to run the provided/compiled hView executable:
 
 1) FFTW:	for DFT (needs debugging)
 https://fftw.org/install/windows.html
@@ -41,4 +41,8 @@ https://github.com/asimba/pybpgviewer
 bpgdec.dll
 
 6) For BPG
-libgree.dll
+libfree.dll
+
+7) LIBRAW
+https://www.libraw.org
+libraw.dll
