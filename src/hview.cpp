@@ -791,6 +791,7 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 		case 'R'://reset scale
 			wpx=0, wpy=0, zoom=1, invzoom=1;
 			contrast_gain=1, contrast_offset=0;
+			imagecentered=false;
 			render();
 			break;
 		case 'C':
