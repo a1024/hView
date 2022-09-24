@@ -398,6 +398,29 @@ const char*		libraw_err2str(int e)
 #endif
 #define			LIBRAW_CHECK(ERROR)		((ERROR)==LIBRAW_SUCCESS||log_error(file, __LINE__, "Libraw error %d: %s", ERROR, libraw_strerror(ERROR)))
 #endif
+void			assign_from_RGB8(const void *src, int iw2, int ih2)
+{
+	iw=iw2, ih=ih2, image_size=iw*ih;
+	auto buf=realloc(image, image_size*4*sizeof(float));
+	if(!buf)
+	{
+		LOG_ERROR("realloc returned null");
+		return;
+	}
+	image=(float*)buf;
+	idepth=8;
+	float inv255=1.f/255;
+	int srcsize=image_size*3;
+	for(int ks=0, kd=0;ks<srcsize;ks+=3, kd+=4)
+	{
+		auto p=(unsigned char*)src+ks;
+		image[kd  ]=p[0]*inv255;
+		image[kd+1]=p[1]*inv255;
+		image[kd+2]=p[2]*inv255;
+		image[kd+3]=1;
+	}
+	imagetype=IM_RGBA;
+}
 void			assign_from_RGBA8(const int *src, int iw2, int ih2)
 {
 	iw=iw2, ih=ih2, image_size=iw*ih;
@@ -792,6 +815,9 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 			error=sail_read_next_frame(state, &img);	WEBP_CHECK(error);
 			switch(img->pixel_format)
 			{
+			case SAIL_PIXEL_FORMAT_BPP24_RGB:
+				assign_from_RGB8((int*)img->pixels, img->width, img->height);
+				break;
 			case SAIL_PIXEL_FORMAT_BPP32_RGBA:
 				assign_from_RGBA8((int*)img->pixels, img->width, img->height);
 				break;
