@@ -420,6 +420,52 @@ void			assign_from_RGBA8(const int *src, int iw2, int ih2)
 	}
 	imagetype=IM_RGBA;
 }
+void			assign_from_RGB16(const void *src, int iw2, int ih2)
+{
+	iw=iw2, ih=ih2, image_size=iw*ih;
+	auto buf=realloc(image, image_size*4*sizeof(float));
+	if(!buf)
+	{
+		LOG_ERROR("realloc returned null");
+		return;
+	}
+	image=(float*)buf;
+	idepth=16;
+	float gain=1.f/65535;
+	int srcsize=image_size*6;
+	for(int ks=0, kd=0;ks<srcsize;ks+=6, kd+=4)
+	{
+		auto p=(unsigned char*)src+ks;
+		image[kd  ]=(p[0]<<8|p[1])*gain;
+		image[kd+1]=(p[2]<<8|p[3])*gain;
+		image[kd+2]=(p[4]<<8|p[5])*gain;
+		image[kd+3]=1;
+	}
+	imagetype=IM_RGBA;
+}
+void			assign_from_RGBA16(const void *src, int iw2, int ih2)
+{
+	iw=iw2, ih=ih2, image_size=iw*ih;
+	auto buf=realloc(image, image_size*4*sizeof(float));
+	if(!buf)
+	{
+		LOG_ERROR("realloc returned null");
+		return;
+	}
+	image=(float*)buf;
+	idepth=16;
+	float gain=1.f/65535;
+	int srcsize=image_size<<3;
+	for(int ks=0, kd=0;ks<srcsize;ks+=8, kd+=4)
+	{
+		auto p=(unsigned char*)src+ks;
+		image[kd  ]=(p[0]<<8|p[1])*gain;
+		image[kd+1]=(p[2]<<8|p[3])*gain;
+		image[kd+2]=(p[4]<<8|p[5])*gain;
+		image[kd+3]=(p[6]<<8|p[7])*gain;
+	}
+	imagetype=IM_RGBA;
+}
 bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, updates title
 {
 	std::wstring wfn=filename, folder, title, extension;
@@ -731,10 +777,10 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 		break;
 #endif
 #ifdef HVIEW_INCLUDE_SAIL
-	case EXT_AVIF:
+	case EXT_PNG://20220924 16bit PNG support
+	case EXT_JP2:case EXT_J2K:
 	case EXT_WEBP:
-	case EXT_JP2:
-	case EXT_J2K:
+	case EXT_AVIF:
 		{
 			stbi_convert_wchar_to_utf8(g_buf, g_buf_size, filename);
 
@@ -748,6 +794,12 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 			{
 			case SAIL_PIXEL_FORMAT_BPP32_RGBA:
 				assign_from_RGBA8((int*)img->pixels, img->width, img->height);
+				break;
+			case SAIL_PIXEL_FORMAT_BPP48_RGB:
+				assign_from_RGB16(img->pixels, img->width, img->height);
+				break;
+			case SAIL_PIXEL_FORMAT_BPP64_RGBA:
+				assign_from_RGBA16(img->pixels, img->width, img->height);
 				break;
 			default:
 				messageboxa(ghWnd, "Error", "Unsupported pixel format from libSAIL: %d", img->pixel_format);
@@ -956,16 +1008,16 @@ bool			save_media_as()
 		,
 		0, 0,//custom filter
 		1,//filter index: 0 is custom filter, 1 is first, ...
-					
+
 		g_wbuf, g_buf_size,//file (output)
-					
+
 		0, 0,//file title
 		0, 0, OFN_ENABLESIZING|OFN_EXPLORER|OFN_NOTESTFILECREATE|OFN_PATHMUSTEXIST|OFN_EXTENSIONDIFFERENT|OFN_OVERWRITEPROMPT,//flags
 
 		0,//nFileOffset
 		8,//nFileExtension
 		L"PNG",//default extension
-					
+
 		0, 0, 0
 	};
 	if(GetSaveFileNameW(&ofn))
@@ -1043,25 +1095,54 @@ bool			save_media_as()
 		case EXT_PNG:
 			{
 				stbi_convert_wchar_to_utf8(g_buf, g_buf_size, filename.c_str());
+				if(imagetype==IM_BAYER||imagetype==IM_BAYER_SEPARATE)
+					debayer();
+				if(idepth>8)
+					idepth=16;
+				else
+					idepth=8;
 				size_t ccount=image_size;
 				char has4=imagetype==IM_RGBA;
 				ccount<<=has4<<1;
-				auto buffer=new unsigned char[ccount];
-				for(int k=0;k<ccount;++k)
+				auto buffer=new unsigned char[ccount<<(idepth==16)];
+				if(idepth==16)
 				{
-					if((k&3)==3)
-						buffer[k]=(unsigned char)(image[k]*255);
-					else
+					for(int k=0;k<ccount;++k)
 					{
-						auto val=(contrast_gain*(image[k]-contrast_offset)+contrast_offset)*255+0.5;
-						if(val<0)
-							val=0;
-						if(val>255)
-							val=255;
-						buffer[k]=(unsigned char)val;
+						unsigned short v2;
+						if((k&3)==3)//alpha
+							v2=(unsigned short)(image[k]*65535);
+						else
+						{
+							auto val=(contrast_gain*(image[k]-contrast_offset)+contrast_offset)*65535+0.5;
+							if(val<0)
+								val=0;
+							if(val>65535)
+								val=65535;
+							v2=(unsigned short)val;
+						}
+						((unsigned short*)buffer)[k]=v2>>8|v2<<8;
 					}
 				}
-				lodepng::encode(g_buf, (unsigned char*)buffer, iw, ih, has4?LCT_RGBA:LCT_GREY, 8);//most programs (eg: WhatsApp) expect 8bit PNG
+				else
+				{
+					for(int k=0;k<ccount;++k)
+					{
+						if((k&3)==3)//alpha
+							buffer[k]=(unsigned char)(image[k]*255);
+						else
+						{
+							auto val=(contrast_gain*(image[k]-contrast_offset)+contrast_offset)*255+0.5;
+							if(val<0)
+								val=0;
+							if(val>255)
+								val=255;
+							buffer[k]=(unsigned char)val;
+						}
+					}
+				}
+				lodepng::encode(g_buf, (unsigned char*)buffer, iw, ih, has4?LCT_RGBA:LCT_GREY, idepth);
+				delete[] buffer;
 			}
 			break;
 /*#ifdef HVIEW_INCLUDE_LIBHEIF

@@ -70,6 +70,10 @@ enum			RequestedFormat
 };
 
 typedef unsigned char byte;
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable:4200)//no default-constructor for struct with zero-length array
+#endif
 struct			HuffHeader//24 bytes
 {
 	char HUFF[4];//'H'|'U'<<8|'F'<<16|'F'<<24
@@ -86,6 +90,9 @@ struct			HuffDataHeader//16 bytes
 	unsigned long long cBitSize;//compressed data size in bits
 	unsigned data[];
 };
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 
 void 			checkSIMD();
 short*			unpack_r10(const byte* src, int width, int height);
