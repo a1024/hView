@@ -24,7 +24,8 @@
 static const char file[]=__FILE__;
 
 int				w=0, h=0, *rgb=nullptr, rgbn=0,
-				iw=0, ih=0, image_size=0;//image dimensions
+				iw=0, ih=0;//image dimensions
+long long		image_size=0;
 float			*image=nullptr;
 ImageType		imagetype=IM_RGBA;
 char			bayer[4]={};//shift ammounts for the 4 Bayer mosaic components, -1 for grayscale
@@ -959,19 +960,29 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 			}
 			render();
 			break;
-		case 'F':case VK_F11://fullscreen
-			if(fullscreen)//exit fullscreen
+		case 'M'://mix channels
+			if(kb[VK_CONTROL])
 			{
-				SetWindowLongA(hWnd, GWL_STYLE, WS_CAPTION|WS_SYSMENU|WS_THICKFRAME|WS_MINIMIZEBOX|WS_MAXIMIZEBOX|WS_CLIPCHILDREN);
-				SetWindowPos(hWnd, HWND_TOP, oldWindowSize.left, oldWindowSize.top, oldWindowSize.right-oldWindowSize.left, oldWindowSize.bottom-oldWindowSize.top, SWP_SHOWWINDOW);
+				mix_channels();
 			}
-			else//enter fullscreen
+			break;
+		case 'F'://TODO live DFT
+		//	break;
+		//case 'T'://TODO live DCT
+		//	break;
+		case VK_F11://fullscreen
+			fullscreen=!fullscreen;
+			if(fullscreen)//enter fullscreen
 			{
 				GetWindowRect(ghWnd, &oldWindowSize);
 				SetWindowLongA(hWnd, GWL_STYLE, WS_OVERLAPPED);
 				SetWindowPos(hWnd, HWND_TOP, 0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN), SWP_SHOWWINDOW);
 			}
-			fullscreen=!fullscreen;
+			else//exit fullscreen
+			{
+				SetWindowLongA(hWnd, GWL_STYLE, WS_CAPTION|WS_SYSMENU|WS_THICKFRAME|WS_MINIMIZEBOX|WS_MAXIMIZEBOX|WS_CLIPCHILDREN);
+				SetWindowPos(hWnd, HWND_TOP, oldWindowSize.left, oldWindowSize.top, oldWindowSize.right-oldWindowSize.left, oldWindowSize.bottom-oldWindowSize.top, SWP_SHOWWINDOW);
+			}
 			break;
 		case 'X'://quit
 			PostQuitMessage(0);

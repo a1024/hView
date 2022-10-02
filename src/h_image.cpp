@@ -14,6 +14,9 @@
 //You should have received a copy of the GNU General Public License
 //along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+#ifdef _MSC_VER
+#define _CRT_SECURE_NO_WARNINGS
+#endif
 #include		"hview.h"
 #include		"generic.h"
 short*			get_image()//delete[] the returned buffer
@@ -430,4 +433,365 @@ void			cmd_histogram()
 
 	console_pause();
 	console_end();
+}
+
+const char		*chnames[]={"red", "green", "blue", "alpha"};
+struct			Buffer
+{
+	int w, h;
+	float *data;
+};
+int				copy_channel(int ch, Buffer &buf)//will debayer image if raw
+{
+	if(!image)
+		return 0;
+	switch(imagetype)
+	{
+	case IM_GRAYSCALE:
+		buf.data=new float[image_size];
+		if(!buf.data)
+			return 0;
+		buf.w=iw;
+		buf.h=ih;
+		memcpy(buf.data, image, image_size*sizeof(float));
+		break;
+	case IM_BAYER:case IM_BAYER_SEPARATE:
+		debayer();
+	case IM_RGBA:
+		buf.data=new float[image_size];
+		if(!buf.data)
+			return 0;
+		buf.w=iw;
+		buf.h=ih;
+		for(int k=0;k<image_size;++k)
+			buf.data[k]=image[k<<2|ch&3];
+		break;
+	/*	{
+			int w2=iw>>1, h2=ih>>1;
+			buffer=new float[image_size>>2];
+			if(!buffer)
+				return nullptr;
+			for(int ky=0;ky<h2;++ky)
+			{
+				for(int kx=0;kx<w2;++kx)
+				{
+					buffer[w2*ky+kx]=image[iw*(ky<<1|;
+				}
+			}
+		}
+		break;//*/
+	}
+	return 1;
+}
+
+struct			TransformPlan
+{
+	float *weights, *temp;
+	int size;
+};
+void			apply_transform_1D(TransformPlan *p, const float *src, float *dst, int srcstride, int dststride)//SLOW O(n^2) DCT, src & dst can be the same pointer
+{
+	for(int k=0;k<p->size;++k)
+	{
+		auto row=p->weights+p->size*k;
+		p->temp[k]=0;
+		for(int ks=0, kd=0;kd<p->size;ks+=srcstride, ++kd)
+			p->temp[k]+=row[kd]*src[ks];
+	}
+	for(int ks=0, kd=0;ks<p->size;++ks, kd+=dststride)
+		dst[kd]=p->temp[ks];
+}
+void			finish_transform(TransformPlan *p)
+{
+	delete[] p->weights, p->weights=nullptr;
+	delete[] p->temp, p->temp=nullptr;
+}
+void			init_dct(int size, TransformPlan *p)
+{
+	p->size=size;
+	p->weights=new float[size*size];
+	p->temp=new float[size];
+	
+	double scale=sqrt(2./size), freq=M_PI/size;
+	for(int ky=0;ky<p->size;++ky)
+	{
+		auto row=p->weights+size*ky;
+		for(int kx=0;kx<size;++kx)
+			row[kx]=(float)(scale*cos(freq*(kx+0.5)*ky));
+	}
+}
+void			init_idct(int size, TransformPlan *p)
+{
+	p->size=size;
+	p->weights=new float[size*size];
+	p->temp=new float[size];
+
+	double scale=sqrt(2./size), freq=M_PI/size;
+	for(int ky=0;ky<size;++ky)
+	{
+		auto row=p->weights+size*ky;
+		for(int kx=0;kx<size;++kx)
+		{
+			if(!kx)
+				row[kx]=(float)(scale*0.5);
+			else
+				row[kx]=(float)(scale*cos(freq*kx*(ky+0.5)));
+		}
+	}
+}
+
+float*			estimate_displacement(float *a, float *b, int bw, int bh, int *vec2)//delete[] returned buffer
+{
+	int size=bw*bh;
+	if(!size)
+		return 0;
+	float *ta=new float[size], *tb=new float[size];
+	TransformPlan p;
+
+	init_dct(bw, &p);
+	for(int ky=0;ky<bh;++ky)
+	{
+		apply_transform_1D(&p, a+bw*ky, ta+bw*ky, 1, 1);
+		apply_transform_1D(&p, b+bw*ky, tb+bw*ky, 1, 1);
+	}
+	if(bw!=bh)
+	{
+		finish_transform(&p);
+		init_dct(bh, &p);
+	}
+	for(int kx=0;kx<bw;++kx)
+	{
+		apply_transform_1D(&p, ta+kx, ta+kx, bw, bw);
+		apply_transform_1D(&p, tb+kx, tb+kx, bw, bw);
+	}
+	finish_transform(&p);
+
+	for(int k=0;k<size;++k)
+		ta[k]*=tb[k];
+	
+	init_idct(bh, &p);
+	for(int kx=0;kx<bw;++kx)
+		apply_transform_1D(&p, ta+kx, tb+kx, bw, bw);
+	if(bw!=bh)
+	{
+		finish_transform(&p);
+		init_dct(bw, &p);
+	}
+	for(int ky=0;ky<bh;++ky)
+		apply_transform_1D(&p, tb+bw*ky, tb+bw*ky, 1, 1);
+
+	float vmin=tb[0], vmax=tb[0];
+	for(int k=1;k<size;++k)
+	{
+		if(vmin>tb[k])
+			vmin=tb[k];
+		if(vmax<tb[k])
+		{
+			vmax=tb[k];
+			vec2[0]=k%bw;
+			vec2[1]=k/bw;
+		}
+	}
+	if(vmin<vmax)
+	{
+		float gain=1.f/(vmax-vmin);
+		for(int k=0;k<size;++k)
+			tb[k]=(tb[k]-vmin)*gain;
+	}
+	delete[] ta;
+	return tb;
+}
+
+void			pad_channel(float **buf, int bw, int bh, int bw2, int bh2)
+{
+	int s2=bw2*bh2;
+	float *b2=new float[s2];
+	memset(b2, 0, s2*sizeof(float));
+	for(int ky=0;ky<bh2;++ky)
+	{
+		int kx0, ky0;
+
+		ky0=ky-((bh2-bh)>>1);
+		if(ky0>=0&&ky0<bh)
+		{
+			for(int kx=0;kx<bw2;++kx)
+			{
+				kx0=kx-((bw2-bw)>>1);
+				if(ky0>=0&&ky0<bh)
+					b2[bw2*ky+kx]=buf[0][bw*ky0+kx0];
+			}
+		}
+	}
+
+	delete[] *buf;
+	*buf=b2;
+}
+void			set_channel(float *rgba, float *src, int bw, int bh, int *disp, int ch)
+{
+	for(int ky=0;ky<ih;++ky)
+	{
+		int kx0, ky0;
+
+		ky0=ky+disp[1];
+		if(ky0>=0&&ky0<bh)
+		{
+			for(int kx=0;kx<iw;++kx)
+			{
+				kx0=kx+disp[0];
+				if(kx0>=0&&kx0<bw)
+					rgba[4*(bw*ky+kx)+ch]=src[bw*ky0+kx0];
+			}
+		}
+	}
+}
+void			mix_channels()
+{
+	Buffer channels[4]={0};
+	int success=1, choice;
+
+	//std::string str;
+	console_start(80, 1000);
+	printf("\nCHANNEL MIXER\n\n");
+	for(int k=0;k<4;++k)
+	{
+		printf("Press any key  to open the source image for the %s channel\n", chnames[k]);
+		if(k==3)
+			printf("(Press Cancel if there is no alpha)\n");
+		console_pause();
+		success=open_media();
+		if(!success)
+		{
+			if(k==3)
+				success=1;
+			break;
+		}
+		success=copy_channel(k, channels[k]);
+		if(!success)
+		{
+			printf("Failed to extract %s channel. Aborting.", chnames[k]);
+			console_pause();
+			break;
+		}
+	}
+	if(!success)
+		goto cleanup;
+	for(int k=1;k<4;++k)
+	{
+		if(channels[k].w!=channels->w||channels[k].h!=channels->h)
+		{
+			success='Y'|'D'<<8;
+			break;
+		}
+	}
+	if(success=='Y')
+		printf("Dimension mismatch.\n");
+	else
+	{
+		printf("Use auto-align only when channel contents are similar.\nAuto-align?  [0=Yes, otherwise No]  ");
+		scanf("%d", &choice);
+		choice=!choice;
+	}
+	
+	int maxw, maxh;
+	maxw=channels[0].w;
+	maxh=channels[0].h;
+	if(choice)//perform auto-align
+	{
+		if((success>>8&0xFF)=='D')//resize channels to same size
+		{
+			printf("Padding...\n");
+			for(int k=0;k<4;++k)
+			{
+				if(maxw<channels[k].w)
+					maxw=channels[k].w;
+				if(maxh<channels[k].h)
+					maxh=channels[k].h;
+			}
+			for(int k=0;k<4;++k)
+			{
+				if(channels[k].data)
+				{
+					pad_channel(&channels[k].data, channels[k].w, channels[k].h, maxw, maxh);
+					channels[k].w=maxw;
+					channels[k].h=maxh;
+				}
+				else
+				{
+					channels[k].data=nullptr;
+					channels[k].w=0;
+					channels[k].h=0;
+				}
+			}
+		}
+		int disp[2]={0};
+		imagetype=IM_RGBA;
+		iw=maxw, ih=maxh, image_size=iw*ih;
+		image=(float*)realloc(image, image_size*4*sizeof(float));
+		//memset(image, 0, image_size*4*sizeof(float));
+		for(int k=0;k<image_size;++k)//set alpha to 1
+		{
+			image[k<<2]=0;
+			image[k<<2|1]=0;
+			image[k<<2|2]=0;
+			image[k<<2|3]=1;
+		}
+		set_channel(image, channels[0].data, iw, ih, disp, 0);
+		for(int k=1;k<3;++k)
+		{
+			printf("Estimating %s-on-red displacement...\n", chnames[k]);
+			float *diff=estimate_displacement(channels[0].data, channels[1].data, maxw, maxh, disp);
+			if(!diff)
+				printf("Failed to retrieve displacement buffer\n");
+			ImageType it2=IM_GRAYSCALE;
+			std::swap(image, diff), std::swap(imagetype, it2);
+			render();
+			std::swap(image, diff), std::swap(imagetype, it2);
+			printf("The %s channel must be displaced by (%d, %d) to fit on red channel.\n\t[0=Correct, otherwise Incorrect]  ", chnames[k], disp[0], disp[1]);
+			scanf("%d", &choice);
+			if(choice)
+			{
+				printf("Enter a better estimate:\n\tdx: ");
+				scanf("%d", disp);
+				printf("\tdy: ");
+				scanf("%d", disp+1);
+			}
+
+			set_channel(image, channels[k].data, iw, ih, disp, k);
+			render();
+
+			delete[] diff;
+		}
+		if(channels[3].data)
+		{
+			disp[0]=disp[1]=0;
+			set_channel(image, channels[3].data, iw, ih, disp, 3);//set alpha
+		}
+	}
+	else//stack as is
+	{
+		int disp[2]={0};
+		imagetype=IM_RGBA;
+		iw=maxw, ih=maxh, image_size=iw*ih;
+		//image=(float*)realloc(image, image_size*4*sizeof(float));
+		for(int k=0;k<image_size;++k)//set alpha to 1
+		{
+			image[k<<2]=0;
+			image[k<<2|1]=0;
+			image[k<<2|2]=0;
+			image[k<<2|3]=1;
+		}
+		memset(image, 0, image_size*4*sizeof(float));
+		for(int k=0;k<4;++k)
+		{
+			set_channel(image, channels[k].data, iw, ih, disp, k);
+			render();
+		}
+	}
+	
+	printf("Done.\n");
+cleanup:
+	console_pause();
+	console_end();
+	for(int k=0;k<4;++k)
+		delete[] channels[k].data;
 }

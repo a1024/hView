@@ -25,6 +25,8 @@
 //LIBJXL		https://gitlab.com/wg1/jpeg-xl					for JXL
 //LIBTIFF		https://gitlab.com/libtiff/libtiff				for TIF
 //LIBBPG		https://github.com/retsyo/libbpg-py				for BPG
+//LIBRAW		https://www.libraw.org/download#stable
+//LIBCFITSIO	https://heasarc.gsfc.nasa.gov/fitsio/
 
 
 	#define		HVIEW_INCLUDE_FFTW
@@ -35,6 +37,7 @@
 	#define		HVIEW_INCLUDE_LIBBPG
 //	#define		HVIEW_INCLUDE_TINYDNGLOADER//superceeded by libraw
 	#define		HVIEW_INCLUDE_LIBRAW
+	#define		HVIEW_INCLUDE_LIBCFITSIO
 
 
 #ifdef HVIEW_INCLUDE_FFTW
@@ -47,13 +50,14 @@
 typedef unsigned char byte;
 
 extern int		w, h, *rgb, rgbn,
-				iw, ih, image_size;
+				iw, ih;
+extern long long image_size;
 extern float	*image;//the image
 enum			ImageType
 {
 	IM_UNINITIALIZED,
 	IM_GRAYSCALE,
-	IM_RGBA,//4 floats per pixel (quad width)
+	IM_RGBA,//4 floats per pixel (quad width)	use image_size*4
 	IM_BAYER,
 	IM_BAYER_SEPARATE,//stored same as bayer, channels are shown separately
 };
@@ -211,7 +215,7 @@ inline bool collinear(Point2d const &a, Point2d const &b, Point2d const &c)
 
 //files
 long			file_sizew(const wchar_t *filename);
-void			open_media();
+int				open_media();
 bool			open_mediaw(const wchar_t *filename);//sets workfolder, updates title
 bool			save_media_as();
 bool			dialog_get_folder(const wchar_t *user_instr, std::wstring &path);
@@ -272,6 +276,7 @@ void			reset_FFTW_state();
 void			toggle_histogram();
 void			reset_histogram();
 void			cmd_histogram();
+void			mix_channels();
 
 //application
 void			center_image();

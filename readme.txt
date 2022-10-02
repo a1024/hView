@@ -16,6 +16,8 @@ An image viewer that opens:
 		https://github.com/strukturag/libheif
 	.jxl - using libjxl
 		https://gitlab.com/wg1/jpeg-xl
+	.fits - using libcfitsio
+		https://heasarc.gsfc.nasa.gov/fitsio/
 	and .huf files created by RawCam camera2 Android app.
 
 Press F1 for key shortcuts.

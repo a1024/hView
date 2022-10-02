@@ -21,6 +21,7 @@
 #include		<vector>
 #include		<string>
 #include		<fstream>
+#include		<sstream>
 #include		<assert.h>
 #include		<sys/stat.h>
 
@@ -40,7 +41,7 @@
 #define			STBI_WINDOWS_UTF8
 #define			STB_IMAGE_IMPLEMENTATION
 #include		"stb_image.h"
-//#define		TINY_DNG_LOADER_IMPLEMENTATION
+//#define		TINY_DNG_LOADER_IMPLEMENTATION//was replaced by libraw
 //#include		"tiny_dng_loader.h"
 #include		"lodepng.h"
 #ifdef HVIEW_INCLUDE_SAIL
@@ -84,6 +85,10 @@ extern "C"
 #ifdef HVIEW_INCLUDE_LIBRAW
 #include		<libraw/libraw.h>
 #pragma			comment(lib, "libraw.lib")
+#endif
+#ifdef HVIEW_INCLUDE_LIBCFITSIO
+#include		<fitsio.h>
+#pragma			comment(lib, "libcfitsio.lib")
 #endif
 
 const char		file[]=__FILE__;
@@ -196,6 +201,7 @@ int				wcscmp_ci(const wchar_t *s1, const wchar_t *s2)//case-insensitive only fo
 	EXT(BPG)\
 	EXT(JXL)\
 	EXT(CRW) EXT(CR2) EXT(NEF) EXT(REF) EXT(DNG) EXT(MOS) EXT(KDC) EXT(DCR)\
+	EXT(FITS)\
 	EXT(HUF)
 enum			Extension
 {
@@ -397,6 +403,206 @@ const char*		libraw_err2str(int e)
 }
 #endif
 #define			LIBRAW_CHECK(ERROR)		((ERROR)==LIBRAW_SUCCESS||log_error(file, __LINE__, "Libraw error %d: %s", ERROR, libraw_strerror(ERROR)))
+#endif
+#ifdef HVIEW_INCLUDE_LIBCFITSIO//https://stackoverflow.com/questions/5419356/redirect-stdout-stderr-to-a-string
+int				fits_check(int status)
+{
+	if(status)
+	{
+		console_start_good();
+		fits_report_error(stderr, status);
+		console_pause();
+		console_end();
+		return 1;
+	}
+	return 0;
+}
+#if 0
+#ifdef _MSC_VER
+#include <io.h>
+#define popen _popen 
+#define pclose _pclose
+#define stat _stat 
+#define dup _dup
+#define dup2 _dup2
+#define fileno _fileno
+#define close _close
+#define pipe _pipe
+#define read _read
+#define eof _eof
+#else
+#include <unistd.h>
+#endif
+#include <fcntl.h>
+#include <stdio.h>
+#include <mutex>
+
+class StdCapture
+{
+public:
+    static void Init()
+    {
+        // make stdout & stderr streams unbuffered
+        // so that we don't need to flush the streams
+        // before capture and after capture 
+        // (fflush can cause a deadlock if the stream is currently being 
+        std::lock_guard<std::mutex> lock(m_mutex);
+        setvbuf(stdout,NULL,_IONBF,0);
+        setvbuf(stderr,NULL,_IONBF,0);
+    }
+
+    static void BeginCapture()
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        if (m_capturing)
+            return;
+
+        secure_pipe(m_pipe);
+        m_oldStdOut = secure_dup(STD_OUT_FD);
+        m_oldStdErr = secure_dup(STD_ERR_FD);
+        secure_dup2(m_pipe[WRITE],STD_OUT_FD);
+        secure_dup2(m_pipe[WRITE],STD_ERR_FD);
+        m_capturing = true;
+#ifndef _MSC_VER
+        secure_close(m_pipe[WRITE]);
+#endif
+    }
+    static bool IsCapturing()
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        return m_capturing;
+    }
+    static bool EndCapture()
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        if (!m_capturing)
+            return;
+
+        m_captured.clear();
+        secure_dup2(m_oldStdOut, STD_OUT_FD);
+        secure_dup2(m_oldStdErr, STD_ERR_FD);
+
+        const int bufSize = 1025;
+        char buf[bufSize];
+        int bytesRead = 0;
+        bool fd_blocked(false);
+        do
+        {
+            bytesRead = 0;
+            fd_blocked = false;
+#ifdef _MSC_VER
+            if (!eof(m_pipe[READ]))
+                bytesRead = read(m_pipe[READ], buf, bufSize-1);
+#else
+            bytesRead = read(m_pipe[READ], buf, bufSize-1);
+#endif
+            if (bytesRead > 0)
+            {
+                buf[bytesRead] = 0;
+                m_captured += buf;
+            }
+            else if (bytesRead < 0)
+            {
+                fd_blocked = (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR);
+                if (fd_blocked)
+                    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+        }
+        while(fd_blocked || bytesRead == (bufSize-1));
+
+        secure_close(m_oldStdOut);
+        secure_close(m_oldStdErr);
+        secure_close(m_pipe[READ]);
+#ifdef _MSC_VER
+        secure_close(m_pipe[WRITE]);
+#endif
+        m_capturing = false;
+    }
+    static std::string GetCapture()
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        return m_captured;
+    }
+private:
+    enum PIPES { READ, WRITE };
+
+    int StdCapture::secure_dup(int src)
+    {
+        int ret = -1;
+        bool fd_blocked = false;
+        do
+        {
+             ret = dup(src);
+             fd_blocked = (errno == EINTR ||  errno == EBUSY);
+             if (fd_blocked)
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        while (ret < 0);
+        return ret;
+    }
+    void StdCapture::secure_pipe(int * pipes)
+    {
+        int ret = -1;
+        bool fd_blocked = false;
+        do
+        {
+#ifdef _MSC_VER
+            ret = pipe(pipes, 65536, O_BINARY);
+#else
+            ret = pipe(pipes) == -1;
+#endif
+            fd_blocked = (errno == EINTR ||  errno == EBUSY);
+            if (fd_blocked)
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        while (ret < 0);
+    }
+    void StdCapture::secure_dup2(int src, int dest)
+    {
+        int ret = -1;
+        bool fd_blocked = false;
+        do
+        {
+             ret = dup2(src,dest);
+             fd_blocked = (errno == EINTR ||  errno == EBUSY);
+             if (fd_blocked)
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        while (ret < 0);
+    }
+
+    void StdCapture::secure_close(int & fd)
+    {
+        int ret = -1;
+        bool fd_blocked = false;
+        do
+        {
+             ret = close(fd);
+             fd_blocked = (errno == EINTR);
+             if (fd_blocked)
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        while (ret < 0);
+
+        fd = -1;
+    }
+
+    static int m_pipe[2];
+    static int m_oldStdOut;
+    static int m_oldStdErr;
+    static bool m_capturing;
+    static std::mutex m_mutex;
+    static std::string m_captured;
+};
+
+// actually define vars.
+int StdCapture::m_pipe[2];
+int StdCapture::m_oldStdOut;
+int StdCapture::m_oldStdErr;
+bool StdCapture::m_capturing;
+std::mutex StdCapture::m_mutex;
+std::string StdCapture::m_captured;
+#endif
 #endif
 void			assign_from_RGB8(const void *src, int iw2, int ih2)
 {
@@ -985,6 +1191,66 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 		}
 		break;
 #endif
+#ifdef HVIEW_INCLUDE_LIBCFITSIO
+	case EXT_FITS:
+		{
+			fitsfile *f;
+			int status, imtype, naxis;
+			long dimensions[2], firstpixel[2]={1, 1};
+			float null=0;
+			//int nkeys;
+			std::stringstream buffer;
+			
+#define		FITS_CHECK()	if(fits_check(status))goto fits_cleanup
+//#define	FITS_CHECK()	if(status)fits_report_error(stderr, status)
+			status=0;
+			stbi_convert_wchar_to_utf8(g_buf, g_buf_size, filename);
+			fits_open_file(&f, g_buf, READONLY, &status);		FITS_CHECK();
+
+			//console_start();
+			//fits_get_hdrspace(f, &nkeys, NULL, &status);		FITS_CHECK();
+			//for(int k=1;k<=nkeys;++k)
+			//{
+			//	fits_read_record(f, k, g_buf, &status);			FITS_CHECK();
+			//	printf("%s\n", g_buf);
+			//}
+			//printf("END\n");
+
+			//fits_get_img_type(f, &imtype, &status);	FITS_CHECK();
+			//fits_get_img_dim(f, &naxis, &status);		FITS_CHECK();
+			fits_get_img_param(f, 2, &imtype, &naxis, dimensions, &status);
+			switch(imtype)
+			{
+			case BYTE_IMG:		idepth=8;break;
+			case SHORT_IMG:		idepth=16;break;
+			case LONG_IMG:		idepth=32;break;
+			case LONGLONG_IMG:	idepth=64;break;
+			case FLOAT_IMG:		idepth=16;break;
+			case DOUBLE_IMG:	idepth=32;break;
+			}
+
+			long long count=dimensions[0]*dimensions[1];//FIXME support 1D images
+			auto buf=realloc(image, count*4*sizeof(float));
+			if(!buf)
+			{
+				LOG_ERROR("realloc returned null");
+				return false;
+			}
+			image=(float*)buf;
+			imagetype=IM_GRAYSCALE;
+			iw=dimensions[0], ih=dimensions[1], image_size=count;
+			fits_read_pix(f, TFLOAT, firstpixel, count, &null, image, 0, &status);	FITS_CHECK();
+			fits_close_file(f, &status);	FITS_CHECK();
+			goto fits_skip;
+		fits_cleanup:
+			fits_close_file(f, &status);
+		fits_skip:
+			float gain=(float)(1/(pow(2, idepth)-1));
+			for(size_t k=0;k<count;++k)
+				image[k]*=gain;
+		}
+		break;
+#endif
 	default://ordinary image
 		{
 			stbi_convert_wchar_to_utf8(g_buf, g_buf_size, filename);
@@ -1010,12 +1276,13 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 	render();
 	return true;
 }
-void			open_media()
+int				open_media()
 {
 	wchar_t szFile[MAX_PATH]={'\0'};
 	tagOFNW ofn={sizeof(ofn), ghWnd, 0, L"All files(*.*)\0*.*\0", 0, 0, 1, szFile, sizeof(szFile), 0, 0, 0, 0, OFN_PATHMUSTEXIST|OFN_FILEMUSTEXIST, 0, 0, 0, 0, 0, 0};
 	if(GetOpenFileNameW(&ofn))
-		open_mediaw(ofn.lpstrFile);
+		return open_mediaw(ofn.lpstrFile);
+	return 0;
 }
 bool			save_media_as()
 {
@@ -1130,7 +1397,7 @@ bool			save_media_as()
 				size_t ccount=image_size;
 				char has4=imagetype==IM_RGBA;
 				ccount<<=has4<<1;
-				auto buffer=new unsigned char[ccount<<(idepth==16)];
+				auto buffer=new unsigned char[ccount<<(int)(idepth==16)];
 				if(idepth==16)
 				{
 					for(int k=0;k<ccount;++k)
