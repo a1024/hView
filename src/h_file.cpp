@@ -604,6 +604,44 @@ std::mutex StdCapture::m_mutex;
 std::string StdCapture::m_captured;
 #endif
 #endif
+void			assign_from_gray8(const void *src, int iw2, int ih2)
+{
+	iw=iw2, ih=ih2, image_size=iw*ih;
+	auto buf=realloc(image, image_size*sizeof(float));
+	if(!buf)
+	{
+		LOG_ERROR("realloc returned null");
+		return;
+	}
+	image=(float*)buf;
+	float inv255=1.f/255;
+	for(int k=0;k<image_size;++k)
+	{
+		auto p=(unsigned char*)src+k;
+		image[k]=p[0]*inv255;
+	}
+	idepth=8;
+	imagetype=IM_GRAYSCALE;
+}
+void			assign_from_gray16(const void *src, int iw2, int ih2)
+{
+	iw=iw2, ih=ih2, image_size=iw*ih;
+	auto buf=realloc(image, image_size*sizeof(float));
+	if(!buf)
+	{
+		LOG_ERROR("realloc returned null");
+		return;
+	}
+	image=(float*)buf;
+	float inv=1.f/65535;
+	for(int k=0;k<image_size;++k)
+	{
+		auto p=(unsigned short*)src+k;
+		image[k]=p[0]*inv;
+	}
+	idepth=16;
+	imagetype=IM_GRAYSCALE;
+}
 void			assign_from_RGB8(const void *src, int iw2, int ih2)
 {
 	iw=iw2, ih=ih2, image_size=iw*ih;
@@ -614,9 +652,8 @@ void			assign_from_RGB8(const void *src, int iw2, int ih2)
 		return;
 	}
 	image=(float*)buf;
-	idepth=8;
 	float inv255=1.f/255;
-	int srcsize=image_size*3;
+	long long srcsize=image_size*3;
 	for(int ks=0, kd=0;ks<srcsize;ks+=3, kd+=4)
 	{
 		auto p=(unsigned char*)src+ks;
@@ -625,6 +662,7 @@ void			assign_from_RGB8(const void *src, int iw2, int ih2)
 		image[kd+2]=p[2]*inv255;
 		image[kd+3]=1;
 	}
+	idepth=8;
 	imagetype=IM_RGBA;
 }
 void			assign_from_RGBA8(const int *src, int iw2, int ih2)
@@ -637,7 +675,6 @@ void			assign_from_RGBA8(const int *src, int iw2, int ih2)
 		return;
 	}
 	image=(float*)buf;
-	idepth=8;
 	float inv255=1.f/255;
 	for(int ks=0, kd=0;ks<image_size;++ks, kd+=4)
 	{
@@ -647,6 +684,7 @@ void			assign_from_RGBA8(const int *src, int iw2, int ih2)
 		image[kd+2]=p[2]*inv255;
 		image[kd+3]=p[3]*inv255;
 	}
+	idepth=8;
 	imagetype=IM_RGBA;
 }
 void			assign_from_RGB16(const void *src, int iw2, int ih2)
@@ -659,9 +697,8 @@ void			assign_from_RGB16(const void *src, int iw2, int ih2)
 		return;
 	}
 	image=(float*)buf;
-	idepth=16;
 	float gain=1.f/65535;
-	int srcsize=image_size*6;
+	long long srcsize=image_size*6;
 	for(int ks=0, kd=0;ks<srcsize;ks+=6, kd+=4)
 	{
 		auto p=(unsigned char*)src+ks;
@@ -670,6 +707,7 @@ void			assign_from_RGB16(const void *src, int iw2, int ih2)
 		image[kd+2]=(p[4]<<8|p[5])*gain;
 		image[kd+3]=1;
 	}
+	idepth=16;
 	imagetype=IM_RGBA;
 }
 void			assign_from_RGBA16(const void *src, int iw2, int ih2)
@@ -682,9 +720,8 @@ void			assign_from_RGBA16(const void *src, int iw2, int ih2)
 		return;
 	}
 	image=(float*)buf;
-	idepth=16;
 	float gain=1.f/65535;
-	int srcsize=image_size<<3;
+	long long srcsize=image_size<<3;
 	for(int ks=0, kd=0;ks<srcsize;ks+=8, kd+=4)
 	{
 		auto p=(unsigned char*)src+ks;
@@ -693,6 +730,7 @@ void			assign_from_RGBA16(const void *src, int iw2, int ih2)
 		image[kd+2]=(p[4]<<8|p[5])*gain;
 		image[kd+3]=(p[6]<<8|p[7])*gain;
 	}
+	idepth=16;
 	imagetype=IM_RGBA;
 }
 bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, updates title
@@ -1021,6 +1059,12 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 			error=sail_read_next_frame(state, &img);	WEBP_CHECK(error);
 			switch(img->pixel_format)
 			{
+			case SAIL_PIXEL_FORMAT_BPP8_GRAYSCALE:
+				assign_from_gray8(img->pixels, img->width, img->height);
+				break;
+			case SAIL_PIXEL_FORMAT_BPP16_GRAYSCALE:
+				assign_from_gray16(img->pixels, img->width, img->height);
+				break;
 			case SAIL_PIXEL_FORMAT_BPP24_RGB:
 				assign_from_RGB8((int*)img->pixels, img->width, img->height);
 				break;
@@ -1246,7 +1290,7 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 			fits_close_file(f, &status);
 		fits_skip:
 			float gain=(float)(1/(pow(2, idepth)-1));
-			for(size_t k=0;k<count;++k)
+			for(ptrdiff_t k=0;k<count;++k)
 				image[k]*=gain;
 		}
 		break;
