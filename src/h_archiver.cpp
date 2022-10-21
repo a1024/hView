@@ -39,7 +39,7 @@ static void		print_bin(const byte *data, int bytesize)
 			printf("-");
 	}
 }
-void			print_histogram(int *histogram, int nlevels, int scanned_size, int *sort_idx, bool CDF)
+void			print_histogram(int *histogram, int nlevels, ptrdiff_t scanned_size, int *sort_idx, bool CDF)
 {
 	int histmax=0;
 	for(int k=0;k<nlevels;++k)
@@ -221,10 +221,10 @@ void			make_alphabet(Node *root, vector_bool *alphabet)
 		}
 	}
 }
-void			calculate_histogram(const short *image, int size, int *histogram, int nLevels)
+void			calculate_histogram(const short *image, ptrdiff_t size, int *histogram, int nLevels)
 {
 	memset(histogram, 0, nLevels*sizeof(int));
-	for(int k=0;k<size;++k)
+	for(ptrdiff_t k=0;k<size;++k)
 	{
 		if(image[k]<0||image[k]>=nLevels)
 			continue;
@@ -1659,7 +1659,7 @@ void			ICER_IDWT2D(short *buffer, int bw, int bh, ICER_FilterType filtertype, in
 	delete[] temp;
 }
 
-void			encode_zigzag(short *buffer, int imsize)
+void			encode_zigzag(short *buffer, ptrdiff_t imsize)
 {
 	for(int k=0;k<imsize;++k)
 	{
@@ -1668,7 +1668,7 @@ void			encode_zigzag(short *buffer, int imsize)
 		symbol=abs(symbol+neg)<<1|neg;
 	}
 }
-void			decode_zigzag(short *buffer, int imsize)
+void			decode_zigzag(short *buffer, ptrdiff_t imsize)
 {
 	for(int k=0;k<imsize;++k)
 	{
@@ -1693,7 +1693,8 @@ void			archiver_test3()
 	int normal=1<<idepth;
 	for(int k=0;k<image_size;++k)
 		src[k]=(short)floor(image[k]*normal+0.5);
-	int width=iw, height=ih, depth=idepth, imsize=image_size;
+	int width=iw, height=ih, depth=idepth;
+	ptrdiff_t imsize=image_size;
 #endif
 #if 0
 	const int width=16, height=16, depth=12;
@@ -2632,7 +2633,7 @@ void			print_subimage(float *buffer, int bw, int bh, int x0, int y0, int dx, int
 }
 
 const float	_pi=acos(-1.f);
-void		dct_init(float *&weights, float *&temp, int size, bool inv)
+void			dct_init(float *&weights, float *&temp, int size, bool inv)
 {
 	weights=new float[size*size];
 	temp=new float[size];
@@ -2657,13 +2658,13 @@ void		dct_init(float *&weights, float *&temp, int size, bool inv)
 		}
 	}
 }
-void		dct_finish(float *&weights, float *&temp)
+void			dct_finish(float *&weights, float *&temp)
 {
 	delete[] weights;
 	delete[] temp;
 	weights=temp=nullptr;
 }
-void		dct_apply_1D(float *data, const float *weights, float *temp, int size, int stride)
+void			dct_apply_1D(float *data, const float *weights, float *temp, int size, int stride)
 {
 	for(int k=0;k<size;++k)
 	{
@@ -3138,22 +3139,22 @@ void			archiver_test4()
 
 //	#define			NO_CONSOLE
 
-float*			backup_image_alloc_buffer(int &ccount)//don't forget to delete[] buffer
+float*			backup_image_alloc_buffer(ptrdiff_t &ccount)//don't forget to delete[] buffer
 {
 	ccount=image_size;
 	ccount<<=2&-(imagetype==IM_RGBA);//only IM_RGBA format has quadruple bytesize
 	auto buffer=new float[ccount];
 	return buffer;
 }
-void			backup_image(float *buffer, int ccount)
+void			backup_image(float *buffer, ptrdiff_t ccount)
 {
 	memcpy(buffer, image, ccount*sizeof(float));
 }
-void			restore_image(float *buffer, int ccount)
+void			restore_image(float *buffer, ptrdiff_t ccount)
 {
 	memcpy(image, buffer, ccount*sizeof(float));
 }
-void			add_buffers(float *dst, const float *src, int ccount)
+void			add_buffers(float *dst, const float *src, ptrdiff_t ccount)
 {
 	for(int k=0;k<ccount;++k)
 		dst[k]+=src[k];
@@ -3183,7 +3184,7 @@ void			stack_images()
 	}
 	open_mediaw((wpath+filenames[0]).c_str());//open first image
 	int iw2=iw, ih2=ih, idepth2=idepth;
-	int ccount=0;
+	ptrdiff_t ccount=0;
 	auto buffer=backup_image_alloc_buffer(ccount);
 	backup_image(buffer, ccount);
 	int nframes=(int)filenames.size(), nusedframes=1;
@@ -3282,7 +3283,7 @@ void			remove_light_pollution()//only for images of starry night sky
 	printf("Light pollution remover\n");
 	printf("Size %dx%d (%d calls)\n", iw, ih, (imagetype==IM_RGBA?3:1)*(iw+ih));
 #endif
-	int ccount=0;
+	ptrdiff_t ccount=0;
 	auto buffer=backup_image_alloc_buffer(ccount);
 	memset(buffer, 0, ccount*sizeof(float));
 

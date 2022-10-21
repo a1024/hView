@@ -51,7 +51,7 @@ typedef unsigned char byte;
 
 extern int		w, h, *rgb, rgbn,
 				iw, ih;
-extern long long image_size;
+extern ptrdiff_t image_size;
 extern float	*image;//the image
 enum			ImageType
 {
@@ -68,6 +68,14 @@ extern int		idepth;
 extern double	contrast_gain, contrast_offset;
 
 extern bool		imagecentered;
+
+enum			ProfilePlotMode
+{
+	PROFILE_OFF,
+	PROFILE_X,
+	PROFILE_Y,
+};
+extern ProfilePlotMode profileplotmode;
 
 extern bool		bitmode;
 extern int		bitplane;
@@ -227,7 +235,7 @@ void			open_prev();
 //exposed archiver
 //int			compress_huff(const short *buffer, int bw, int bh, int depth, int bayer, std::vector<int> &data);
 //bool			decompress_huff(const byte *data, int bytesize, RequestedFormat format, void **buffer, int &bw, int &bh, int &depth, char *bayer_sh);
-void			print_histogram(int *histogram, int nlevels, int scanned_size, int *sort_idx, bool CDF=false);
+void			print_histogram(int *histogram, int nlevels, ptrdiff_t scanned_size, int *sort_idx, bool CDF=false);
 enum			ICER_FilterType
 {
 	ICER_FILTER_A,//up to 13bit image
@@ -252,8 +260,8 @@ void			ICER_DWT1D(short *buffer, int count, ICER_FilterType filtertype, int nsta
 void			ICER_IDWT1D(short *buffer, int count, ICER_FilterType filtertype, int nstages=0);
 void			ICER_DWT2D(short *buffer, int bw, int bh, ICER_FilterType filtertype, int nstages=0);
 void			ICER_IDWT2D(short *buffer, int bw, int bh, ICER_FilterType filtertype, int nstages=0);
-void			encode_zigzag(short *buffer, int imsize);
-void			decode_zigzag(short *buffer, int imsize);
+void			encode_zigzag(short *buffer, ptrdiff_t imsize);
+void			decode_zigzag(short *buffer, ptrdiff_t imsize);
 void			apply_DCT(int logsize, bool inv);
 void			archiver_test();
 void			archiver_test2();

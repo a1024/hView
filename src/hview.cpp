@@ -25,14 +25,17 @@ static const char file[]=__FILE__;
 
 int				w=0, h=0, *rgb=nullptr, rgbn=0,
 				iw=0, ih=0;//image dimensions
-long long		image_size=0;
+ptrdiff_t		image_size=0;
 float			*image=nullptr;
 ImageType		imagetype=IM_RGBA;
-char			bayer[4]={};//shift ammounts for the 4 Bayer mosaic components, -1 for grayscale
+char			bayer[4]={};//shift ammounts for the 4 Bayer mosaic components, -1 for grayscale, example: RGGB is {0, 8, 8, 16}
 const char		bayer_labels[]="BGRA";
 int				idepth=0;
 
 bool			imagecentered=false;
+
+extern ProfilePlotMode profileplotmode=PROFILE_OFF;
+HPEN			profilePens[4];//red, green, blue, black
 
 bool			bitmode=false;//draw standalone bitplane
 int				bitplane=0;//see bitmode
@@ -361,6 +364,80 @@ void			draw_histogram(int *hist, int nlevels, int hist_amplitude, int color, int
 		}
 	}
 }
+void			draw_profile_x(int comp)
+{
+	int iy=screen2image_y_int(my);
+	if(iy>=0&&iy<ih)
+	{
+		float *row;
+		int stride;
+		switch(imagetype)
+		{
+		case IM_GRAYSCALE:	row=image+iw*iy, stride=1;break;
+		case IM_RGBA:		row=image+(iw*iy<<2|comp), stride=4;break;
+		case IM_BAYER:
+		case IM_BAYER_SEPARATE:
+			row=image+iw*iy+(iw&-(comp>>1))+(comp&1), stride=1;//to see the color/spatial correlation
+			break;
+		default:
+			return;
+		}
+
+		int ix=screen2image_x_int(0), y1, y2;
+		if(ix>=0&&ix<iw)
+			y1=h-(int)floor((h>>1)*row[ix*stride]);
+		else
+			y1=h;
+		for(int kx=1;kx<w;++kx)
+		{
+			ix=screen2image_x_int(kx);
+			if(ix>=0&&ix<iw)
+				y2=h-(int)floor((h>>1)*row[ix*stride]);
+			else
+				y2=h;
+			MoveToEx(ghMemDC, kx-1, y1, 0);
+			LineTo(ghMemDC, kx, y2);
+			y1=y2;
+		}
+	}
+}
+void			draw_profile_y(int comp)
+{
+	int ix=screen2image_x_int(mx);
+	if(ix>=0&&ix<iw)
+	{
+		float *col;
+		int stride;
+		switch(imagetype)
+		{
+		case IM_GRAYSCALE:	col=image+ix, stride=iw;break;
+		case IM_RGBA:		col=image+(ix<<2)+comp, stride=iw<<2;break;
+		case IM_BAYER:
+		case IM_BAYER_SEPARATE:
+			col=image+ix+(iw&-(comp>>1))+(comp&1), stride=iw;//to see the color/spatial correlation
+			break;
+		default:
+			return;
+		}
+
+		int iy=screen2image_y_int(0), x1, x2;
+		if(iy>=0&&iy<ih)
+			x1=(int)floor((w>>1)*col[iy*stride]);
+		else
+			x1=0;
+		for(int ky=1;ky<h;++ky)
+		{
+			iy=screen2image_y_int(ky);
+			if(iy>=0&&iy<ih)
+				x2=(int)floor((w>>1)*col[iy*stride]);
+			else
+				x2=w;
+			MoveToEx(ghMemDC, x1, ky-1, 0);
+			LineTo(ghMemDC, x2, ky);
+			x1=x2;
+		}
+	}
+}
 void			render()
 {
 	memset(rgb, 0xFF, rgbn<<2);
@@ -610,7 +687,48 @@ void			render()
 				break;
 			}
 		}
-	}
+
+		if(profileplotmode>PROFILE_OFF)
+		{
+			auto draw_profile=profileplotmode==PROFILE_X?draw_profile_x:draw_profile_y;
+			switch(imagetype)
+			{
+			case IM_GRAYSCALE:
+				draw_profile(0);
+				break;
+			case IM_RGBA:
+				{
+					HPEN temp=(HPEN)SelectObject(ghMemDC, profilePens[0]);
+					draw_profile(0);
+					SelectObject(ghMemDC, profilePens[1]);
+					draw_profile(1);
+					SelectObject(ghMemDC, profilePens[2]);
+					draw_profile(2);
+					SelectObject(ghMemDC, profilePens[3]);
+					draw_profile(3);
+					SelectObject(ghMemDC, temp);
+				}
+				break;
+			case IM_BAYER:
+				{
+					HPEN temp=(HPEN)SelectObject(ghMemDC, profilePens[0]);
+					draw_profile(bayer[0]>>3);
+					SelectObject(ghMemDC, profilePens[bayer[1]>>3]);
+					draw_profile(bayer[1]>>3);
+					SelectObject(ghMemDC, profilePens[bayer[2]>>3]);
+					draw_profile(bayer[2]>>3);
+					SelectObject(ghMemDC, profilePens[bayer[3]>>3]);
+					draw_profile(bayer[3]>>3);
+					SelectObject(ghMemDC, temp);
+				}
+				break;
+			case IM_BAYER_SEPARATE:
+				profileplotmode=PROFILE_OFF;
+				break;
+			}
+		}
+	}//if image
+
 	//for(int k=0;k<rgbn;++k)//red screen test
 	//	rgb[k]=0xFFFF0000;//
 	BitBlt(ghDC, 0, 0, w, h, ghMemDC, 0, 0, SRCCOPY);
@@ -666,7 +784,11 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 			render();
 		}
 		else
+		{
 			mx=(short&)lParam, my=((short*)&lParam)[1];//client coordinates
+			if(profileplotmode==PROFILE_X||profileplotmode==PROFILE_Y)
+				render();
+		}
 		break;
 	case WM_LBUTTONDOWN:
 		start_mx=(short&)lParam, start_my=((short*)&lParam)[1];//client coordinates
@@ -732,6 +854,8 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 				"\' (quote): Toggle bit mode\n"
 				"[: Previous bit plane\n"
 				"]: Next bit plane\n"
+				"X: Toggle horizontal profile\n"
+				"Y: Toggle vertical profile\n"
 				"F1: Shortcut keys\n"
 				"F2: File properties\n"
 				"X: Quit\n"
@@ -932,7 +1056,7 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 			break;
 		case 'N':
 			{
-				int ccount=image_size;
+				ptrdiff_t ccount=image_size;
 				ccount<<=(imagetype==IM_RGBA)<<1;
 				float vmin=image[0], vmax=image[0];
 				for(int k=1;k<ccount;++k)
@@ -984,9 +1108,23 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 				SetWindowPos(hWnd, HWND_TOP, oldWindowSize.left, oldWindowSize.top, oldWindowSize.right-oldWindowSize.left, oldWindowSize.bottom-oldWindowSize.top, SWP_SHOWWINDOW);
 			}
 			break;
-		case 'X'://quit
-			PostQuitMessage(0);
+		case 'X'://toggle horizontal profile plot
+			if(profileplotmode!=PROFILE_X)
+				profileplotmode=PROFILE_X;
+			else
+				profileplotmode=PROFILE_OFF;
+			render();
 			break;
+		case 'Y'://toggle vertical profile plot
+			if(profileplotmode!=PROFILE_Y)
+				profileplotmode=PROFILE_Y;
+			else
+				profileplotmode=PROFILE_OFF;
+			render();
+			break;
+		//case 'X'://quit
+		//	PostQuitMessage(0);
+		//	break;
 		}
 		break;
 	case WM_KEYUP:
@@ -1087,6 +1225,10 @@ int				__stdcall WinMain(HINSTANCE__ *hInstance, HINSTANCE__ *hPrevInstance, cha
 		BITMAPINFO bmpInfo={{sizeof(BITMAPINFOHEADER), w, -h, 1, 32, BI_RGB, 0, 0, 0, 0, 0}};
 		hBitmap=CreateDIBSection(0, &bmpInfo, DIB_RGB_COLORS, (void**)&rgb, 0, 0);
 		hBitmap=(HBITMAP)SelectObject(ghMemDC, hBitmap);
+		profilePens[0]=CreatePen(PS_SOLID, 1, RGB(255, 0, 0));
+		profilePens[1]=CreatePen(PS_SOLID, 1, RGB(0, 255, 0));
+		profilePens[2]=CreatePen(PS_SOLID, 1, RGB(0, 0, 255));
+		profilePens[3]=CreatePen(PS_SOLID, 1, RGB(0, 0, 0));
 
 		int nArgs;
 		wchar_t **args=CommandLineToArgvW(GetCommandLineW(), &nArgs);

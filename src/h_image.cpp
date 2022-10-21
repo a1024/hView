@@ -157,7 +157,7 @@ void			applyFFT()
 		//	}
 		//}
 		fft_w=iw, fft_h=ih, fft_type=imagetype;
-		int bytesize=image_size*sizeof(fftw_complex);
+		ptrdiff_t bytesize=image_size*sizeof(fftw_complex);
 		bytesize>>=(imagetype!=IM_GRAYSCALE&&imagetype!=IM_RGBA)<<1;
 		for(int kp=0;kp<nplanes;++kp)
 		{

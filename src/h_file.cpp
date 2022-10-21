@@ -319,7 +319,7 @@ const char*		sail_error2str(int e)
 	}
 	return a;
 }
-#define			WEBP_CHECK(ERROR)		(!(ERROR)||log_error(file, __LINE__, sail_error2str(ERROR)))
+#define			SAIL_CHECK(ERROR)		(!(ERROR)||log_error(file, __LINE__, sail_error2str(ERROR)))
 #endif
 #ifdef HVIEW_INCLUDE_LIBHEIF
 #define			LIBHEIF_CHECK(ERROR)	(!(ERROR).code||log_error(file, __LINE__, (ERROR).message))
@@ -1053,10 +1053,10 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 
 			void *state=nullptr;
 			struct sail_image *img=nullptr;
-			auto error=sail_start_reading_file(g_buf, nullptr, &state);	WEBP_CHECK(error);
+			auto error=sail_start_reading_file(g_buf, nullptr, &state);	SAIL_CHECK(error);
 			if(!state)//file may not exist
 				return false;
-			error=sail_read_next_frame(state, &img);	WEBP_CHECK(error);
+			error=sail_read_next_frame(state, &img);	SAIL_CHECK(error);
 			switch(img->pixel_format)
 			{
 			case SAIL_PIXEL_FORMAT_BPP8_GRAYSCALE:
@@ -1078,10 +1078,13 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 				assign_from_RGBA16(img->pixels, img->width, img->height);
 				break;
 			default:
-				messageboxa(ghWnd, "Error", "Unsupported pixel format from libSAIL: %d", img->pixel_format);
+				error=sail_stop_reading(state);				SAIL_CHECK(error);
+				sail_destroy_image(img);
+				goto try_stb;
+				//messageboxa(ghWnd, "Error", "Unsupported pixel format from libSAIL: %d", img->pixel_format);
 				break;
 			}
-			error=sail_stop_reading(state);				WEBP_CHECK(error);
+			error=sail_stop_reading(state);				SAIL_CHECK(error);
 			sail_destroy_image(img);
 
 			//struct sail_io *io;
@@ -1297,6 +1300,7 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 #endif
 	default://ordinary image
 		{
+		try_stb:
 			stbi_convert_wchar_to_utf8(g_buf, g_buf_size, filename);
 			int iw2=0, ih2=0, nch2=0;
 			unsigned char *original_image=stbi_load(g_buf, &iw2, &ih2, &nch2, 4);
