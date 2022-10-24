@@ -634,10 +634,10 @@ void			assign_from_gray16(const void *src, int iw2, int ih2)
 	}
 	image=(float*)buf;
 	float inv=1.f/65535;
-	for(int k=0;k<image_size;++k)
+	for(int ks=0, kd=0;kd<image_size;ks+=2, ++kd)
 	{
-		auto p=(unsigned short*)src+k;
-		image[k]=p[0]*inv;
+		auto p=(unsigned char*)src+ks;
+		image[kd]=(p[0]<<8|p[1])*inv;
 	}
 	idepth=16;
 	imagetype=IM_GRAYSCALE;
