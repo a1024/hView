@@ -14,6 +14,7 @@
 //You should have received a copy of the GNU General Public License
 //along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+#define _CRT_SECURE_NO_WARNINGS
 #include		"generic.h"
 #include		"hview.h"
 #include		"huff.h"
@@ -22,7 +23,8 @@
 #include		<queue>
 #include		<stack>
 #include		<assert.h>
-//#include		<tmmintrin.h>
+#include		<tmmintrin.h>
+#include		"lodepng.h"
 const char		file[]=__FILE__;
 
 //#define		DEBUG_VEC_BOOL
@@ -64,7 +66,7 @@ void			print_histogram(int *histogram, int nlevels, ptrdiff_t scanned_size, int 
 			sum+=histogram[symbol];
 			if(sort_idx)
 				print("%4d ", k);
-			printf("%4d %6d %2d %7d %2d ", symbol, histogram[symbol], 100*histogram[symbol]/scanned_size, sum, 100*sum/scanned_size);
+			printf("%4d %6d %2d %7d %2d ", symbol, histogram[symbol], (int)(100*histogram[symbol]/scanned_size), sum, (int)(100*sum/scanned_size));
 			for(int kr=0, count=histogram[symbol]*consolechars/histmax;kr<count;++kr)
 				printf("*");
 			printf("\n");
@@ -83,7 +85,7 @@ void			print_histogram(int *histogram, int nlevels, ptrdiff_t scanned_size, int 
 				continue;
 			if(sort_idx)
 				print("%4d ", k);
-			printf("%4d %6d %2d ", symbol, histogram[symbol], 100*histogram[symbol]/scanned_size);
+			printf("%4d %6d %2d ", symbol, histogram[symbol], (int)(100*histogram[symbol]/scanned_size));
 			for(int kr=0, count=histogram[symbol]*consolechars/histmax;kr<count;++kr)
 				printf("*");
 			printf("\n");
@@ -488,8 +490,8 @@ void			build_dec_tree(Node *root)
 bool			decompress_huff(const byte *data, int bytesize, RequestedFormat format, void **pbuffer, int &bw, int &bh, int &depth, char *bayer_sh)//realloc will be used on buffer
 {
 #ifdef DEBUG_ARCH
-	console_start_good();
-	//console_start();
+	//console_start_good();
+	console_start();
 	printf("decode_huff\n");
 #endif
 	auto header=(HuffHeader*)data;
@@ -545,8 +547,8 @@ bool			decompress_huff(const byte *data, int bytesize, RequestedFormat format, v
 	auto root=build_tree((int*)header->histogram, header->nLevels);
 	
 #ifdef PRINT_ALPHABET
-	console_start_good();
-	//console_start();
+	//console_start_good();
+	console_start();
 	std::vector<vector_bool> alphabet(header->nLevels);
 	make_alphabet(root, alphabet.data());
 	std::vector<int> indices;
@@ -627,8 +629,8 @@ bool			decompress_huff(const byte *data, int bytesize, RequestedFormat format, v
 	}
 	if(bit_idx!=hData->cBitSize)
 	{
-		console_start_good();
-		//console_start();
+		//console_start_good();
+		console_start();
 		printf("Decompression error:\n");
 		printf("\tbit_idx = %d\n", bit_idx);
 		printf("\tbitsize = %lld\n", hData->cBitSize);
@@ -679,6 +681,34 @@ bool			decompress_huff(const byte *data, int bytesize, RequestedFormat format, v
 
 
 //test functions
+std::string		filter_path(const char *str, size_t len)//can be same string
+{
+	std::string path(str, len);
+	if(path[0]=='\"')
+		path.erase(path.begin());
+	if(path[path.size()-1]=='\"')
+		path.pop_back();
+	for(int k=0;k<(int)path.size();++k)
+		if(path[k]=='\\')
+			path[k]='/';
+	if(path[path.size()-1]!='/')
+		path.push_back('/');
+	return path;
+}
+std::wstring		filter_path(const wchar_t *str, size_t len)//can be same string
+{
+	std::wstring path(str, len);
+	if(path[0]=='\"')
+		path.erase(path.begin());
+	if(path[path.size()-1]=='\"')
+		path.pop_back();
+	for(int k=0;k<(int)path.size();++k)
+		if(path[k]=='\\')
+			path[k]='/';
+	if(path[path.size()-1]!='/')
+		path.push_back('/');
+	return path;
+}
 /*void			make_alphabet(Node *root, std::vector<bool> *alphabet)//depth-first
 {
 	typedef std::pair<Node*, std::vector<bool>> TraverseInfo;
@@ -769,8 +799,8 @@ compare_images_exit:
 }
 void			archiver_test()
 {
-	console_start_good();
-	//console_start();
+	//console_start_good();
+	console_start();
 	//console_buffer_size(80, 9000);
 	//system("MODE CON COLS=80 LINES=4000");
 
@@ -2632,7 +2662,7 @@ void			print_subimage(float *buffer, int bw, int bh, int x0, int y0, int dx, int
 	printf("\n");
 }
 
-const float	_pi=acos(-1.f);
+const float	_pi=acosf(-1.f);
 void			dct_init(float *&weights, float *&temp, int size, bool inv)
 {
 	weights=new float[size*size];
@@ -3162,14 +3192,14 @@ void			add_buffers(float *dst, const float *src, ptrdiff_t ccount)
 void			stack_images()
 {
 #ifndef NO_CONSOLE
-	console_start(80, 2000);
+	console_start();//80, 2000
 	printf("Simple average stacker\n");
 #endif
 	std::wstring wpath;
 	dialog_get_folder(L"Open folder...", wpath);
 	wpath+='/';
 	std::vector<std::wstring> filenames;
-	get_all_image_filenames(wpath, filenames);
+	get_all_image_filenames(wpath.c_str(), wpath.size(), filenames);
 
 	if(!filenames.size())
 	{
@@ -3218,6 +3248,259 @@ void			stack_images()
 #ifndef NO_CONSOLE
 	console_end();
 #endif
+}
+
+#define MIX(A, B, X)	(A+(B-A)*(X))
+void planetary_placecenter(const float *srcbuf, int bw, int bh, float *dstbuf, int dx, int dy, double threshold, int linear)
+{
+	double cx=0, cy=0, sum=0;
+	int dstsize=dx*dy*4;
+	for(int ky=0;ky<bh;++ky)
+	{
+		for(int kx=0;kx<bw;++kx)
+		{
+			int idx=(bw*ky+kx)<<2;
+			float valr=srcbuf[idx  ];
+			float valg=srcbuf[idx|1];
+			float valb=srcbuf[idx|2];
+			float mag=sqrt(valr*valr+valg*valg+valb*valb);
+			if(mag>threshold)
+			{
+				mag-=threshold;
+				cx+=kx*mag;
+				cy+=ky*mag;
+				sum+=mag;
+			}
+		}
+	}
+	cx/=sum;
+	cy/=sum;
+
+	float black[]={0, 0, 0, 1};//r, g, b, a
+	for(int k=0;k<dstsize;++k)
+		dstbuf[k]=black[k&3];
+
+	for(int ky=0;ky<dy;++ky)
+	{
+		//kx0 = kx + (centroid-dx/2)
+		double ytail=cy-dy*0.5;//fetch coordinate component
+		int ky0=(int)floor(ytail);
+		ytail-=ky0;//'ytail' becomes tail
+		ky0+=ky;//ky0 becomes source coordinate
+		if((unsigned)ky0<(unsigned)(bh-1))
+		{
+			for(int kx=0;kx<dx;++kx)
+			{
+				double xtail=cx-dx*0.5;
+				int kx0=(int)floor(xtail);
+				xtail-=kx0;
+				kx0+=kx;
+				if((unsigned)kx0<(unsigned)(bw-1))
+				{
+					int srcidx=(bw*ky0+kx0)<<2, dstidx=(dx*ky+kx)<<2;
+					if(linear)
+					{
+						for(int kc=0;kc<3;++kc)
+						{
+							double
+								v00=srcbuf[srcidx        +kc], v01=srcbuf[srcidx        +4+kc],
+								v10=srcbuf[srcidx+(bw<<2)+kc], v11=srcbuf[srcidx+(bw<<2)+4+kc];
+							double top=MIX(v00, v01, xtail), bottom=MIX(v10, v11, xtail);
+							dstbuf[dstidx+kc]=(float)MIX(top, bottom, ytail);
+						}
+					}
+					else
+					{
+						for(int kc=0;kc<3;++kc)
+							dstbuf[dstidx+kc]=srcbuf[srcidx+kc];
+					}
+				}
+			}
+		}
+	}
+}
+#if 0
+void planetary_stamp_comp(const float *srcbuf, int bw, int bh, float *dstbuf, int dx, int dy, double *centroids, int comp, int linear)
+{
+	for(int ky=0;ky<dy;++ky)
+	{
+		//kx0 = kx + (centroid-dx/2)
+		double ytail=centroids[comp<<1|1]-dy*0.5;//fetch coordinate component
+		int ky0=(int)floor(ytail);
+		ytail-=ky0;//'ytail' becomes tail
+		ky0+=ky;//ky0 becomes source coordinate
+		if((unsigned)ky0<(unsigned)bh)
+		{
+			for(int kx=0;kx<dx;++kx)
+			{
+				double xtail=centroids[comp<<1]-dx*0.5;
+				int kx0=(int)floor(xtail);
+				xtail-=kx0;
+				kx0+=kx;
+				if((unsigned)kx0<(unsigned)bw)
+				{
+					int srcidx=(bw*ky0+kx0)<<2|comp, dstidx=(dx*ky+kx)<<2|comp;
+					if(linear)
+					{
+						double
+							v00=srcbuf[srcidx   ], v01=srcbuf[srcidx   +4],
+							v10=srcbuf[srcidx+bw], v11=srcbuf[srcidx+bw+4];
+						double top=MIX(v00, v01, xtail), bottom=MIX(v10, v11, xtail);
+						dstbuf[dstidx]=(float)MIX(top, bottom, ytail);
+					}
+					else
+						dstbuf[dstidx]=srcbuf[srcidx];
+				}
+			}
+		}
+	}
+}
+void planetary_placecenter(const float *srcbuf, int bw, int bh, float *dstbuf, int dx, int dy, double threshold, int linear)
+{
+	double centroids[6]={0}, sum[3]={0};
+	int dstsize=dx*dy*4;
+	for(int ky=0;ky<bh;++ky)
+	{
+		for(int kx=0;kx<bw;++kx)
+		{
+			int idx=(bw*ky+kx)<<2;
+			float valr=srcbuf[idx  ];
+			float valg=srcbuf[idx|1];
+			float valb=srcbuf[idx|2];
+			if(valr>threshold)
+			{
+				valr-=threshold;
+				centroids[0]+=kx*valr;
+				centroids[1]+=ky*valr;
+				sum[0]+=valr;
+			}
+			if(valg>threshold)
+			{
+				valg-=threshold;
+				centroids[2]+=kx*valg;
+				centroids[3]+=ky*valg;
+				sum[1]+=valg;
+			}
+			if(valb>threshold)
+			{
+				valb-=threshold;
+				centroids[4]+=kx*valb;
+				centroids[5]+=ky*valb;
+				sum[2]+=valb;
+			}
+		}
+	}
+	centroids[0]/=sum[0];
+	centroids[1]/=sum[0];
+	centroids[2]/=sum[1];
+	centroids[3]/=sum[1];
+	centroids[4]/=sum[2];
+	centroids[5]/=sum[2];
+	float black[]={0, 0, 0, 1};//r, g, b, a
+	for(int k=0;k<dstsize;++k)
+		dstbuf[k]=black[k&3];
+	planetary_stamp_comp(srcbuf, bw, bh, dstbuf, dx, dy, centroids, 0, linear);
+	planetary_stamp_comp(srcbuf, bw, bh, dstbuf, dx, dy, centroids, 1, linear);
+	planetary_stamp_comp(srcbuf, bw, bh, dstbuf, dx, dy, centroids, 2, linear);
+}
+#endif
+void planetary_stabilize()
+{
+	console_start();
+	printf("Step 1: Extract video frames to a new folder using the following command:\n\tffmpeg -i DSC_0646.MOV \"20230203/%%06d.PNG\"\nNavigate to the source then destination folders when ready\n");
+	console_pause();
+	std::wstring srcpath, dstpath;
+	dialog_get_folder(L"Open source folder...", srcpath);
+	std::vector<std::wstring> filenames;
+	get_all_image_filenames(srcpath.c_str(), srcpath.size(), filenames);
+	if(!filenames.size())
+	{
+		printf("\nNo images found in \'%S\'. ABORTING.\n", srcpath.c_str());
+		console_pause();
+		console_end();
+		return;
+	}
+	
+	printf("Step 2: Enter destination path\n");
+	console_pause();
+	dialog_get_folder(L"Open destination folder...", dstpath);
+	{
+		std::vector<std::wstring> filenames2;
+		get_all_image_filenames(dstpath.c_str(), dstpath.size(), filenames2);
+		if(filenames2.size())
+		{
+			printf("\nImages found in destination folder \'%S\'. ABORTING.\n", dstpath.c_str());
+			console_pause();
+			console_end();
+			return;
+		}
+	}
+
+	int dx=0, dy=0;
+	printf("Step 3: Enter destination frame dimensions in pixels\n");
+	printf("\twidth:\t");
+	dx=console_scan_int();
+	//while(!scanf("%d", &dx));
+	printf("\theight:\t");
+	dy=console_scan_int();
+	//while(!scanf("%d", &dy));
+
+	printf("Step 4: Enter 0 for nearest, 1 for linear: ");
+	int linear=0;
+	do
+	{
+		linear=console_scan_int();
+		//while(!scanf("%d", &linear));
+	}while(linear&~1);//while not boolean
+	
+	printf("Step 5: Enter brightness threshold [0, 1]: ");
+	double threshold=console_scan_float();
+	if(threshold<0)
+		threshold=0;
+	if(threshold>1)
+		threshold=1;
+	
+	printf("About to start...\n");
+	console_pause();
+
+	int nframes=(int)filenames.size();
+	int dstsize=dx*dy*4;
+	float *srcbuf=0, *dstbuf=(float*)malloc(dstsize*sizeof(float));
+	unsigned char *result=(unsigned char*)malloc(dstsize);
+	printf("Processing...\n");
+	for(int ki=0;ki<nframes;++ki)
+	{
+		printf("%d/%d = %.2lf%%\r", ki+1, nframes, 100.*ki/nframes);
+
+		bool success=open_mediaw((srcpath+filenames[ki]).c_str());//open image
+		if(!success||imagetype!=IM_RGBA)
+		{
+			printf("Skiping \'%S\', only RGBA frames are supported\n", filenames[ki].c_str());
+			console_pause();
+			continue;
+		}
+		ptrdiff_t ccount=0;
+		srcbuf=backup_image_alloc_buffer(ccount);
+		backup_image(srcbuf, ccount);
+		planetary_placecenter(srcbuf, iw, ih, dstbuf, dx, dy, threshold, linear);
+		for(int kv=0;kv<dstsize;++kv)
+		{
+			float val=255*dstbuf[kv];
+			if(val<0)
+				val=0;
+			if(val>255)
+				val=255;
+			result[kv]=(unsigned char)val;
+		}
+		sprintf_s(g_buf, g_buf_size, "%S%06d.PNG", dstpath.c_str(), ki+1);
+		lodepng_encode_file(g_buf, result, dx, dy, LCT_RGBA, 8);
+		delete[] srcbuf;
+	}
+	printf("\nDone.\n");
+	console_pause();
+	
+	free(dstbuf);
+	console_end();
 }
 
 void			average_filter_mirror(const float *src, float *dst, int count, int stride, int fsize)
@@ -3279,7 +3562,7 @@ void			average_filter_mirror(const float *src, float *dst, int count, int stride
 void			remove_light_pollution()//only for images of starry night sky
 {
 #ifndef NO_CONSOLE
-	console_start(80, 2000);
+	console_start();
 	printf("Light pollution remover\n");
 	printf("Size %dx%d (%d calls)\n", iw, ih, (imagetype==IM_RGBA?3:1)*(iw+ih));
 #endif
@@ -3511,4 +3794,144 @@ void			equalize(int super)
 		delete[] hist;
 		delete[] CDF;
 	}
+}
+
+#include"sans.h"
+#include"lodepng.h"
+void archiver_test5()
+{
+#if 0
+	unsigned char testdata[]=
+	{
+		193, 95, 114, 86, 128, 193, 175, 63, 8, 21, 64, 81, 35, 65, 0, 0,
+		193, 95, 114, 86, 128, 193, 175, 63, 8, 21, 64, 81, 35, 65, 0, 0,
+		193, 95, 114, 86, 128, 193, 175, 63, 8, 21, 64, 81, 35, 65, 0, 0,
+		193, 95, 114, 86, 128, 193, 175, 63, 8, 21, 64, 81, 35, 65, 0, 0,
+	};
+	size_t csize;
+	long long enc=0, dec=0;
+	void *cbuf=sans_encode(testdata, 16, 2, 2, 8, &csize, &enc);
+	unsigned char *b2=(unsigned char*)sans_decode(cbuf, csize, 0, 0, 0, 0, &dec);
+	free(cbuf);
+	free(b2);
+#endif
+
+#if 1
+	int ch=1;
+	int dummy_alpha=0;
+	ptrdiff_t imsize=image_size;
+	if(imagetype==IM_RGBA)
+	{
+		dummy_alpha=1;
+		for(ptrdiff_t k=0;k<(image_size<<2);++k)
+		{
+			float val=255*image[k];
+			if(val<0)
+				val=0;
+			if(val>255)
+				val=255;
+			if(val<255)
+			{
+				dummy_alpha=0;
+				break;
+			}
+		}
+		if(dummy_alpha)
+			ch=3, imsize*=3;
+		else
+			ch=4, imsize<<=2;
+	}
+	unsigned char *buffer=new unsigned char[imsize];
+	for(ptrdiff_t ks=0, kd=0;ks<imsize;++ks)
+	{
+		if(dummy_alpha&&(ks&3)==3)
+			continue;
+		float val=255*image[ks];
+		if(val<0)
+			val=0;
+		if(val>255)
+			val=255;
+		buffer[kd]=(unsigned char)val;
+		++kd;
+	}
+
+	long long png_enc, png_dec;
+	unsigned char *png=0, *o2=0;
+	unsigned iw2=0, ih2=0;
+	size_t pngsize=0, o2size=0;
+	LodePNGState state;
+	lodepng_state_init(&state);
+	state.info_raw.colortype = imagetype==IM_RGBA?(dummy_alpha?LCT_RGB:LCT_RGBA):LCT_GREY;
+	state.info_raw.bitdepth = 8;
+	state.info_png.color.colortype = state.info_raw.colortype;
+	state.info_png.color.bitdepth = 8;
+
+	png_enc=__rdtsc();
+	lodepng_encode(&png, &pngsize, buffer, iw, ih, &state);
+	png_enc=__rdtsc()-png_enc;
+
+	png_dec=__rdtsc();
+	lodepng_decode(&o2, &iw2, &ih2, &state, png, pngsize);
+	png_dec=__rdtsc()-png_dec;
+
+	lodepng_state_cleanup(&state);
+	free(png);
+	free(o2);
+
+	size_t csize;
+	long long enc=0, dec=0;
+	void *cbuf=sans_encode(buffer, iw, ih, ch, 8, &csize, &enc);
+	if(!cbuf)
+	{
+		LOG_ERROR("Enc error");
+		delete[] buffer;
+		return;
+	}
+	unsigned char *b2=(unsigned char*)sans_decode(cbuf, csize, 0, 0, 0, 0, &dec);
+	free(cbuf);
+
+	if(!b2)
+	{
+		//LOG_ERROR("Dec error");
+		delete[] buffer;
+		return;
+	}
+	const float gain=1.f/255;
+	for(ptrdiff_t ks=0, kd=0;kd<imsize;++kd)
+	{
+		if(dummy_alpha&&(ks&3)==3)
+		{
+			image[kd]=1;
+			continue;
+		}
+		image[kd]=b2[ks]*gain;
+		++ks;
+	}
+	free(b2);
+	delete[] buffer;
+
+	render();
+	messageboxa(ghWnd, "Result",
+		"\tPNG\t\tANS\n"
+		"  Enc\t%10lf\t%10lf CPP\n"
+		"  Dec\t%10lf\t%10lf CPP\n"
+		"  Ratio\t%10lf\t%10lf\n"
+		"  Size\t%10lld\t%10lld bytes\n"
+		"  Uncompressed %lld bytes\n",
+		(double)png_enc/imsize, (double)enc/imsize,
+		(double)png_dec/imsize, (double)dec/imsize,
+		(double)imsize/pngsize, (double)imsize/csize,
+		pngsize, csize,
+		imsize);
+
+	//messageboxa(ghWnd, "Result", "Enc/Dec/Ratio/Size:\n  SANS %lf/%lf / %lf/%lld\n  PNG %lf/%lf / %lf/%lld",
+	//	(double)enc/imsize, (double)dec/imsize, (double)imsize/csize, csize,
+	//	(double)png_enc/imsize, (double)png_dec/imsize, (double)imsize/pngsize, pngsize);
+
+	//LOG_ERROR("E/D/S/R:\n  SANS %lf/%lf / %lf/%lld\n  PNG %lf/%lf / %lf/%lld",
+	//	(double)enc/imsize, (double)dec/imsize, (double)imsize/csize, csize,
+	//	(double)png_enc/imsize, (double)png_dec/imsize, (double)imsize/pngsize, pngsize);
+
+	//LOG_ERROR("enc %lf, dec %lf, size %lld, ratio %lf", (double)enc/imsize, (double)dec/imsize, csize, (double)imsize/csize);
+#endif
 }

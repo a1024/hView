@@ -47,6 +47,11 @@ void			console_pause();
 void			console_buffer_size(short x, short y);
 void			console_start(int cx, int cy);
 void			console_start_good();
+void			console_log(const char *format, ...);
+int				console_scan(char *buf, int len);
+#define			printf console_log
+int				console_scan_int();
+double			console_scan_float();
 
 //gneeric buffer
 const int		g_buf_size=2048;

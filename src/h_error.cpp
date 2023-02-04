@@ -47,7 +47,9 @@ bool 			log_error(const char *file, int line, const char *format, ...)
 	if(firsttime)
 	{
 		memcpy(latest_error_msg, first_error_msg, length);
+#ifndef BENCHMARK
 		messageboxa(ghWnd, "Error", latest_error_msg);//redundant, since report_error/emergencyPrint prints both
+#endif
 	}
 	++error_count;
 	return firsttime;

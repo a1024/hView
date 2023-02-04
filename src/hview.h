@@ -39,6 +39,8 @@
 	#define		HVIEW_INCLUDE_LIBRAW
 	#define		HVIEW_INCLUDE_LIBCFITSIO
 
+//	#define		BENCHMARK
+
 
 #ifdef HVIEW_INCLUDE_FFTW
 #include		"fftw3.h"
@@ -228,7 +230,7 @@ bool			open_mediaw(const wchar_t *filename);//sets workfolder, updates title
 bool			save_media_as();
 bool			dialog_get_folder(const wchar_t *user_instr, std::wstring &path);
 void			convert_w2utf8(const wchar_t *src, std::string &dst);
-bool			get_all_image_filenames(std::wstring const &path, std::vector<std::wstring> &filenames);//path ends with slash
+bool			get_all_image_filenames(const wchar_t *path, size_t len, std::vector<std::wstring> &filenames);//path ends with slash
 void			open_next();
 void			open_prev();
 
@@ -270,6 +272,10 @@ void			archiver_test4();
 void			stack_images();
 void			remove_light_pollution();
 void			equalize(int super);
+void			archiver_test5();
+void			planetary_stabilize();
+std::string		filter_path(const char *str, size_t len);//can be same string
+std::wstring	filter_path(const wchar_t *str, size_t len);
 
 //image operations
 short*			get_image();//delete[] the returned buffer

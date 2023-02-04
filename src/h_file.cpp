@@ -14,6 +14,7 @@
 //You should have received a copy of the GNU General Public License
 //along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+#define _CRT_SECURE_NO_WARNINGS
 #include		"generic.h"
 #include		"hview.h"
 #include		"huff.h"
@@ -90,8 +91,12 @@ extern "C"
 #include		<fitsio.h>
 #pragma			comment(lib, "libcfitsio.lib")
 #endif
-
+#define			QOI_IMPLEMENTATION
+#include		"qoi.h"
+#define			SANS_IMPLEMENTATION
+#include		"sans.h"
 const char		file[]=__FILE__;
+
 const wchar_t	doublequote=L'\"';
 void			assign_path(std::wstring const &text, int start, int end, std::wstring &pathret)//pathret can be text
 {
@@ -202,6 +207,7 @@ int				wcscmp_ci(const wchar_t *s1, const wchar_t *s2)//case-insensitive only fo
 	EXT(JXL)\
 	EXT(CRW) EXT(CR2) EXT(NEF) EXT(REF) EXT(DNG) EXT(MOS) EXT(KDC) EXT(DCR)\
 	EXT(FITS)\
+	EXT(QOI)\
 	EXT(HUF)
 enum			Extension
 {
@@ -738,11 +744,6 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 	std::wstring wfn=filename, folder, title, extension;
 	split_filename(filename, folder, title);
 	get_extension(title, extension);
-
-	bitmode=false;
-	reset_FFTW_state();
-	workfolder=std::move(folder), filetitle=std::move(title);
-	SetWindowTextW(ghWnd, (wfn+L" - hView").c_str());
 	
 	//check extension
 	int ext_idx=enumerate_extension(extension);
@@ -754,10 +755,17 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 			read_binary(filename, data);
 			if(!data.size())//file may not exist
 				return false;
+#ifdef BENCHMARK
+			long long t1=__rdtsc();
+#endif
 			auto success=huff::decompress(data.data(), (int)data.size(), RF_F32_BAYER, (void**)&image, iw, ih, idepth, bayer);
 			//auto success=decompress_huff(data.data(), data.size(), RF_F32_BAYER, (void**)&image, iw, ih, idepth, bayer);
 			if(!success)
 				return false;
+#ifdef BENCHMARK
+			long long t2=__rdtsc();
+			LOG_ERROR("HUF: %lld cycles", t2-t1);
+#endif
 			image_size=iw*ih;
 			if(bayer[0]==-1)
 				imagetype=IM_GRAYSCALE;
@@ -783,7 +791,10 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 			void *runner=JxlThreadParallelRunnerCreate(nullptr, JxlThreadParallelRunnerDefaultNumWorkerThreads());	GEN_ASSERT(runner);
 			result=JxlDecoderSetParallelRunner(decoder, JxlThreadParallelRunner, runner);		JXLDEC_CHECK(result);
 			result=JxlDecoderSubscribeEvents(decoder, JXL_DEC_BASIC_INFO|JXL_DEC_FULL_IMAGE);	JXLDEC_CHECK(result);
-
+			
+#ifdef BENCHMARK
+			long long t1=__rdtsc();
+#endif
 			result=JxlDecoderSetInput(decoder, data.data(), data.size());	JXLDEC_CHECK(result);
 			JxlBasicInfo info={};
 			JxlPixelFormat format={4, JXL_TYPE_UINT8, JXL_LITTLE_ENDIAN, 0};
@@ -846,6 +857,10 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 					break;
 				}
 			}
+#ifdef BENCHMARK
+			long long t2=__rdtsc();
+			LOG_ERROR("JXL: %lld cycles", t2-t1);
+#endif
 			assign_from_RGBA8((int*)buffer, info.xsize, info.ysize);
 			if(buffer)
 				delete[] buffer;
@@ -864,6 +879,9 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 			stbi_convert_wchar_to_utf8(g_buf, g_buf_size, filename);
 
 			heif_context *ctx=heif_context_alloc();
+#ifdef BENCHMARK
+			long long t1=__rdtsc();
+#endif
 			heif_error error=heif_context_read_from_file(ctx, g_buf, nullptr);	LIBHEIF_CHECK(error);//TODO: file may not exist
 
 			heif_image_handle *handle=nullptr;
@@ -881,6 +899,10 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 
 			int stride=4;
 			const uint8_t *data=heif_image_get_plane_readonly(img, heif_channel_interleaved, &stride);	LIBHEIF_CHECK(error);
+#ifdef BENCHMARK
+			long long t2=__rdtsc();
+			LOG_ERROR("HEIC: %lld cycles", t2-t1);
+#endif
 			assign_from_RGBA8((int*)data, iw2, ih2);
 
 			heif_image_release(img);
@@ -893,10 +915,17 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 		{
 #if 1
 			stbi_convert_wchar_to_utf8(g_buf, g_buf_size, filename);
+#ifdef BENCHMARK
+			long long t1=__rdtsc();
+#endif
 			int iw2=0, ih2=0;
 			auto original_image=bpg_to_rgba(g_buf, &iw2, &ih2);
 			if(!original_image)
 				return false;
+#ifdef BENCHMARK
+			long long t2=__rdtsc();
+			LOG_ERROR("BPG: %lld cycles", t2-t1);
+#endif
 			
 			assign_from_RGBA8((int*)original_image, iw2, ih2);
 			gcc_free_memory(original_image);
@@ -951,6 +980,9 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 	case EXT_TIF:
 	case EXT_TIFF:
 		{
+#ifdef BENCHMARK
+			long long t1=__rdtsc();
+#endif
 			TIFF *tiff=TIFFOpenW(filename, "r");
 			if(!tiff)//file may not exist
 				return false;
@@ -970,6 +1002,10 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 				if(result<0)
 					LOG_ERROR("TIFF library: error reading row %d", k);
 			}
+#ifdef BENCHMARK
+			long long t2=__rdtsc();
+			LOG_ERROR("TIFF: %lld cycles", t2-t1);
+#endif
 			TIFFClose(tiff);
 			iw=iw2, ih=ih2, image_size=iw2*ih2, idepth=idepth2;
 			imagetype=IM_RGBA;
@@ -1053,10 +1089,17 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 
 			void *state=nullptr;
 			struct sail_image *img=nullptr;
+#ifdef BENCHMARK
+			long long t1=__rdtsc();
+#endif
 			auto error=sail_start_reading_file(g_buf, nullptr, &state);	SAIL_CHECK(error);
 			if(!state)//file may not exist
 				return false;
 			error=sail_read_next_frame(state, &img);	SAIL_CHECK(error);
+#ifdef BENCHMARK
+			long long t2=__rdtsc();
+			LOG_ERROR("libSAIL: %lld cycles", t2-t1);
+#endif
 			switch(img->pixel_format)
 			{
 			case SAIL_PIXEL_FORMAT_BPP8_GRAYSCALE:
@@ -1252,6 +1295,9 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 //#define	FITS_CHECK()	if(status)fits_report_error(stderr, status)
 			status=0;
 			stbi_convert_wchar_to_utf8(g_buf, g_buf_size, filename);
+#ifdef BENCHMARK
+			long long t1=__rdtsc();
+#endif
 			fits_open_file(&f, g_buf, READONLY, &status);		FITS_CHECK();
 
 			//console_start();
@@ -1287,6 +1333,10 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 			imagetype=IM_GRAYSCALE;
 			iw=dimensions[0], ih=dimensions[1], image_size=count;
 			fits_read_pix(f, TFLOAT, firstpixel, count, &null, image, 0, &status);	FITS_CHECK();
+#ifdef BENCHMARK
+			long long t2=__rdtsc();
+			LOG_ERROR("FITS: %lld cycles", t2-t1);
+#endif
 			fits_close_file(f, &status);	FITS_CHECK();
 			goto fits_skip;
 		fits_cleanup:
@@ -1298,12 +1348,53 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 		}
 		break;
 #endif
+	case EXT_QOI:
+		{
+			stbi_convert_wchar_to_utf8(g_buf, g_buf_size, filename);
+			qoi_desc desc={0};
+#ifdef BENCHMARK
+			long long t1=__rdtsc();
+#endif
+			void *src=qoi_read(g_buf, &desc);
+			if(!src)
+				return false;
+#ifdef BENCHMARK
+			long long t2=__rdtsc();
+			LOG_ERROR("QOI: %lld cycles", t2-t1);
+#endif
+			
+			switch(desc.channels)
+			{
+			case 1:
+				assign_from_gray8(src, desc.width, desc.height);
+				break;
+			case 3:
+				assign_from_RGB8(src, desc.width, desc.height);
+				break;
+			case 4:
+				assign_from_RGBA8((int*)src, desc.width, desc.height);
+				break;
+			default:
+				LOG_ERROR("Invalid number of channels %d", desc.channels);
+				break;
+			}
+
+			free(src);
+		}
+		break;
 	default://ordinary image
 		{
 		try_stb:
 			stbi_convert_wchar_to_utf8(g_buf, g_buf_size, filename);
 			int iw2=0, ih2=0, nch2=0;
+#ifdef BENCHMARK
+			long long t1=__rdtsc();
+#endif
 			unsigned char *original_image=stbi_load(g_buf, &iw2, &ih2, &nch2, 4);
+#ifdef BENCHMARK
+			long long t2=__rdtsc();
+			LOG_ERROR("stbi_load(): %lld cycles", t2-t1);
+#endif
 			if(!original_image)//file may not exist
 				return false;
 			auto src=(int*)original_image;
@@ -1321,11 +1412,167 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 
 	if(imagecentered&&iw&&ih)
 		center_image();
+	bitmode=false;
+	reset_FFTW_state();
+	workfolder=std::move(folder), filetitle=std::move(title);
+	SetWindowTextW(ghWnd, (wfn+L" - hView").c_str());
 	render();
 	return true;
 }
 int				open_media()
 {
+#if 0
+	if(image&&imagetype==IM_GRAYSCALE)
+	{
+		static int inv=0;
+
+		//int hist[256]={0};
+		//int histhi[16]={0}, histlo[16][16]={0};
+		//unsigned char vmax[256]={0};
+		size_t imsize=(size_t)iw*ih;
+		unsigned char *buffer=new unsigned char[imsize];
+
+		for(int k=0;k<imsize;++k)//quantize image
+		{
+			float val=255*image[k];
+			if(val<0)
+				val=0;
+			if(val>255)
+				val=255;
+			buffer[k]=(unsigned char)val;
+		}
+
+		if(inv)
+			integrate_buffer(buffer, iw, ih);
+			//DWT2inv_16x16c(data);
+		else
+			differentiate_buffer(buffer, iw, ih);
+			//DWT2fwd_16x16c(data);
+
+		float gain=1.f/255;
+		for(int k=0;k<imsize;++k)//dequantize image
+			image[k]=buffer[k]*gain;
+#if 0
+		__m128i data[16], d2[16];
+		unsigned char *p=(unsigned char*)data;
+		for(int ky=0;ky<ih;ky+=16)
+		{
+			for(int kx=0;kx<iw;kx+=16)
+			{
+				for(int ky2=0;ky2<16;++ky2)//load block
+				{
+					for(int kx2=0;kx2<16;++kx2)
+					{
+						float val=255*image[iw*(ky+ky2)+kx+kx2];
+						if(val<0)
+							val=0;
+						if(val>255)
+							val=255;
+						p[ky2<<4|kx2]=(unsigned char)val;
+					}
+				}
+
+				if(inv)
+					integrate_buffer(p, 16, 16);
+					//DWT2inv_16x16c(data);
+				else
+					differentiate_buffer(p, 16, 16);
+					//DWT2fwd_16x16c(data);
+#if 0
+				//for(int k=0;k<256;++k)//
+				//	((unsigned char*)data)[k]=k;
+
+				memcpy(d2, data, 256);
+				DWT2fwd_16x16c(data);
+				//for(int k=0;k<256;++k)
+				//{
+				//	unsigned char v=((unsigned char*)data)[k];
+				//	++hist[v];
+				//	if(vmax[k]<v)
+				//		vmax[k]=v;
+				//}
+				DWT2inv_16x16c(data);
+
+				int broken=0;
+				for(int k=0;k<256;++k)
+				{
+					unsigned char src=((unsigned char*)d2)[k], dst=((unsigned char*)data)[k];
+					if(src!=dst)
+					{
+						LOG_ERROR("[%d %d][%d %d] %d != %d", kx, ky, k&15, k>>4, src, dst);
+						broken=1;
+						break;
+					}
+				}
+#endif
+
+				float gain=1.f/255;
+				for(int ky2=0;ky2<16;++ky2)//store block
+				{
+					for(int kx2=0;kx2<16;++kx2)
+						image[iw*(ky+ky2)+kx+kx2]=p[ky2<<4|kx2]*gain;
+				}
+#if 0
+				if(broken)
+				{
+					render();
+					return 0;
+				}
+#endif
+			}
+		}
+#endif
+		inv=!inv;
+		//console_start_good();
+		//for(int k=0;k<256;++k)
+		//	printf("%3d %4d\n", k, hist[k]);
+		//console_pause();
+		//LOG_ERROR("Done");
+		//for(int k=0;k<imsize;++k)
+		//	++hist[buffer[k]];
+		//for(int k=0;k<imsize;++k)
+		//{
+		//	unsigned char v=buffer[k];
+		//	++histhi[v>>4];
+		//	++histlo[v>>4][v&15];
+		//}
+		delete[] buffer;
+
+		render();
+		return 0;
+	}
+#endif
+#if 0
+	{
+		qoi_desc desc={32, 2, 1, QOI_LINEAR};
+		unsigned char udata[]=
+		{
+			193, 95, 114, 86, 128, 193, 175, 63, 8, 21, 64, 81, 35, 65, 0, 0,
+			193, 95, 114, 86, 128, 193, 175, 63, 8, 21, 64, 81, 35, 65, 0, 0,
+			193, 95, 114, 86, 128, 193, 175, 63, 8, 21, 64, 81, 35, 65, 0, 0,
+			193, 95, 114, 86, 128, 193, 175, 63, 8, 21, 64, 81, 35, 65, 0, 0,
+
+			//0, 1, 2, 3,
+			//4, 5, 6, 7,
+			//8, 9, 10, 11,
+			//12, 13, 14, 15,
+
+			0, 0, 0, 0,
+		};
+		size_t len=0;
+		//differentiate_buffer(udata, 4, 4);
+		void *cdata=qoi_encode(udata, &desc, (int*)&len);
+		unsigned char *im=(unsigned char*)qoi_decode(cdata, len, &desc);
+		//integrate_buffer(udata, 4, 4);
+		//integrate_buffer(im, 4, 4);
+		int size=desc.width*desc.height;
+		for(int k=0;k<size;++k)
+		{
+			if(im[k]!=udata[k])
+				LOG_ERROR("Test error at %d", k);
+		}
+	}
+#endif
 	wchar_t szFile[MAX_PATH]={'\0'};
 	tagOFNW ofn={sizeof(ofn), ghWnd, 0, L"All files(*.*)\0*.*\0", 0, 0, 1, szFile, sizeof(szFile), 0, 0, 0, 0, OFN_PATHMUSTEXIST|OFN_FILEMUSTEXIST, 0, 0, 0, 0, 0, 0};
 	if(GetOpenFileNameW(&ofn))
@@ -1343,6 +1590,7 @@ bool			save_media_as()
 #ifdef HVIEW_INCLUDE_LIBJXL
 		L"JPEG XL (*.JXL)\0*.JXL\0"
 #endif
+		L"Quite OK Image format (8-bit only) (*.QOI)\0*.QOI\0"
 //#ifdef HVIEW_INCLUDE_LIBHEIF
 //		L"HEIF (*.HEIC)\0*.HEIC\0"
 //#endif
@@ -1375,7 +1623,13 @@ bool			save_media_as()
 				void *runner=JxlThreadParallelRunnerCreate(nullptr, JxlThreadParallelRunnerDefaultNumWorkerThreads());	GEN_ASSERT(runner);
 				JxlEncoderStatus status=JxlEncoderSetParallelRunner(encoder, JxlThreadParallelRunner, runner);			JXLENC_CHECK(status);
 				
-				JxlPixelFormat format={imagetype==IM_RGBA?4:1, JXL_TYPE_FLOAT, JXL_NATIVE_ENDIAN, 0};
+				JxlPixelFormat format=
+				{
+					imagetype==IM_RGBA?4u:1u,
+					JXL_TYPE_FLOAT,
+					JXL_NATIVE_ENDIAN,
+					0
+				};
 
 				JxlBasicInfo info={};
 				JxlEncoderInitBasicInfo(&info);
@@ -1392,11 +1646,14 @@ bool			save_media_as()
 				//	info.bits_per_sample=32, info.exponent_bits_per_sample=8;
 				//else
 				//	info.bits_per_sample=idepth, info.exponent_bits_per_sample=0;
+#ifdef BENCHMARK
+				long long t1=__rdtsc();
+#endif
 				status=JxlEncoderSetBasicInfo(encoder, &info);	JXLENC_CHECK(status);
 
 				JxlColorEncoding color_encoding={};
 				JxlColorEncodingSetToSRGB(&color_encoding, imagetype!=IM_RGBA);
-				JxlEncoderSetColorEncoding(encoder, &color_encoding);
+				status=JxlEncoderSetColorEncoding(encoder, &color_encoding);	JXLENC_CHECK(status);
 				
 				size_t bytesize=image_size*sizeof(float);
 				bytesize<<=(imagetype==IM_RGBA)<<1;
@@ -1420,6 +1677,10 @@ bool			save_media_as()
 				compressed.resize(next_out-compressed.data());
 
 				JxlEncoderDestroy(encoder);
+#ifdef BENCHMARK
+				long long t2=__rdtsc();
+				LOG_ERROR("QOI: %lld cycles", t2-t1);
+#endif
 
 				FILE *out;
 				_wfopen_s(&out, filename.c_str(), L"wb");
@@ -1442,9 +1703,8 @@ bool			save_media_as()
 					idepth=16;
 				else
 					idepth=8;
-				size_t ccount=image_size;
 				char has4=imagetype==IM_RGBA;
-				ccount<<=has4<<1;
+				size_t ccount=image_size<<(has4<<1);
 				auto buffer=new unsigned char[ccount<<(int)(idepth==16)];
 				if(idepth==16)
 				{
@@ -1482,7 +1742,51 @@ bool			save_media_as()
 						}
 					}
 				}
-				lodepng::encode(g_buf, (unsigned char*)buffer, iw, ih, has4?LCT_RGBA:LCT_GREY, idepth);
+#ifdef BENCHMARK
+				long long t1=__rdtsc();
+#endif
+				int error=lodepng::encode(g_buf, (unsigned char*)buffer, iw, ih, has4?LCT_RGBA:LCT_GREY, idepth);
+#ifdef BENCHMARK
+				long long t2=__rdtsc();
+				LOG_ERROR("LODEPNG: %lld cycles", t2-t1);
+#endif
+				if(error)
+					LOG_ERROR("LodePNG: %s", lodepng_error_text(error));
+				delete[] buffer;
+			}
+			break;
+		case EXT_QOI:
+			{
+				stbi_convert_wchar_to_utf8(g_buf, g_buf_size, filename.c_str());
+				if(imagetype==IM_BAYER||imagetype==IM_BAYER_SEPARATE)
+					debayer();
+				char has4=imagetype==IM_RGBA;
+				size_t ccount=image_size<<(has4<<1);
+				auto buffer=new unsigned char[ccount];
+				for(int k=0;k<ccount;++k)
+				{
+					float val;
+					if((k&3)!=3)//color component
+						val=(float)((contrast_gain*(image[k]-contrast_offset)+contrast_offset)*255+0.5);
+					else//alpha component
+						val=image[k]*255;
+					if(val<0)
+						val=0;
+					if(val>255)
+						val=255;
+					buffer[k]=(unsigned char)val;
+				}
+				qoi_desc desc={(unsigned)iw, (unsigned)ih, has4?4u:1u, QOI_LINEAR};
+#ifdef BENCHMARK
+				long long t1=__rdtsc();
+#endif
+				int size=qoi_write(g_buf, buffer, &desc);
+#ifdef BENCHMARK
+				long long t2=__rdtsc();
+				LOG_ERROR("QOI: %lld cycles", t2-t1);
+#endif
+				if(!size)
+					LOG_ERROR("Failed to save %s", g_buf);
 				delete[] buffer;
 			}
 			break;
@@ -1529,6 +1833,7 @@ bool			dialog_get_folder(const wchar_t *user_instr, std::wstring &path)
 			hr=pFileOpenDialog->GetResult(&pShellItem);
 			pShellItem->GetDisplayName(SIGDN_FILESYSPATH, &fullpath);
 			path=fullpath;
+			path=filter_path(path.c_str(), path.size());
 			CoTaskMemFree(fullpath);
 		}
 		pFileOpenDialog->Release();
@@ -1583,11 +1888,15 @@ void			convert_w2utf8(const wchar_t *src, std::string &dst)
 	dst=g_buf;
 }
 
-bool			get_all_image_filenames(std::wstring const &path, std::vector<std::wstring> &filenames)//path ends with slash
+bool			get_all_image_filenames(const wchar_t *path, size_t len, std::vector<std::wstring> &filenames)//path ends with slash
 {
 	std::wstring ext;
 	_WIN32_FIND_DATAW data={};
-	void *hSearch=FindFirstFileW((path+L'*').c_str(), &data);//skip .
+	if(!len)
+		len=wcslen(path);
+	std::wstring src=filter_path(path, len);
+
+	void *hSearch=FindFirstFileW((src+L'*').c_str(), &data);//skip .
 	if(hSearch==INVALID_HANDLE_VALUE)
 		return false;
 	int success=FindNextFileW(hSearch, &data);//skip ..
@@ -1603,7 +1912,7 @@ bool			get_all_image_filenames(std::wstring const &path, std::vector<std::wstrin
 }
 int				enumerate_files(std::wstring const &folder, std::vector<std::wstring> &filenames, std::wstring const &currenttitle)
 {
-	get_all_image_filenames(folder, filenames);
+	get_all_image_filenames(folder.c_str(), folder.size(), filenames);
 
 	for(int k=0;k<(int)filenames.size();++k)
 		if(currenttitle==filenames[k])

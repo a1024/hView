@@ -840,8 +840,9 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 				"Ctrl H: Cmd histogram\n"
 				"E: Equalize\n"
 				"Ctrl E: Equalize (HQ)\n"
+				"Ctrl S: Save as\n"
 				"S: Simple average image stacker\n"
-				"Ctrl S: Save as"
+				"P: Align planetary frames\n"
 				"L: Remove light pollution from night sky image\n"
 				"F/F11: Toggle fullscreen\n"
 #ifdef FFTW3_H
@@ -871,6 +872,7 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 				if(imagetype==IM_BAYER||imagetype==IM_BAYER_SEPARATE)
 				{
 					messageboxa(ghWnd, "Properties",
+						"%S\n"
 						"Width: %d\n"
 						"Height: %d\n"
 						"Depth: %d bit/channel\n"
@@ -879,6 +881,7 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 						"\t%c%c\n"
 						"File size: %d bytes = %.2lf KB\n"
 						"Uncompressed size: %lld bits = %.2lf MB\n",
+						filetitle.c_str(),
 						iw, ih, idepth,
 						bayer_labels[bayer[0]>>3], bayer_labels[bayer[1]>>3],
 						bayer_labels[bayer[2]>>3], bayer_labels[bayer[3]>>3],
@@ -888,11 +891,13 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 				else
 				{
 					messageboxa(ghWnd, "Properties",
+						"%S\n"
 						"Width: %d\n"
 						"Height: %d\n"
 						"Depth: %d bit/channel\n"
 						"File size: %d bytes = %.2lf KB\n"
 						"Uncompressed size: %lld bits = %.2lf MB\n",
+						filetitle.c_str(),
 						iw, ih, idepth,
 						filesize, (double)filesize/1024,
 						bitsize, MBsize);
@@ -900,7 +905,8 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 			}
 			break;
 		case VK_SPACE:
-			archiver_test4();
+			archiver_test5();
+			//archiver_test4();
 			//archiver_test3();
 			//archiver_test2();
 			break;
@@ -1049,6 +1055,9 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 				stack_images();
 				render();
 			}
+			break;
+		case 'P':
+			planetary_stabilize();
 			break;
 		case 'L':
 			remove_light_pollution();
