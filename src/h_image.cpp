@@ -383,33 +383,56 @@ void			reset_histogram()
 		histogram=nullptr;
 	}
 }
-void			toggle_histogram()
+void			update_histogram()
 {
-	histOn=!histOn;
 	if(histOn)
 	{
 		int nlevels=1<<idepth;
 		switch(imagetype)
 		{
 		case IM_GRAYSCALE:
-			histogram=new int[nlevels];
 			calculate_histogram(image, iw, ih, 1, 1, nlevels, histogram, true, &histmax_r);
 			break;
 		case IM_RGBA:
-			histogram=new int[nlevels*3];
 			calculate_histogram(image  , iw<<2, ih, 4, 1, nlevels, histogram, true, &histmax_r);
 			calculate_histogram(image+1, iw<<2, ih, 4, 1, nlevels, histogram+nlevels, true, &histmax_g);
-			calculate_histogram(image+2, iw<<2, ih, 4, 1, nlevels, histogram+(nlevels<<1), true, &histmax_b);
+			calculate_histogram(image+2, iw<<2, ih, 4, 1, nlevels, histogram+((size_t)nlevels<<1), true, &histmax_b);
+			break;
+		case IM_BAYER:
+		case IM_BAYER_SEPARATE:
+			calculate_histogram(image, iw, ih, 2, 2, nlevels, histogram, true, nullptr);//TODO: support other Bayer matrices
+			calculate_histogram(image+1, iw, ih, 2, 2, nlevels, histogram+nlevels, true, &histmax_r);
+			calculate_histogram(image+iw, iw, ih, 2, 2, nlevels, histogram+((size_t)nlevels<<1), true, &histmax_b);
+			calculate_histogram(image+iw+1, iw, ih, 2, 2, nlevels, histogram, false, &histmax_g);
+			break;
+		}
+	}
+}
+void			toggle_histogram()
+{
+	histOn=!histOn;
+	if(histOn)
+	{
+		if(idepth>16)//cancel if will allocate too much
+		{
+			histOn=!histOn;
+			return;
+		}
+		int nlevels=1<<idepth;
+		switch(imagetype)
+		{
+		case IM_GRAYSCALE:
+			histogram=new int[nlevels];
+			break;
+		case IM_RGBA:
+			histogram=new int[nlevels*3];
 			break;
 		case IM_BAYER:
 		case IM_BAYER_SEPARATE:
 			histogram=new int[nlevels*3];
-			calculate_histogram(image, iw, ih, 2, 2, nlevels, histogram, true, nullptr);//TODO: support other Bayer matrices
-			calculate_histogram(image+1, iw, ih, 2, 2, nlevels, histogram+nlevels, true, &histmax_r);
-			calculate_histogram(image+iw, iw, ih, 2, 2, nlevels, histogram+(nlevels<<1), true, &histmax_b);
-			calculate_histogram(image+iw+1, iw, ih, 2, 2, nlevels, histogram, false, &histmax_g);
 			break;
 		}
+		update_histogram();
 	}
 	else
 	{
@@ -794,4 +817,104 @@ cleanup:
 	console_end();
 	for(int k=0;k<4;++k)
 		delete[] channels[k].data;
+}
+
+void			differentiate_channel(float *buf, int rowlen, int xcount, int ycount, int xstride, int ystride)
+{
+	int vstride=rowlen*ystride, idx;
+	for(int ky=ycount-1;ky>=0;--ky)//backward loops
+	{
+		for(int kx=xcount-1;kx>=0;--kx)
+		{
+			idx=vstride*ky+xstride*kx;
+			float
+				left=kx?buf[idx-xstride]:0,
+				top=ky?buf[idx-vstride]:0,
+				topleft=kx&&ky?buf[idx-vstride-xstride]:0,
+				sub=top+left-topleft;
+			if(kx||ky)
+				sub-=0.5f;
+			buf[idx]-=sub;//differentiate
+		}
+	}
+}
+void			integrate_channel(float *buf, int rowlen, int xcount, int ycount, int xstride, int ystride)
+{
+	int vstride=rowlen*ystride, idx;
+	for(int ky=0;ky<ycount;++ky)//forward loops
+	{
+		for(int kx=0;kx<xcount;++kx)
+		{
+			idx=vstride*ky+xstride*kx;
+			float
+				left=kx?buf[idx-xstride]:0,
+				top=ky?buf[idx-vstride]:0,
+				topleft=kx&&ky?buf[idx-vstride-xstride]:0,
+				sub=top+left-topleft;
+			if(kx||ky)
+				sub-=0.5f;
+			buf[idx]+=sub;//integrate
+		}
+	}
+}
+void			differentiate_image()
+{
+	if(imagetype==IM_GRAYSCALE)
+		differentiate_channel(image, iw, iw, ih, 1, 1);
+	else if(imagetype==IM_BAYER)
+	{
+		differentiate_channel(image     , iw, iw>>1, ih>>1, 2, 2);
+		differentiate_channel(image   +1, iw, iw>>1, ih>>1, 2, 2);
+		differentiate_channel(image+iw  , iw, iw>>1, ih>>1, 2, 2);
+		differentiate_channel(image+iw+1, iw, iw>>1, ih>>1, 2, 2);
+		//for(int ky=ih-1;ky>=0;--ky)
+		//{
+		//	for(int kx=iw-1;kx>=0;--kx)
+		//	{
+		//		float
+		//			left=kx>1?image[(iw*ky+kx-2)<<2|kc]:0,
+		//			top=ky>1?image[(iw*((ky|ky2)-2)+(kx|kx2))<<2|kc]:0,
+		//			topleft=kx>1&&ky>1?image[(iw*((ky|ky2)-1)+(kx|kx2)-1)<<2|kc]:0;
+		//		image[(iw*(ky|ky2)+(kx|kx2))<<2|kc]-=top+left-topleft-0.5;
+		//	}
+		//}
+	}
+	else if(imagetype==IM_RGBA)
+	{
+		differentiate_channel(image  , iw<<2, iw, ih, 4, 1);
+		differentiate_channel(image+1, iw<<2, iw, ih, 4, 1);
+		differentiate_channel(image+2, iw<<2, iw, ih, 4, 1);
+		//for(int ky=ih-1;ky>=0;--ky)
+		//{
+		//	for(int kx=iw-1;kx>=0;--kx)
+		//	{
+		//		for(int kc=0;kc<3;++kc)//don't touch alpha
+		//		{
+		//			float
+		//				left=kx?image[(iw*ky+kx-1)<<2|kc]:0,
+		//				top=ky?image[(iw*(ky-1)+kx)<<2|kc]:0,
+		//				topleft=kx&&ky?image[(iw*(ky-1)+kx-1)<<2|kc]:0;
+		//			image[(iw*ky+kx)<<2|kc]-=top+left-topleft-0.5;
+		//		}
+		//	}
+		//}
+	}
+}
+void			integrate_image()
+{
+	if(imagetype==IM_GRAYSCALE)
+		integrate_channel(image, iw, iw, ih, 1, 1);
+	else if(imagetype==IM_BAYER)
+	{
+		integrate_channel(image     , iw, iw>>1, ih>>1, 2, 2);
+		integrate_channel(image   +1, iw, iw>>1, ih>>1, 2, 2);
+		integrate_channel(image+iw  , iw, iw>>1, ih>>1, 2, 2);
+		integrate_channel(image+iw+1, iw, iw>>1, ih>>1, 2, 2);
+	}
+	else if(imagetype==IM_RGBA)
+	{
+		integrate_channel(image  , iw<<2, iw, ih, 4, 1);
+		integrate_channel(image+1, iw<<2, iw, ih, 4, 1);
+		integrate_channel(image+2, iw<<2, iw, ih, 4, 1);
+	}
 }

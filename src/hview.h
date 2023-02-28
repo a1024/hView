@@ -288,9 +288,13 @@ void			applyFFT();
 void			reset_FFTW_state();
 
 void			toggle_histogram();
+void			update_histogram();
 void			reset_histogram();
 void			cmd_histogram();
 void			mix_channels();
+
+void			differentiate_image();
+void			integrate_image();
 
 //application
 void			center_image();

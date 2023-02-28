@@ -352,10 +352,12 @@ void			draw_histogram(int *hist, int nlevels, int hist_amplitude, int color, int
 	int wndw=w;
 	for(int kx=0;kx<w;++kx)
 	{
-		//int idx=kx*(nlevels-1)/(wndw-1);
+		//int idx=kx*(nlevels-1)/(wndw-1);//X
 		int idx=kx*nlevels/wndw;
-		int freq=y1+hist[idx]*(y2-y1)/hist_amplitude;
-		for(int ky=y1;ky<freq;++ky)
+		int freq=y2-(int)((long long)hist[idx]*(y2-y1)/hist_amplitude);
+		//int freq=y1+(int)((long long)hist[idx]*(y2-y1)/hist_amplitude);//weird upside down histogram
+		for(int ky=freq;ky<y2;++ky)
+		//for(int ky=y1;ky<freq;++ky)
 		{
 			auto p=(unsigned char*)(rgb+w*ky+kx);
 			p[0]+=(p2[0]-(int)p[0])>>1;
@@ -836,6 +838,8 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 				"B: Split/join Bayer mosaic\n"
 				"Ctrl B: Debayer\n"
 				"G: Toggle between Bayer and grayscale\n"
+				"D: Differentiate image\n"
+				"I: Integrate image\n"
 				"H: Histogram\n"
 				"Ctrl H: Cmd histogram\n"
 				"E: Equalize\n"
@@ -1032,6 +1036,16 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 				imagetype=IM_GRAYSCALE;
 			else if(imagetype==IM_GRAYSCALE)
 				imagetype=IM_BAYER;
+			render();
+			break;
+		case 'D':
+			differentiate_image();
+			update_histogram();
+			render();
+			break;
+		case 'I':
+			integrate_image();
+			update_histogram();
 			render();
 			break;
 		case 'H'://histogram
