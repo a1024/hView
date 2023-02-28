@@ -871,8 +871,34 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 		case VK_F2://file properties
 			{
 				long filesize=file_sizew((workfolder+filetitle).c_str());
-				long long bitsize=iw*ih*idepth;
+				long long bitsize=(long long)iw*ih*idepth;
+				switch(imagetype)
+				{
+				case IM_GRAYSCALE:
+					break;
+				case IM_BAYER:
+					break;
+				case IM_RGBA:
+					{
+						int has_alpha=0;
+						int len=iw*ih<<2;
+						for(int k=0;k<len;k+=4)
+						{
+							if(image[k+3]!=1)
+							{
+								has_alpha=1;
+								break;
+							}
+						}
+						if(has_alpha)
+							bitsize<<=2;
+						else
+							bitsize*=3;
+					}
+					break;
+				}
 				double MBsize=(double)bitsize/(8*1024*1024);
+				double ratio=(double)bitsize/((long long)filesize<<3);
 				if(imagetype==IM_BAYER||imagetype==IM_BAYER_SEPARATE)
 				{
 					messageboxa(ghWnd, "Properties",
@@ -884,13 +910,15 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 						"\t%c%c\n"
 						"\t%c%c\n"
 						"File size: %d bytes = %.2lf KB\n"
-						"Uncompressed size: %lld bits = %.2lf MB\n",
+						"Uncompressed size: %lld bits = %.2lf MB\n"
+						"Compression ratio: %lf (%lf BPP)\n",
 						filetitle.c_str(),
 						iw, ih, idepth,
 						bayer_labels[bayer[0]>>3], bayer_labels[bayer[1]>>3],
 						bayer_labels[bayer[2]>>3], bayer_labels[bayer[3]>>3],
 						filesize, (double)filesize/1024,
-						bitsize, MBsize);
+						bitsize, MBsize,
+						ratio, idepth/ratio);
 				}
 				else
 				{
@@ -900,11 +928,13 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 						"Height: %d\n"
 						"Depth: %d bit/channel\n"
 						"File size: %d bytes = %.2lf KB\n"
-						"Uncompressed size: %lld bits = %.2lf MB\n",
+						"Uncompressed size: %lld bits = %.2lf MB\n"
+						"Compression ratio: %lf (%lf BPP)\n",
 						filetitle.c_str(),
 						iw, ih, idepth,
 						filesize, (double)filesize/1024,
-						bitsize, MBsize);
+						bitsize, MBsize,
+						ratio, idepth/ratio);
 				}
 			}
 			break;
