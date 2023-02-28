@@ -821,39 +821,78 @@ cleanup:
 
 void			differentiate_channel(float *buf, int rowlen, int xcount, int ycount, int xstride, int ystride)
 {
+	float inv255=1.f/255;
 	int vstride=rowlen*ystride, idx;
 	for(int ky=ycount-1;ky>=0;--ky)//backward loops
 	{
 		for(int kx=xcount-1;kx>=0;--kx)
 		{
 			idx=vstride*ky+xstride*kx;
-			float
-				left=kx?buf[idx-xstride]:0,
-				top=ky?buf[idx-vstride]:0,
-				topleft=kx&&ky?buf[idx-vstride-xstride]:0,
+			unsigned char
+				current=255*buf[idx],
+				left=kx?255*buf[idx-xstride]:0,
+				top=ky?255*buf[idx-vstride]:0,
+				topleft=kx&&ky?255*buf[idx-vstride-xstride]:0,
 				sub=top+left-topleft;
 			if(kx||ky)
-				sub-=0.5f;
-			buf[idx]-=sub;//differentiate
+				sub-=128;
+
+			unsigned char result=current-sub;//differentiate
+			
+			buf[idx]=result*inv255;
+
+			//if(fabsf(result)<1e-4)
+			//	result=0;
+			//else if(fabsf(result-1)<1e-4)
+			//	result=1;
+			//else
+			//{
+			//	result*=255.f/256;
+			//	result-=floorf(result);
+			//	result*=256.f/255;
+			//}
+			//buf[idx]=result;
+
+			//if(buf[idx]<0||buf[idx]>1)//
+			//	buf[idx]=0.5;//
 		}
 	}
 }
 void			integrate_channel(float *buf, int rowlen, int xcount, int ycount, int xstride, int ystride)
 {
+	float inv255=1.f/255;
 	int vstride=rowlen*ystride, idx;
 	for(int ky=0;ky<ycount;++ky)//forward loops
 	{
 		for(int kx=0;kx<xcount;++kx)
 		{
 			idx=vstride*ky+xstride*kx;
-			float
-				left=kx?buf[idx-xstride]:0,
-				top=ky?buf[idx-vstride]:0,
-				topleft=kx&&ky?buf[idx-vstride-xstride]:0,
+			unsigned char
+				current=255*buf[idx],
+				left=kx?255*buf[idx-xstride]:0,
+				top=ky?255*buf[idx-vstride]:0,
+				topleft=kx&&ky?255*buf[idx-vstride-xstride]:0,
 				sub=top+left-topleft;
 			if(kx||ky)
-				sub-=0.5f;
-			buf[idx]+=sub;//integrate
+				sub-=128;
+
+			unsigned char result=current+sub;//integrate
+			
+			//if(kx==220&&ky==329)//
+			//	kx=220;//
+			
+			buf[idx]=result*inv255;
+			//if(fabsf(result)<1e-4)
+			//	result=0;
+			//else if(fabsf(result-1)<1e-4)
+			//	result=1;
+			//else
+			//{
+			//	result*=255.f/256;
+			//	result-=floorf(result);
+			//	result*=256.f/255;
+			//}
+			//buf[idx]=result;
 		}
 	}
 }
