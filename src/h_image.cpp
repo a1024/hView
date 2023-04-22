@@ -349,7 +349,7 @@ void			applyFFT()
 #endif
 }
 
-void			calculate_histogram(const float *buffer, int width, int height, int xstride, int ystride, int nlevels, int *histogram, bool zerobuffer, int *histmax)
+void			calculate_histogram(const float *buffer, int width, int height, int xstride, int ystride, int nlevels, int *histogram, bool zerobuffer, int *histmax, double *invCR)
 {
 	int normal=nlevels-1;
 	if(zerobuffer)
@@ -371,8 +371,41 @@ void			calculate_histogram(const float *buffer, int width, int height, int xstri
 	{
 		*histmax=0;
 		for(int k=0;k<nlevels;++k)
+		{
 			if(*histmax<histogram[k])
 				*histmax=histogram[k];
+		}
+	}
+	if(invCR)
+	{
+		double entropy=0;
+		int ch_count=0;
+		switch(imagetype)
+		{
+		case IM_GRAYSCALE:
+			ch_count=width*height>>2;
+			break;
+		case IM_RGBA:
+		case IM_BAYER:
+		case IM_BAYER_SEPARATE:
+			ch_count=width*height>>2;
+			break;
+		}
+		for(int sym=0;sym<nlevels;++sym)
+		{
+			int freq=histogram[sym];
+			if(freq)
+			{
+				double p=(double)freq/ch_count;
+				p/=0x10000;
+				p*=0xFF00;
+				p+=1/65536.;
+				double bitsize=-log2(p);
+				if(isfinite(bitsize))
+					entropy+=p*bitsize;
+			}
+		}
+		*invCR+=entropy/log2(nlevels);
 	}
 }
 void			reset_histogram()
@@ -388,22 +421,26 @@ void			update_histogram()
 	if(histOn)
 	{
 		int nlevels=1<<idepth;
+		memset(invCR, 0, 4*sizeof(double));
 		switch(imagetype)
 		{
 		case IM_GRAYSCALE:
-			calculate_histogram(image, iw, ih, 1, 1, nlevels, histogram, true, &histmax_r);
+			calculate_histogram(image, iw, ih, 1, 1, nlevels, histogram, true, &histmax_r, invCR);
+			invCR[3]=invCR[0];
 			break;
 		case IM_RGBA:
-			calculate_histogram(image  , iw<<2, ih, 4, 1, nlevels, histogram, true, &histmax_r);
-			calculate_histogram(image+1, iw<<2, ih, 4, 1, nlevels, histogram+nlevels, true, &histmax_g);
-			calculate_histogram(image+2, iw<<2, ih, 4, 1, nlevels, histogram+((size_t)nlevels<<1), true, &histmax_b);
+			calculate_histogram(image  , iw<<2, ih, 4, 1, nlevels, histogram, true, &histmax_r, invCR);
+			calculate_histogram(image+1, iw<<2, ih, 4, 1, nlevels, histogram+nlevels, true, &histmax_g, invCR+1);
+			calculate_histogram(image+2, iw<<2, ih, 4, 1, nlevels, histogram+((size_t)nlevels<<1), true, &histmax_b, invCR+2);
+			invCR[3]=(invCR[0]+invCR[1]+invCR[2])/3;
 			break;
 		case IM_BAYER:
 		case IM_BAYER_SEPARATE:
-			calculate_histogram(image, iw, ih, 2, 2, nlevels, histogram, true, nullptr);//TODO: support other Bayer matrices
-			calculate_histogram(image+1, iw, ih, 2, 2, nlevels, histogram+nlevels, true, &histmax_r);
-			calculate_histogram(image+iw, iw, ih, 2, 2, nlevels, histogram+((size_t)nlevels<<1), true, &histmax_b);
-			calculate_histogram(image+iw+1, iw, ih, 2, 2, nlevels, histogram, false, &histmax_g);
+			calculate_histogram(image, iw, ih, 2, 2, nlevels, histogram, true, nullptr, invCR);//TODO: support other Bayer matrices
+			calculate_histogram(image+1, iw, ih, 2, 2, nlevels, histogram+nlevels, true, &histmax_r, invCR+1);
+			calculate_histogram(image+iw, iw, ih, 2, 2, nlevels, histogram+((size_t)nlevels<<1), true, &histmax_b, invCR+2);
+			calculate_histogram(image+iw+1, iw, ih, 2, 2, nlevels, histogram, false, &histmax_g, invCR);
+			invCR[3]=(invCR[0]+invCR[1]+invCR[2])/3;
 			break;
 		}
 	}
@@ -447,7 +484,7 @@ void			cmd_histogram()
 	if(imagetype==IM_GRAYSCALE)
 	{
 		int *histogram=new int[nlevels];
-		calculate_histogram(image, iw, ih, 1, 1, nlevels, histogram, true, nullptr);
+		calculate_histogram(image, iw, ih, 1, 1, nlevels, histogram, true, nullptr, 0);
 		print_histogram(histogram, nlevels, image_size, nullptr);
 		delete[] histogram;
 	}
@@ -829,10 +866,10 @@ void			differentiate_channel(float *buf, int rowlen, int xcount, int ycount, int
 		{
 			idx=vstride*ky+xstride*kx;
 			unsigned char
-				current=255*buf[idx],
-				left=kx?255*buf[idx-xstride]:0,
-				top=ky?255*buf[idx-vstride]:0,
-				topleft=kx&&ky?255*buf[idx-vstride-xstride]:0,
+				current=(unsigned char)(255*buf[idx]),
+				left=(unsigned char)(kx?255*buf[idx-xstride]:0),
+				top=(unsigned char)(ky?255*buf[idx-vstride]:0),
+				topleft=(unsigned char)(kx&&ky?255*buf[idx-vstride-xstride]:0),
 				sub=top+left-topleft;
 			if(kx||ky)
 				sub-=128;
@@ -868,10 +905,10 @@ void			integrate_channel(float *buf, int rowlen, int xcount, int ycount, int xst
 		{
 			idx=vstride*ky+xstride*kx;
 			unsigned char
-				current=255*buf[idx],
-				left=kx?255*buf[idx-xstride]:0,
-				top=ky?255*buf[idx-vstride]:0,
-				topleft=kx&&ky?255*buf[idx-vstride-xstride]:0,
+				current=(unsigned char)(255*buf[idx]),
+				left=(unsigned char)(kx?255*buf[idx-xstride]:0),
+				top=(unsigned char)(ky?255*buf[idx-vstride]:0),
+				topleft=(unsigned char)(kx&&ky?255*buf[idx-vstride-xstride]:0),
 				sub=top+left-topleft;
 			if(kx||ky)
 				sub-=128;

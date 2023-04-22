@@ -84,6 +84,7 @@ extern int		bitplane;
 
 extern bool		histOn;
 extern int		*histogram, histmax_r, histmax_g, histmax_b;//size of 1<<idepth
+extern double	invCR[5];
 
 #ifdef FFTW3_H
 extern bool		FourierDomain;//if true, show the image in fft_in_planes, otherwise ordinary image

@@ -1404,10 +1404,22 @@ bool			open_mediaw(const wchar_t *filename)//if successful: sets workfolder, upd
 			free(original_image);
 		}
 	}
-	if(histOn)
+	//if(histOn)
 	{
 		toggle_histogram();
 		toggle_histogram();
+		long fsize=file_sizew(filename);
+		switch(imagetype)
+		{
+		case IM_GRAYSCALE:
+		case IM_BAYER:
+		case IM_BAYER_SEPARATE:
+			invCR[4]=(double)fsize/image_size;
+			break;
+		case IM_RGBA:
+			invCR[4]=(double)fsize/(image_size*3);//TODO detect alpha
+			break;
+		}
 	}
 
 	if(imagecentered&&iw&&ih)

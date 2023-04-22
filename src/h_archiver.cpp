@@ -3263,10 +3263,10 @@ void planetary_placecenter(const float *srcbuf, int bw, int bh, float *dstbuf, i
 			float valr=srcbuf[idx  ];
 			float valg=srcbuf[idx|1];
 			float valb=srcbuf[idx|2];
-			float mag=sqrt(valr*valr+valg*valg+valb*valb);
+			float mag=(float)sqrt(valr*valr+valg*valg+valb*valb);
 			if(mag>threshold)
 			{
-				mag-=threshold;
+				mag-=(float)threshold;
 				cx+=kx*mag;
 				cy+=ky*mag;
 				sum+=mag;
