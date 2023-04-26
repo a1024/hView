@@ -19,6 +19,8 @@
 #endif
 #include		"hview.h"
 #include		"generic.h"
+static const char file[]=__FILE__;
+
 short*			get_image()//delete[] the returned buffer
 {
 	if(!image)
@@ -856,27 +858,81 @@ cleanup:
 		delete[] channels[k].data;
 }
 
-void			differentiate_channel(float *buf, int rowlen, int xcount, int ycount, int xstride, int ystride)
+void channel_cvtps_i32(float *buf, int rowlen, int xcount, int ycount, int xstride, int ystride, int depth)
 {
-	float inv255=1.f/255;
+	int vstride=rowlen*ystride;
+	unsigned amplitude=(unsigned)((1LL<<depth)-1), half=1<<(depth-1);
+	//float gain=1.f/amplitude;
+	for(int ky=0;ky<ycount;++ky)
+	{
+		for(int kx=0;kx<xcount;++kx)
+		{
+			int idx=vstride*ky+xstride*kx;
+			int val=(int)(amplitude*buf[idx]);
+			//int val=(int)roundf(amplitude*buf[idx]);
+			val-=half;
+			val<<=32-depth;
+			((int*)buf)[idx]=val;
+		}
+	}
+}
+void channel_cvti32_ps(float *buf, int rowlen, int xcount, int ycount, int xstride, int ystride, int depth)
+{
+	int vstride=rowlen*ystride;
+	unsigned amplitude=(unsigned)((1LL<<depth)-1), half=1<<(depth-1);
+	float gain=1.f/amplitude;
+	for(int ky=0;ky<ycount;++ky)
+	{
+		for(int kx=0;kx<xcount;++kx)
+		{
+			int idx=vstride*ky+xstride*kx;
+			int val=((int*)buf)[idx];
+			val>>=32-depth;
+			val+=half;
+			val&=amplitude;
+			buf[idx]=val*gain;
+		}
+	}
+}
+void			channel_predict_i32(int *buf, int rowlen, int xcount, int ycount, int xstride, int ystride)
+{
+	//unsigned precmask=0xFFFFFFFF<<(32-idepth);
+	//unsigned amplitude=(unsigned)((1LL<<depth)-1), half=1<<(depth-1);
+	//float inv255=1.f/amplitude;
 	int vstride=rowlen*ystride, idx;
 	for(int ky=ycount-1;ky>=0;--ky)//backward loops
 	{
 		for(int kx=xcount-1;kx>=0;--kx)
 		{
 			idx=vstride*ky+xstride*kx;
-			unsigned char
-				current=(unsigned char)(255*buf[idx]),
-				left=(unsigned char)(kx?255*buf[idx-xstride]:0),
-				top=(unsigned char)(ky?255*buf[idx-vstride]:0),
-				topleft=(unsigned char)(kx&&ky?255*buf[idx-vstride-xstride]:0),
-				sub=top+left-topleft;
-			if(kx||ky)
-				sub-=128;
-
-			unsigned char result=current-sub;//differentiate
+			int
+				current=buf[idx],
+				left=kx?buf[idx-xstride]:0,
+				top=ky?buf[idx-vstride]:0,
+				topleft=kx&&ky?buf[idx-vstride-xstride]:0,
+				pred;
 			
-			buf[idx]=result*inv255;
+			int vmin, vmax;
+			if(top<left)
+				vmin=top, vmax=left;
+			else
+				vmin=left, vmax=top;
+			if(topleft<vmin)
+				pred=vmax;
+			else if(topleft>vmax)
+				pred=vmin;
+			else
+				pred=top+left-topleft;
+			
+			//int pred=top+left-topleft;
+			//if(kx||ky)
+			//	pred-=128;
+			//pred=((pred+half)&amplitude)-half;
+			int result=current-pred;//differentiate
+			//result=((result+half)&amplitude)-half;
+			
+			buf[idx]=result;
+			//buf[idx]=result*inv255;
 
 			//if(fabsf(result)<1e-4)
 			//	result=0;
@@ -895,30 +951,54 @@ void			differentiate_channel(float *buf, int rowlen, int xcount, int ycount, int
 		}
 	}
 }
-void			integrate_channel(float *buf, int rowlen, int xcount, int ycount, int xstride, int ystride)
+void			channel_unpredict_i32(int *buf, int rowlen, int xcount, int ycount, int xstride, int ystride)
 {
-	float inv255=1.f/255;
+	//unsigned precmask=0xFFFFFFFF<<(32-idepth);
+	//unsigned amplitude=(unsigned)((1LL<<depth)-1), half=1<<(depth-1);
+	//float inv255=1.f/amplitude;
 	int vstride=rowlen*ystride, idx;
 	for(int ky=0;ky<ycount;++ky)//forward loops
 	{
 		for(int kx=0;kx<xcount;++kx)
 		{
 			idx=vstride*ky+xstride*kx;
-			unsigned char
-				current=(unsigned char)(255*buf[idx]),
-				left=(unsigned char)(kx?255*buf[idx-xstride]:0),
-				top=(unsigned char)(ky?255*buf[idx-vstride]:0),
-				topleft=(unsigned char)(kx&&ky?255*buf[idx-vstride-xstride]:0),
-				sub=top+left-topleft;
-			if(kx||ky)
-				sub-=128;
+			int
+				current=buf[idx],
+				left=kx?buf[idx-xstride]:0,
+				top=ky?buf[idx-vstride]:0,
+				topleft=kx&&ky?buf[idx-vstride-xstride]:0,
+				pred;
+			
+			int vmin, vmax;
+			if(top<left)
+				vmin=top, vmax=left;
+			else
+				vmin=left, vmax=top;
+			if(topleft<vmin)
+				pred=vmax;
+			else if(topleft>vmax)
+				pred=vmin;
+			else
+				pred=top+left-topleft;
 
-			unsigned char result=current+sub;//integrate
+		//	pred=top+left-topleft;
+			//if(kx||ky)
+			//	pred-=128;
+			
+			//pred=((pred+half)&amplitude)-half;
+			int result=current+pred;//integrate
+			//result=((result+half)&amplitude)-half;
+			//if(amplitude+1)
+			//{
+			//	result%=amplitude+1;
+			//	result+=(amplitude+1)&-(result<0);
+			//}
 			
 			//if(kx==220&&ky==329)//
 			//	kx=220;//
 			
-			buf[idx]=result*inv255;
+			buf[idx]=result;
+			//buf[idx]=result*inv255;
 			//if(fabsf(result)<1e-4)
 			//	result=0;
 			//else if(fabsf(result-1)<1e-4)
@@ -933,64 +1013,158 @@ void			integrate_channel(float *buf, int rowlen, int xcount, int ycount, int xst
 		}
 	}
 }
-void			differentiate_image()
+#if 0
+int *g_temp=0;
+void save_buffer(int *buf, int nelem)
 {
-	if(imagetype==IM_GRAYSCALE)
-		differentiate_channel(image, iw, iw, ih, 1, 1);
-	else if(imagetype==IM_BAYER)
+	int *p=(int*)realloc(g_temp, nelem*sizeof(int));
+	if(!p)
+		return;
+	g_temp=p;
+	memcpy(g_temp, buf, nelem*sizeof(int));
+}
+void compare_buffer(int *buf, int nelem)
+{
+	for(int k=0;k<nelem;++k)
 	{
-		differentiate_channel(image     , iw, iw>>1, ih>>1, 2, 2);
-		differentiate_channel(image   +1, iw, iw>>1, ih>>1, 2, 2);
-		differentiate_channel(image+iw  , iw, iw>>1, ih>>1, 2, 2);
-		differentiate_channel(image+iw+1, iw, iw>>1, ih>>1, 2, 2);
-		//for(int ky=ih-1;ky>=0;--ky)
-		//{
-		//	for(int kx=iw-1;kx>=0;--kx)
-		//	{
-		//		float
-		//			left=kx>1?image[(iw*ky+kx-2)<<2|kc]:0,
-		//			top=ky>1?image[(iw*((ky|ky2)-2)+(kx|kx2))<<2|kc]:0,
-		//			topleft=kx>1&&ky>1?image[(iw*((ky|ky2)-1)+(kx|kx2)-1)<<2|kc]:0;
-		//		image[(iw*(ky|ky2)+(kx|kx2))<<2|kc]-=top+left-topleft-0.5;
-		//	}
-		//}
-	}
-	else if(imagetype==IM_RGBA)
-	{
-		differentiate_channel(image  , iw<<2, iw, ih, 4, 1);
-		differentiate_channel(image+1, iw<<2, iw, ih, 4, 1);
-		differentiate_channel(image+2, iw<<2, iw, ih, 4, 1);
-		//for(int ky=ih-1;ky>=0;--ky)
-		//{
-		//	for(int kx=iw-1;kx>=0;--kx)
-		//	{
-		//		for(int kc=0;kc<3;++kc)//don't touch alpha
-		//		{
-		//			float
-		//				left=kx?image[(iw*ky+kx-1)<<2|kc]:0,
-		//				top=ky?image[(iw*(ky-1)+kx)<<2|kc]:0,
-		//				topleft=kx&&ky?image[(iw*(ky-1)+kx-1)<<2|kc]:0;
-		//			image[(iw*ky+kx)<<2|kc]-=top+left-topleft-0.5;
-		//		}
-		//	}
-		//}
+		if(buf[k]!=g_temp[k])
+		{
+			if(imagetype==IM_RGBA)
+			{
+				int kc=k&3;
+				k>>=2;
+				int kx=k%iw, ky=k/iw;
+				LOG_ERROR("CXY %d %d %d", kc, kx, ky);
+			}
+			LOG_ERROR("");
+			break;
+		}
 	}
 }
-void			integrate_image()
+#endif
+void			image_transform_fwd()
 {
 	if(imagetype==IM_GRAYSCALE)
-		integrate_channel(image, iw, iw, ih, 1, 1);
+	{
+		channel_cvtps_i32(image, iw, iw, ih, 1, 1, idepth);
+		channel_predict_i32((int*)image, iw, iw, ih, 1, 1);
+		channel_cvti32_ps(image, iw, iw, ih, 1, 1, idepth);
+	}
 	else if(imagetype==IM_BAYER)
 	{
-		integrate_channel(image     , iw, iw>>1, ih>>1, 2, 2);
-		integrate_channel(image   +1, iw, iw>>1, ih>>1, 2, 2);
-		integrate_channel(image+iw  , iw, iw>>1, ih>>1, 2, 2);
-		integrate_channel(image+iw+1, iw, iw>>1, ih>>1, 2, 2);
+		channel_cvtps_i32(image     , iw, iw>>1, ih>>1, 2, 2, idepth);
+		channel_cvtps_i32(image   +1, iw, iw>>1, ih>>1, 2, 2, idepth);
+		channel_cvtps_i32(image+iw  , iw, iw>>1, ih>>1, 2, 2, idepth);
+		channel_cvtps_i32(image+iw+1, iw, iw>>1, ih>>1, 2, 2, idepth);
+		channel_predict_i32((int*)image     , iw, iw>>1, ih>>1, 2, 2);
+		channel_predict_i32((int*)image   +1, iw, iw>>1, ih>>1, 2, 2);
+		channel_predict_i32((int*)image+iw  , iw, iw>>1, ih>>1, 2, 2);
+		channel_predict_i32((int*)image+iw+1, iw, iw>>1, ih>>1, 2, 2);
+		channel_cvti32_ps(image     , iw, iw>>1, ih>>1, 2, 2, idepth);
+		channel_cvti32_ps(image   +1, iw, iw>>1, ih>>1, 2, 2, idepth);
+		channel_cvti32_ps(image+iw  , iw, iw>>1, ih>>1, 2, 2, idepth);
+		channel_cvti32_ps(image+iw+1, iw, iw>>1, ih>>1, 2, 2, idepth);
 	}
 	else if(imagetype==IM_RGBA)
 	{
-		integrate_channel(image  , iw<<2, iw, ih, 4, 1);
-		integrate_channel(image+1, iw<<2, iw, ih, 4, 1);
-		integrate_channel(image+2, iw<<2, iw, ih, 4, 1);
+		channel_cvtps_i32(image  , iw<<2, iw, ih, 4, 1, idepth);
+		channel_cvtps_i32(image+1, iw<<2, iw, ih, 4, 1, idepth);
+		channel_cvtps_i32(image+2, iw<<2, iw, ih, 4, 1, idepth);
+		unsigned precmask=0xFFFFFFFF<<(32-idepth);
+		//unsigned amplitude=(unsigned)((1LL<<idepth)-1), half=1<<(idepth-1);
+		//save_buffer((int*)image, iw*ih<<2);//
+		for(int ky=0;ky<ih;++ky)
+		{
+			for(int kx=0;kx<iw;++kx)
+			{
+				int idx=iw*ky+kx;
+				int
+					r=((int*)image)[idx<<2  ],
+					g=((int*)image)[idx<<2|1],
+					b=((int*)image)[idx<<2|2];
+				
+				//if(kx==5&&ky==1)
+				//	kx=5;
+
+				r-=g;			//fwd YCoCg-T
+				g+=r>>1&precmask;
+				b-=g;
+				g+=b>>1&precmask;
+
+				//if(r!=((r+half)&amplitude)-half)
+				//	r=((r+half)&amplitude)-half;
+
+				((int*)image)[idx<<2  ]=r;
+				((int*)image)[idx<<2|1]=g;
+				((int*)image)[idx<<2|2]=b;
+			}
+		}
+		channel_predict_i32((int*)image  , iw<<2, iw, ih, 4, 1);
+		channel_predict_i32((int*)image+1, iw<<2, iw, ih, 4, 1);
+		channel_predict_i32((int*)image+2, iw<<2, iw, ih, 4, 1);
+		channel_cvti32_ps(image  , iw<<2, iw, ih, 4, 1, idepth);
+		channel_cvti32_ps(image+1, iw<<2, iw, ih, 4, 1, idepth);
+		channel_cvti32_ps(image+2, iw<<2, iw, ih, 4, 1, idepth);
+	}
+}
+void			image_transform_inv()
+{
+	if(imagetype==IM_GRAYSCALE)
+	{
+		channel_cvtps_i32(image, iw, iw, ih, 1, 1, idepth);
+		channel_unpredict_i32((int*)image, iw, iw, ih, 1, 1);
+		channel_cvti32_ps(image, iw, iw, ih, 1, 1, idepth);
+	}
+	else if(imagetype==IM_BAYER)
+	{
+		channel_cvtps_i32(image     , iw, iw>>1, ih>>1, 2, 2, idepth);
+		channel_cvtps_i32(image   +1, iw, iw>>1, ih>>1, 2, 2, idepth);
+		channel_cvtps_i32(image+iw  , iw, iw>>1, ih>>1, 2, 2, idepth);
+		channel_cvtps_i32(image+iw+1, iw, iw>>1, ih>>1, 2, 2, idepth);
+		channel_unpredict_i32((int*)image     , iw, iw>>1, ih>>1, 2, 2);
+		channel_unpredict_i32((int*)image   +1, iw, iw>>1, ih>>1, 2, 2);
+		channel_unpredict_i32((int*)image+iw  , iw, iw>>1, ih>>1, 2, 2);
+		channel_unpredict_i32((int*)image+iw+1, iw, iw>>1, ih>>1, 2, 2);
+		channel_cvti32_ps(image     , iw, iw>>1, ih>>1, 2, 2, idepth);
+		channel_cvti32_ps(image   +1, iw, iw>>1, ih>>1, 2, 2, idepth);
+		channel_cvti32_ps(image+iw  , iw, iw>>1, ih>>1, 2, 2, idepth);
+		channel_cvti32_ps(image+iw+1, iw, iw>>1, ih>>1, 2, 2, idepth);
+	}
+	else if(imagetype==IM_RGBA)
+	{
+		channel_cvtps_i32(image  , iw<<2, iw, ih, 4, 1, idepth);
+		channel_cvtps_i32(image+1, iw<<2, iw, ih, 4, 1, idepth);
+		channel_cvtps_i32(image+2, iw<<2, iw, ih, 4, 1, idepth);
+		channel_unpredict_i32((int*)image  , iw<<2, iw, ih, 4, 1);
+		channel_unpredict_i32((int*)image+1, iw<<2, iw, ih, 4, 1);
+		channel_unpredict_i32((int*)image+2, iw<<2, iw, ih, 4, 1);
+		unsigned precmask=0xFFFFFFFF<<(32-idepth);
+		for(int ky=0;ky<ih;++ky)
+		{
+			for(int kx=0;kx<iw;++kx)
+			{
+				int idx=iw*ky+kx;
+				int
+					r=((int*)image)[idx<<2  ],
+					g=((int*)image)[idx<<2|1],
+					b=((int*)image)[idx<<2|2];
+				
+				//if(kx==5&&ky==1)
+				//	kx=5;
+
+				g-=b>>1&precmask;			//inv YCoCg-T
+				b+=g;
+				g-=r>>1&precmask;
+				r+=g;
+				
+				((int*)image)[idx<<2  ]=r;
+				((int*)image)[idx<<2|1]=g;
+				((int*)image)[idx<<2|2]=b;
+			}
+		}
+		//compare_buffer((int*)image, iw*ih<<2);//
+		channel_cvti32_ps(image  , iw<<2, iw, ih, 4, 1, idepth);
+		channel_cvti32_ps(image+1, iw<<2, iw, ih, 4, 1, idepth);
+		channel_cvti32_ps(image+2, iw<<2, iw, ih, 4, 1, idepth);
 	}
 }

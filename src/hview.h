@@ -294,8 +294,8 @@ void			reset_histogram();
 void			cmd_histogram();
 void			mix_channels();
 
-void			differentiate_image();
-void			integrate_image();
+void			image_transform_fwd();
+void			image_transform_inv();
 
 //application
 void			center_image();

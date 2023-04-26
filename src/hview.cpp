@@ -1070,12 +1070,12 @@ LRESULT			__stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM l
 			render();
 			break;
 		case 'D':
-			differentiate_image();
+			image_transform_fwd();
 			update_histogram();
 			render();
 			break;
 		case 'I':
-			integrate_image();
+			image_transform_inv();
 			update_histogram();
 			render();
 			break;
