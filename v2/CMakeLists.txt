@@ -1,6 +1,6 @@
 ﻿# CMakeList.txt : CMake project for hView, include source and define project specific logic here.
 
-add_compile_options(/experimental:c11atomics)
+#add_compile_options(/experimental:c11atomics)
 include_directories(
 	"C:/Programs/ffmpeg-6.0-full_build-shared/include"#laptop
 
