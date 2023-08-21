@@ -620,14 +620,6 @@ void image_resize(ImageHandle *image, int w, int h);
 int load_media(const char *filename, ImageHandle *image);//returns error (0 on success)
 
 
-//typedef enum ZoomModeEnum
-//{
-//	AUTOZOOM_OFF,
-//	AUTOZOOM_ON,
-//	AUTOZOOM_CENTER,
-//} ZoomMode;
-//extern ZoomMode autozoom;
-
 extern int imagecentered;
 extern double
 	zoom,//image pixel size in screen pixels

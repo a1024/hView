@@ -17,10 +17,8 @@ typedef enum DragEnum
 	DRAG_IMAGE_PERSISTENT,
 } Drag;
 int drag=DRAG_NONE,
-	//mx0=0, my0=0,//prev mouse coords
 	start_mx=0, start_my=0;//initial drag mouse coords
 
-//ZoomMode autozoom=AUTOZOOM_OFF;
 int imagecentered=0;
 double zoom=1;//image pixel size in screen pixels
 double mousewheel_zoom=2;//mouse wheel factor
@@ -31,7 +29,7 @@ ImageHandle image=0;
 //int iw=0, ih=0;
 //float *image=0;
 
-static void zoomat(int xs, int ys, double factor)
+static void zoom_at(int xs, int ys, double factor)
 {
 	const double tolerance=1e-2;
 	wpx+=xs/zoom*(1-1/factor);
@@ -88,10 +86,8 @@ int io_mousemove()//return true to redraw
 		//int X0=w>>1, Y0=h>>1;
 		//cam_turnMouse(cam, mx-X0, my-Y0, mouse_sensitivity);
 		set_mouse(w>>1, h>>1);
-		//mx0=mx, my0=my;
 		return !timer;
 	}
-	//mx0=mx, my0=my;
 	return 0;
 }
 int io_mousewheel(int forward)
@@ -99,7 +95,7 @@ int io_mousewheel(int forward)
 	const double tolerance=1e-2;
 	int mw_fwd=forward>0;
 
-	zoomat(mx, my, mw_fwd?mousewheel_zoom:1/mousewheel_zoom);//fwd zooms in
+	zoom_at(mx, my, mw_fwd?mousewheel_zoom:1/mousewheel_zoom);//fwd zooms in
 	return 1;
 }
 static void count_active_keys(IOKey upkey)
@@ -123,7 +119,6 @@ int io_keydn(IOKey key, char c)
 			drag=GET_KEY_STATE(KEY_CTRL)?DRAG_IMAGE_PERSISTENT:DRAG_IMAGE;//ctrl LBUTTON: persistent drag
 			start_mx=mx, start_my=my;
 			show_mouse(0);
-			//mx0=w>>1, my0=h>>1;
 			set_mouse(w>>1, h>>1);
 			mouse_capture();
 		}
@@ -257,9 +252,9 @@ void io_timer()
 {
 	const int delta=10;//screen pixels per frame
 	if(keyboard[KEY_ENTER])
-		zoomat(w>>1, h>>1, 1.02);
+		zoom_at(w>>1, h>>1, 1.02);
 	if(keyboard[KEY_BKSP])
-		zoomat(w>>1, h>>1, 1/1.02);
+		zoom_at(w>>1, h>>1, 1/1.02);
 	if(keyboard['W'])//move window up
 		wpy-=delta/zoom;
 	if(keyboard['A'])//move window left
