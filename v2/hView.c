@@ -4,10 +4,10 @@ static const char file[]=__FILE__;
 
 //active keys turn on timer
 #define ACTIVE_KEY_LIST\
-	AK('W') AK('A') AK('S') AK('D') AK('T') AK('G')\
+	AK('W') AK('A') AK('S') AK('D')\
 	AK(KEY_ENTER) AK(KEY_BKSP)\
 	AK(KEY_UP) AK(KEY_DOWN)
-//	AK(KEY_LEFT) AK(KEY_RIGHT)
+//	AK(KEY_LEFT) AK(KEY_RIGHT) AK('T') AK('G')
 int active_keys_pressed=0;
 
 typedef enum DragEnum
@@ -21,6 +21,8 @@ int drag=DRAG_NONE,
 
 int imagecentered=0;
 double zoom=1;//image pixel size in screen pixels
+#define ZOOM_LIMIT_LABEL 48
+#define ZOOM_LIMIT_ALPHA 96
 double mousewheel_zoom=2;//mouse wheel factor
 double wpx=0, wpy=0;//window position (top-left corner) in image coordinates
 
@@ -30,9 +32,55 @@ ImageType imagetype=IM_UNINITIALIZED;
 int imagedepth=0;
 char bayer[4]={0};//shift ammounts for the 4 Bayer mosaic components, -1 for grayscale, example: RGGB is {0, 8, 8, 16}
 
-static ArrayHandle text_vertices=0;
+static ArrayHandle vertices_text=0;
 int pxlabels_hex=1;
 
+int hist_on=0;
+int histogram[768];//histogram of preview buffer which is always 8-bit
+ArrayHandle vertices_2d=0;
+
+ProfilePlotMode profileplotmode=PROFILE_OFF;
+
+int bitmode=0,//0: off, 1: colorful bitplanes, 2: monochrome bitplanes
+	bitplane=-1;
+
+void calc_hist()
+{
+	if(!impreview)
+		return;
+	int res=impreview->iw*impreview->ih;
+	memset(histogram, 0, 768*sizeof(int));
+	switch(imagetype)
+	{
+	case IM_GRAYSCALE:
+		for(int k=0;k<res;++k)
+		{
+			unsigned char sym=impreview->data[k<<2];
+			++histogram[sym];
+		}
+		break;
+	case IM_RGBA:
+		for(int k=0;k<res;++k)
+		{
+			unsigned char *p=impreview->data+(k<<2);
+			++histogram[0<<8|p[0]];
+			++histogram[1<<8|p[1]];
+			++histogram[2<<8|p[2]];
+		}
+		break;
+	case IM_BAYER:
+		for(int ky=0;ky<impreview->ih;++ky)
+		{
+			for(int kx=0;kx<impreview->iw;++kx)
+			{
+				int comp=bayer[(ky&1)<<1|kx&1];
+				unsigned char sym=impreview->data[(impreview->iw*ky+kx)<<2|comp];
+				++histogram[comp<<8|sym];
+			}
+		}
+		break;
+	}
+}
 void update_image(int settitle, int render)
 {
 	if(!image)
@@ -45,7 +93,45 @@ void update_image(int settitle, int render)
 			image_free(&impreview);
 		impreview=image_construct(0, 0, 8, 0, image->iw, image->ih, image->depth);
 	}
-	image_blit(impreview, 0, 0, image->data, image->iw, image->ih, image->depth);
+	if(bitmode==1)
+	{
+		const unsigned short *src=(const unsigned short*)image->data;
+		unsigned char *dst=(unsigned char*)impreview->data;
+		int sh=bitplane+16-imagedepth, srcidx, dstidx;
+		for(int ky=0;ky<image->ih;++ky)
+		{
+			for(int kx=0;kx<image->iw;++kx)
+			{
+				srcidx=(image->iw*ky+kx)<<2, dstidx=(impreview->iw*ky+kx)<<2;
+				for(int kc=0;kc<3;++kc)
+					dst[dstidx|kc]=src[srcidx|kc]>>sh&1?255:0;
+				dst[dstidx|3]=src[srcidx|3]>>8;//copy alpha
+			}
+		}
+	}
+	else if(bitmode==2)
+	{
+		const unsigned long long *src=(const unsigned long long*)image->data;
+		unsigned char *dst=(unsigned char*)impreview->data;
+		int kb=bitplane%imagedepth, kc=bitplane/imagedepth;
+		int sh=(kc<<4)+kb+16-imagedepth, srcidx, dstidx;
+		for(int ky=0;ky<image->ih;++ky)
+		{
+			for(int kx=0;kx<image->iw;++kx)
+			{
+				srcidx=image->iw*ky+kx, dstidx=(impreview->iw*ky+kx)<<2;
+				int val=src[srcidx]>>sh&1?255:0;
+				dst[dstidx]=val;
+				dst[dstidx|1]=val;
+				dst[dstidx|2]=val;
+				dst[dstidx|3]=src[srcidx]>>(48+8);//copy alpha
+			}
+		}
+	}
+	else
+		image_blit(impreview, 0, 0, image->data, image->iw, image->ih, image->depth);
+	if(hist_on)
+		calc_hist();
 	if(render)
 		io_render();
 }
@@ -132,6 +218,23 @@ int io_keydn(IOKey key, char c)
 {
 	switch(key)
 	{
+	case KEY_F1:
+		messagebox(MBOX_OK, "Controls",
+			"Esc/LBUTTON/WASD: Drag image\n"
+			"Enter/Bksp/Wheel: Zoom image\n"
+			"Left/Right: prev/next image\n"
+			"Ctrl O: Open image\n"
+			"E: Reset view to topleft corner at 1:1\n"
+			"C: Fit image to window\n"
+			"Ctrl C: Copy pixel values from screen (when zoomed in)\n"
+			"H: Toggle histogram\n"
+			"Ctrl H: Toggle hexadecimal pixel labels\n"
+			"X/Y: Toggle horizontal/vertical cross-section profiles\n"
+			"\n"
+			"Quote: Toggle bitplane view\n"
+			"Brackets: Select bitplane\n" 
+		);
+		break;
 	case KEY_ESC:
 	case KEY_LBUTTON:
 		if(drag==DRAG_NONE)//start dragging
@@ -236,16 +339,166 @@ int io_keydn(IOKey key, char c)
 		}
 		break;
 		
-	case 'R':
+	case 'E':
 		wpx=0, wpy=0, zoom=1;
 		imagecentered=0;
 		return 1;
 	case 'C':
-		center_image();
+		if(GET_KEY_STATE(KEY_CTRL))
+		{
+			if(zoom>=ZOOM_LIMIT_LABEL)
+			{
+				ArrayHandle str;
+				STR_ALLOC(str, 0);
+				int sx1=image2screen_x_int(0), sx2=image2screen_x_int(impreview->iw),
+					sy1=image2screen_y_int(0), sy2=image2screen_y_int(impreview->ih);
+				int csx1=CLAMP(0, sx1, w),
+					csx2=CLAMP(0, sx2, w);
+				int csy1=CLAMP(0, sy1, h),
+					csy2=CLAMP(0, sy2, h);
+				int ix1=screen2image_x_int(csx1),
+					ix2=screen2image_x_int(csx2);
+				int iy1=screen2image_y_int(csy1),
+					iy2=screen2image_y_int(csy2);
+				const char *format;
+				if(pxlabels_hex)
+				{
+					if(imagedepth<=4)
+						format=" 0x%01X";
+					else if(imagedepth<=8)
+						format=" 0x%02X";
+					else if(imagedepth<=12)
+						format=" 0x%03X";
+					else
+						format=" 0x%04X";
+				}
+				else
+					format=" %5d";
+				switch(imagetype)
+				{
+				case IM_GRAYSCALE:
+					{
+						str_append(&str, "%d bit GRAY:\n", imagedepth);
+						unsigned short *ptr=(unsigned short*)image->data;
+						int iy=MAXVAR(iy1, 0);
+						for(int yend=MINVAR(iy2+2, image->ih);iy<yend;++iy)
+						{
+							int ky=image2screen_y_int(iy);
+							int ix=MAXVAR(ix1, 0);
+							for(int xend=MINVAR(ix2+2, image->iw);ix<xend;++ix)
+							{
+								int kx=image2screen_x_int(ix);
+								int idx=(image->iw*iy+ix)<<2;
+								str_append(&str, format, ptr[idx  ]>>(16-imagedepth));
+							}
+							str_append(&str, "\n");
+						}
+					}
+					break;
+				case IM_RGBA:
+					{
+						str_append(&str, "%d bit RGBA:\n", imagedepth);
+						unsigned short *ptr=(unsigned short*)image->data;
+						int iy=MAXVAR(iy1, 0);
+						for(int yend=MINVAR(iy2+2, image->ih);iy<yend;++iy)
+						{
+							int ky=image2screen_y_int(iy);
+							int ix=MAXVAR(ix1, 0);
+							for(int xend=MINVAR(ix2+2, image->iw);ix<xend;++ix)
+							{
+								int kx=image2screen_x_int(ix);
+								int idx=(image->iw*iy+ix)<<2;
+								str_append(&str, "    ");
+								str_append(&str, format, ptr[idx  ]>>(16-imagedepth));
+								str_append(&str, format, ptr[idx+1]>>(16-imagedepth));
+								str_append(&str, format, ptr[idx+2]>>(16-imagedepth));
+								str_append(&str, format, ptr[idx+3]>>(16-imagedepth));
+							}
+							str_append(&str, "\n");
+						}
+					}
+					break;
+				case IM_BAYER:
+					{
+						const char labels[]="RGB";
+						str_append(&str, "%d bit %c%c%c%c:\n", imagedepth, labels[bayer[0]], labels[bayer[1]], labels[bayer[2]], labels[bayer[3]]);
+						unsigned short *ptr=(unsigned short*)image->data;
+						int iy=MAXVAR(iy1, 0);
+						iy>>=1;
+						iy<<=1;
+						for(int yend=MINVAR(iy2+2, image->ih);iy<yend;++iy)
+						{
+							int ky=image2screen_y_int(iy);
+							int ix=MAXVAR(ix1, 0);
+							ix>>=1;
+							ix<<=1;
+							for(int xend=MINVAR(ix2+2, image->iw);ix<xend;++ix)
+							{
+								int kx=image2screen_x_int(ix);
+								int idx=(image->iw*iy+ix)<<2;
+								str_append(&str, format, ptr[idx+bayer[(iy&1)<<1|ix&1]]>>(16-imagedepth));
+							}
+							str_append(&str, "\n");
+						}
+					}
+					break;
+				}
+				copy_to_clipboard((char*)str->data, (int)str->count);
+				array_free(&str);
+			}
+		}
+		else
+			center_image();
 		return 1;
 	case 'H':
-		pxlabels_hex=!pxlabels_hex;
+		if(GET_KEY_STATE(KEY_CTRL))//toggle pixel label base
+			pxlabels_hex=!pxlabels_hex;
+		else//toggle histogram
+		{
+			hist_on=!hist_on;
+			if(hist_on)
+				calc_hist();
+		}
 		return 1;
+	case 'X'://toggle horizontal profile plot
+		if(profileplotmode!=PROFILE_X)
+			profileplotmode=PROFILE_X;
+		else
+			profileplotmode=PROFILE_OFF;
+		return 1;
+	case 'Y'://toggle vertical profile plot
+		if(profileplotmode!=PROFILE_Y)
+			profileplotmode=PROFILE_Y;
+		else
+			profileplotmode=PROFILE_OFF;
+		return 1;
+	case KEY_QUOTE://toggle bitplane view
+		bitmode+=1-(GET_KEY_STATE(KEY_SHIFT)<<2);
+		MODVAR(bitmode, bitmode, 3);
+		if(bitmode&&bitplane==-1)
+			bitplane=imagedepth-1;
+		if(bitmode==1)
+			MODVAR(bitplane, bitplane, imagedepth);
+		update_image(0, 1);
+		break;
+	case KEY_LBRACKET://prev bitplane
+		if(bitmode)
+		{
+			int n=bitmode==2?imagedepth*3:imagedepth;
+			++bitplane;
+			MODVAR(bitplane, bitplane, n);
+			update_image(0, 1);
+		}
+		break;
+	case KEY_RBRACKET://next bitplane
+		if(bitmode)
+		{
+			int n=bitmode==2?imagedepth*3:imagedepth;
+			--bitplane;
+			MODVAR(bitplane, bitplane, n);
+			update_image(0, 1);
+		}
+		break;
 	}
 	return 0;
 }
@@ -319,11 +572,106 @@ void print_pixellabels(int ix1, int ix2, int iy1, int iy2, int xoffset, int yoff
 		{
 			int kx=image2screen_x_int(ix+xoffset);
 			int idx=(image->iw*iy+ix)<<2;
-			GUIPrint_enqueue(&text_vertices, 0, (float)kx, (float)ky+labeloffset, fontsize, format, label, ptr[idx+component]>>(16-imagedepth));
+			GUIPrint_enqueue(&vertices_text, 0, (float)kx, (float)ky+labeloffset, fontsize, format, label, ptr[idx+component]>>(16-imagedepth));
 		}
 	}
-	print_line_flush(text_vertices, fontsize);
+	print_line_flush(vertices_text, fontsize);
 	txtcolors=set_text_colors(txtcolors);
+}
+void draw_histogram(int *hist, int nlevels, int color, int y1, int y2)
+{
+	int fmax=0;
+	for(int sym=0;sym<nlevels;++sym)
+	{
+		if(fmax<hist[sym])
+			fmax=hist[sym];
+	}
+	for(int sym=0;sym<nlevels;++sym)
+		draw_rect_enqueue(&vertices_2d, (float)sym*w/nlevels, (float)(sym+1)*w/nlevels, y2-(float)hist[sym]*(y2-y1)/fmax, y2);
+	draw_2d_flush(vertices_2d, color, GL_TRIANGLES);
+}
+void draw_profile_x(int comp, int color)//horizontal cross-section profile		to see the color/spatial correlation
+{
+	int iy=screen2image_y_int(my);
+	if((unsigned)iy<(unsigned)impreview->ih)
+	{
+		unsigned char *row=0;
+		int lgstride=0;
+		switch(imagetype)
+		{
+		case IM_GRAYSCALE:	row=impreview->data+(impreview->iw*iy<<2), lgstride=2;break;
+		case IM_RGBA:		row=impreview->data+(impreview->iw*iy<<2|comp), lgstride=2;break;
+		case IM_BAYER:
+		case IM_BAYER_SEPARATE:
+			iy>>=1;
+			iy<<=1;
+			iy|=comp>>1;
+			row=impreview->data+((impreview->iw*iy+(comp&1))<<2|bayer[comp]);
+			lgstride=2;
+			break;
+		default:
+			return;
+		}
+		int ix, y2;
+		float gain=(h>>1)/255.f;
+		for(int kx=0;kx<w;++kx)
+		{
+			ix=screen2image_x_int(kx);
+			if(imagetype==IM_BAYER||imagetype==IM_BAYER_SEPARATE)
+			{
+				ix>>=1;
+				ix<<=1;
+			}
+			if((unsigned)ix<(unsigned)impreview->iw)
+				y2=h-tdy-row[ix<<lgstride]*gain;
+			else
+				y2=h-tdy;
+			draw_curve_enqueue(&vertices_2d, (float)kx, (float)y2);
+		}
+		draw_2d_flush(vertices_2d, color, GL_LINE_STRIP);
+	}
+}
+void draw_profile_y(int comp, int color)//vertical cross-section profile
+{
+	int ix=screen2image_x_int(mx);
+	if((unsigned)ix<(unsigned)impreview->iw)
+	{
+		unsigned char *col=0;
+		int stride=0;
+		switch(imagetype)
+		{
+		case IM_GRAYSCALE:	col=impreview->data+(ix<<2), stride=impreview->iw<<2;break;
+		case IM_RGBA:		col=impreview->data+(ix<<2|comp), stride=impreview->iw<<2;break;
+		case IM_BAYER:
+		case IM_BAYER_SEPARATE:
+			ix>>=1;
+			ix<<=1;
+			ix|=comp&1;
+			col=impreview->data+((ix+(impreview->iw&-(comp>>1)))<<2|bayer[comp]);
+			stride=impreview->iw<<2;
+			break;
+		default:
+			return;
+		}
+
+		int iy, x2;
+		float gain=(w>>1)/255.f;
+		for(int ky=0;ky<h;++ky)
+		{
+			iy=screen2image_y_int(ky);
+			if(imagetype==IM_BAYER||imagetype==IM_BAYER_SEPARATE)
+			{
+				iy>>=1;
+				iy<<=1;
+			}
+			if((unsigned)iy<(unsigned)impreview->ih)
+				x2=col[iy*stride]*gain;
+			else
+				x2=0;
+			draw_curve_enqueue(&vertices_2d, (float)x2, (float)ky);
+		}
+		draw_2d_flush(vertices_2d, color, GL_LINE_STRIP);
+	}
 }
 void io_render()
 {
@@ -333,23 +681,12 @@ void io_render()
 
 	if(impreview)
 	{
-		int
-			sx1=image2screen_x_int(0), sx2=image2screen_x_int(impreview->iw),
+		int sx1=image2screen_x_int(0), sx2=image2screen_x_int(impreview->iw),
 			sy1=image2screen_y_int(0), sy2=image2screen_y_int(impreview->ih);
 		display_texture_i(sx1, sx2, sy1, sy2, (int*)impreview->data, impreview->iw, impreview->ih, 0, 1, 0, 1, 1, 0);
-		int
-			imx=screen2image_x_int(mx),
+		int imx=screen2image_x_int(mx),
 			imy=screen2image_y_int(my);
-		const char *imtypestr="?";
-		switch(imagetype)
-		{
-		case IM_UNINITIALIZED: imtypestr="IM_UNINITIALIZED"; break;
-		case IM_GRAYSCALE:     imtypestr="IM_GRAYSCALE";     break;
-		case IM_RGBA:          imtypestr="IM_RGBA";          break;
-		case IM_BAYER:         imtypestr="IM_BAYER";         break;
-		case IM_BAYER_SEPARATE:imtypestr="IM_BAYER_SEPARATE";break;
-		}
-		if(zoom>=48)
+		if(zoom>=ZOOM_LIMIT_LABEL)
 		{
 			int csx1=CLAMP(0, sx1, w),
 				csx2=CLAMP(0, sx2, w);
@@ -374,7 +711,7 @@ void io_render()
 				print_pixellabels(ix1, ix2, iy1, iy2, 0, 0, 0, 'r', theme[0], 0);
 				print_pixellabels(ix1, ix2, iy1, iy2, 0, 0, 1, 'g', theme[1], 0);
 				print_pixellabels(ix1, ix2, iy1, iy2, 0, 0, 2, 'b', theme[2], 0);
-				if(zoom>=96)
+				if(zoom>=ZOOM_LIMIT_ALPHA)
 					print_pixellabels(ix1, ix2, iy1, iy2, 0, 0, 3, 'a', theme[3], 0);
 			}
 			else if(imagetype==IM_BAYER)
@@ -385,15 +722,100 @@ void io_render()
 				print_pixellabels(ix1, ix2, iy1, iy2, 1, 1, bayer[3], labels[bayer[3]], theme[bayer[3]], 1);
 			}
 		}
+		if(hist_on)
+		{
+			switch(imagetype)
+			{
+			case IM_GRAYSCALE:
+				draw_histogram(histogram, 256, 0x80808080, tdy, h-tdy);
+				break;
+			case IM_RGBA:
+			case IM_BAYER:
+				{
+					int y1=tdy, y2=h-tdy, dy=y2-y1;
+					draw_histogram(histogram    , 256, 0x800000FF, y1       , y1+dy/3);
+					draw_histogram(histogram+256, 256, 0x8000FF00, y1+dy  /3, y1+dy*2/3);
+					draw_histogram(histogram+512, 256, 0x80FF0000, y1+dy*2/3, y2);
+				}
+				break;
+			}
+		}
+		if(profileplotmode>PROFILE_OFF)
+		{
+			void (*draw_profile)(int comp, int color)=profileplotmode==PROFILE_X?draw_profile_x:draw_profile_y;
+			switch(imagetype)
+			{
+			case IM_GRAYSCALE:
+				draw_profile(0, 0xFF000000);
+				break;
+			case IM_RGBA:
+				draw_profile(0, 0xFF0000FF);
+				draw_profile(1, 0xFF00FF00);
+				draw_profile(2, 0xFFFF0000);
+				draw_profile(3, 0xFF000000);
+				break;
+			case IM_BAYER:
+				draw_profile(0, 0xFF000000|0xFF<<(bayer[0]<<3));
+				draw_profile(1, 0xFF000000|0xFF<<(bayer[1]<<3));
+				draw_profile(2, 0xFF000000|0xFF<<(bayer[2]<<3));
+				draw_profile(3, 0xFF000000|0xFF<<(bayer[3]<<3));
+				break;
+			case IM_BAYER_SEPARATE:
+				profileplotmode=PROFILE_OFF;//X
+				break;
+			}
+		}
+		
+		const char *imtypestr="?";
+		switch(imagetype)
+		{
+		case IM_UNINITIALIZED: imtypestr="IM_UNINITIALIZED"; break;
+		case IM_GRAYSCALE:     imtypestr="IM_GRAYSCALE";     break;
+		case IM_RGBA:          imtypestr="IM_RGBA";          break;
+		case IM_BAYER:         imtypestr="IM_BAYER";         break;
+		case IM_BAYER_SEPARATE:imtypestr="IM_BAYER_SEPARATE";break;
+		}
+		//g_printed=0;
+		GUIPrint_append(0, 0, h-tdy, 1, 0, "XY(%5d, %5d) / WH %dx%d  x%lf  %s  %d bitdepth", imx, imy, impreview->iw, impreview->ih, zoom, imtypestr, imagedepth);
+		if(bitmode==1)
+			GUIPrint_append(0, 0, h-tdy, 1, 0, "  Bitplane %d", bitplane);
+		else if(bitmode==2)
+			GUIPrint_append(0, 0, h-tdy, 1, 0, "  Ch %d Bitplane %d", bitplane/imagedepth, bitplane%imagedepth);
 		if((unsigned)imx<(unsigned)impreview->iw&&(unsigned)imy<(unsigned)impreview->ih)
 		{
 			unsigned char *p=impreview->data+((impreview->iw*imy+imx)<<2);
-			int color;
-			memcpy(&color, p, sizeof(color));
-			GUIPrint(0, 0, h-tdy, 1, "XY(%d, %d) / WH %dx%d  x%lf  %s  RGBA(%3d, %3d, %3d, %3d)=0x%08X", imx, imy, impreview->iw, impreview->ih, zoom, imtypestr, p[0], p[1], p[2], p[3], color);
+			switch(imagetype)
+			{
+			case IM_GRAYSCALE:
+				GUIPrint_append(0, 0, h-tdy, 1, 0, "  GRAY_ALPHA(%3d, %3d)", (unsigned)p[0], (unsigned)p[3]);
+				break;
+			case IM_RGBA:
+				{
+					int color;
+					memcpy(&color, p, sizeof(color));
+					GUIPrint_append(0, 0, h-tdy, 1, 0, "  RGBA(%3d, %3d, %3d, %3d)=0x%08X", (unsigned)p[0], (unsigned)p[1], (unsigned)p[2], (unsigned)p[3], color);
+				}
+				break;
+			case IM_BAYER:
+			case IM_BAYER_SEPARATE:
+				{
+					const char labels[]="RGB";
+					int comp=(imy&1)<<1|imx&1;
+					GUIPrint_append(0, 0, h-tdy, 1, 0, "  %c(%5d)=0x%04X", labels[bayer[comp]], (unsigned)p[bayer[comp]], (unsigned)p[bayer[comp]]);
+				}
+				break;
+			}
 		}
-		else
-			GUIPrint(0, 0, h-tdy, 1, "XY(%d, %d) / WH %dx%d  x%lf  %s", imx, imy, impreview->iw, impreview->ih, zoom, imtypestr);
+		GUIPrint_append(0, 0, h-tdy, 1, 1, "");
+		//if((unsigned)imx<(unsigned)impreview->iw&&(unsigned)imy<(unsigned)impreview->ih)
+		//{
+		//	unsigned char *p=impreview->data+((impreview->iw*imy+imx)<<2);
+		//	int color;
+		//	memcpy(&color, p, sizeof(color));
+		//	GUIPrint(0, 0, h-tdy, 1, "XY(%d, %d) / WH %dx%d  x%lf  %s  %d bit  RGBA(%3d, %3d, %3d, %3d)=0x%08X", imx, imy, impreview->iw, impreview->ih, zoom, imtypestr, imagedepth, p[0], p[1], p[2], p[3], color);
+		//}
+		//else
+		//	GUIPrint(0, 0, h-tdy, 1, "XY(%d, %d) / WH %dx%d  x%lf  %s  %d bit", imx, imy, impreview->iw, impreview->ih, zoom, imtypestr, imagedepth);
 	}
 	extern int mouse_bypass;
 	static double t=0;

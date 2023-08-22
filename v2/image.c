@@ -15,7 +15,7 @@ static void copy_row(unsigned char *dst, int dstpxoffset, int dstdepth, const un
 		int srcstride=srcdepth==16?2:1, dststride=dstdepth==16?2:1;
 		const unsigned char *srcptr=src+(srcpxoffset<<(srcdepth==16?3:2));
 		unsigned char *dstptr=dst+(dstpxoffset<<(dstdepth==16?3:2));
-		if(srcstride==2)
+		if(srcstride==2)//16 -> 8 bit
 		{
 			++srcptr;//skip low byte
 			for(int k=0;k<(npx<<2);++k)
@@ -25,11 +25,14 @@ static void copy_row(unsigned char *dst, int dstpxoffset, int dstdepth, const un
 				srcptr+=2;
 			}
 		}
-		else
+		else//8 -> 16 bit
 		{
 			for(int k=0;k<(npx<<2);++k)
 			{
-				dstptr[0]=0;
+				if((k&3)==3&&*srcptr==0xFF)
+					dstptr[0]=0xFF;
+				else
+					dstptr[0]=0;
 
 				dstptr[1]=*srcptr;
 				dstptr+=2;

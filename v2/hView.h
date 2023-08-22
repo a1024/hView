@@ -575,6 +575,10 @@ void draw_ellipse    (float x1, float x2, float y1, float y2, int color);
 #define DRAW_RECT_HOLLOWI(X1, X2, Y1, Y2, COLOR) draw_rect_hollow((float)(X1), (float)X2, (float)Y1, (float)Y2, COLOR)
 #define     DRAW_ELLIPSEI(X1, X2, Y1, Y2, COLOR)     draw_ellipse((float)(X1), (float)X2, (float)Y1, (float)Y2, COLOR)
 
+void draw_curve_enqueue(ArrayHandle *vertices, float x, float y);
+void draw_rect_enqueue(ArrayHandle *vertices, float x1, float x2, float y1, float y2);
+void draw_2d_flush(ArrayHandle vertices, int color, unsigned primitive);
+
 int toggle_sdftext();
 int set_text_color(int color_txt);
 int set_bk_color(int color_bk);
@@ -654,6 +658,14 @@ typedef enum ImageTypeEnum
 extern ImageType imagetype;
 extern int imagedepth;
 extern char bayer[4];
+
+typedef enum ProfilePlotModeEnum
+{
+	PROFILE_OFF,
+	PROFILE_X,
+	PROFILE_Y,
+} ProfilePlotMode;
+extern ProfilePlotMode profileplotmode;
 
 
 #ifdef __cplusplus

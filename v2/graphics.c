@@ -721,6 +721,68 @@ void draw_rect_hollow(float x1, float x2, float y1, float y2, int color)
 #endif
 }
 
+void draw_rect_enqueue(ArrayHandle *vertices, float x1, float x2, float y1, float y2)
+{
+	float
+		X1=screen2NDC_x(x1), Y1=screen2NDC_y(y1),
+		X2=screen2NDC_x(x2), Y2=screen2NDC_y(y2);
+		//X1=screen2NDC_x_bias(x1), Y1=screen2NDC_y_bias(y1),
+		//X2=screen2NDC_x_bias(x2), Y2=screen2NDC_y_bias(y2);
+	float *vptr;
+	if(!*vertices)
+	{
+		ARRAY_ALLOC(float[2], *vertices, 0, 6, 0, 0);
+		vptr=(float*)vertices[0]->data;
+	}
+	else
+		vptr=(float*)ARRAY_APPEND(*vertices, 0, 6, 1, 0);
+	*vptr++=X1; *vptr++=Y1;
+	*vptr++=X1; *vptr++=Y2;
+	*vptr++=X2; *vptr++=Y2;
+	*vptr++=X2; *vptr++=Y2;
+	*vptr++=X2; *vptr++=Y1;
+	*vptr++=X1; *vptr++=Y1;
+}
+void draw_curve_enqueue(ArrayHandle *vertices, float x, float y)
+{
+	float *vptr;
+	if(!*vertices)
+	{
+		ARRAY_ALLOC(float[2], *vertices, 0, 1, 0, 0);
+		vptr=(float*)vertices[0]->data;
+	}
+	else
+		vptr=(float*)ARRAY_APPEND(*vertices, 0, 1, 1, 0);
+	*vptr++=screen2NDC_x(x); *vptr++=screen2NDC_y(y);
+}
+void draw_2d_flush(ArrayHandle vertices, int color, unsigned primitive)
+{
+	if(!vertices||!vertices->count)
+		return;
+
+	setGLProgram(shader_2D.program);		GL_CHECK(error);
+	send_color(u_2D_color, color);			GL_CHECK(error);
+
+	glEnableVertexAttribArray(a_2D_coords);	GL_CHECK(error);
+
+	glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);							GL_CHECK(error);
+	glBufferData(GL_ARRAY_BUFFER, (int)(vertices->count*vertices->esize), vertices->data, GL_STATIC_DRAW);GL_CHECK(error);
+	glVertexAttribPointer(a_2D_coords, 2, GL_FLOAT, GL_FALSE, 0, 0);		GL_CHECK(error);
+	
+//	glBindBuffer(GL_ARRAY_BUFFER, 0);										GL_CHECK(error);
+//	glVertexAttribPointer(a_2D_coords, 2, GL_FLOAT, GL_FALSE, 0, g_fbuf);	GL_CHECK(error);
+	
+#ifndef NO_3D
+	glDisable(GL_DEPTH_TEST);
+#endif
+	glDrawArrays(primitive, 0, vertices->count);	GL_CHECK(error);
+	glDisableVertexAttribArray(a_2D_coords);		GL_CHECK(error);
+#ifndef NO_3D
+	glEnable(GL_DEPTH_TEST);
+#endif
+	vertices->count=0;
+}
+
 ArrayHandle vrtx=0;
 void vrtx_resize(int vcount, int floatspervertex)
 {
@@ -1160,10 +1222,13 @@ float GUIPrint_append(float tab_origin, float x, float y, float zoom, int show, 
 	va_start(args, format);
 	len=vsnprintf(g_buf+g_printed, G_BUF_SIZE-g_printed, format, args);
 	va_end(args);
-
-	if(show)
-		width=print_line_immediate(0, x, y, 1, g_buf+g_printed, len, -1, 0, 0);
+	
 	g_printed+=len;
+	if(show)
+	{
+		width=print_line_immediate(0, x, y, 1, g_buf, g_printed, -1, 0, 0);
+		g_printed=0;
+	}
 	return width;
 }
 
