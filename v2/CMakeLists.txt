@@ -2,16 +2,23 @@
 
 #add_compile_options(/experimental:c11atomics)
 include_directories(
-	"C:/Programs/ffmpeg-6.0-full_build-shared/include"#laptop
+	#includes - laptop
+	"C:/Programs/ffmpeg-6.0-full_build-shared/include"
 
-	"E:/Programs/ffmpeg-6.0-full_build-shared/include"#desktop
+	#includes - desktop
+	"E:/Programs/ffmpeg-6.0-full_build-shared/include"
 	"E:/C/SDL2-2.0.12-MSVC/include"
+	"E:/C/a/libheif-1.12.0"
+	"E:/C/a/LibRaw-0.20.2"
 )
 link_directories(
-	"C:/Programs/ffmpeg-6.0-full_build-shared/lib"#laptop
+	#libraries - laptop
+	"C:/Programs/ffmpeg-6.0-full_build-shared/lib"
 
-	"E:/Programs/ffmpeg-6.0-full_build-shared/lib"#desktop
+	#libraries - desktop
+	"E:/Programs/ffmpeg-6.0-full_build-shared/lib"
 	"E:/C/SDL2-2.0.12-MSVC/lib/x64"
+	"E:/C/hView-cpp/hView"
 )
 add_executable(hView WIN32
 	"console.c"

@@ -25,10 +25,27 @@ double mousewheel_zoom=2;//mouse wheel factor
 double wpx=0, wpy=0;//window position (top-left corner) in image coordinates
 
 ArrayHandle fn=0;
-ImageHandle image=0;
-//int iw=0, ih=0;
-//float *image=0;
+ImageHandle image=0, impreview=0;
+ImageType imagetype=IM_UNINITIALIZED;
+int imagedepth=0;
+char bayer[4]={0};//shift ammounts for the 4 Bayer mosaic components, -1 for grayscale, example: RGGB is {0, 8, 8, 16}
 
+void update_image(int settitle, int render)
+{
+	if(!image)
+		return;
+	if(settitle)
+		set_window_title("%s - hView", (char*)fn->data);
+	if(!impreview||impreview->iw!=image->iw||impreview->ih!=image->ih)
+	{
+		if(impreview)
+			image_free(&impreview);
+		impreview=image_construct(0, 0, 8, 0, image->iw, image->ih, image->depth);
+	}
+	image_blit(impreview, 0, 0, image->data, image->iw, image->ih, image->depth);
+	if(render)
+		io_render();
+}
 static void zoom_at(int xs, int ys, double factor)
 {
 	const double tolerance=1e-2;
@@ -48,7 +65,7 @@ int io_init(int argc, char **argv)//return false to abort
 		fn=filter_path(argv[0], 1);
 		load_media((char*)fn->data, &image);
 		if(image)
-			set_window_title("%s - hView", (char*)fn->data);
+			update_image(1, 0);
 		else
 			array_free(&fn);
 	}
@@ -88,7 +105,7 @@ int io_mousemove()//return true to redraw
 		set_mouse(w>>1, h>>1);
 		return !timer;
 	}
-	return 0;
+	return 1;
 }
 int io_mousewheel(int forward)
 {
@@ -152,9 +169,10 @@ int io_keydn(IOKey key, char c)
 					if(fn)
 						array_free(&fn);
 					fn=filter_path(fn2->data, 1);
-					set_window_title("%s - hView", (char*)fn->data);
-					return 1;
+					update_image(1, 0);
 				}
+				array_free(&fn2);
+				return image!=0;
 			}
 		}
 		break;
@@ -216,7 +234,7 @@ int io_keydn(IOKey key, char c)
 					image=im2;
 					array_free(&fn);
 					fn=filter_path(fn2[0]->data, 1);
-					set_window_title("%s - hView", (char*)fn->data);
+					update_image(1, 1);
 					return 1;
 				}
 				array_free(&filenames);
@@ -270,18 +288,38 @@ void io_render()
 		return;
 	glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
 
-	if(image)
+	if(impreview)
 	{
 		int
-			sx1=image2screen_x_int(0), sx2=image2screen_x_int(image->iw),
-			sy1=image2screen_y_int(0), sy2=image2screen_y_int(image->ih);
-		display_texture_i(sx1, sx2, sy1, sy2, (int*)image->data, image->iw, image->ih, 0, 1, 0, 1, 1, 0);
-		GUIPrint(0, 0, tdy, 1, "%dx%d", image->iw, image->ih);
+			sx1=image2screen_x_int(0), sx2=image2screen_x_int(impreview->iw),
+			sy1=image2screen_y_int(0), sy2=image2screen_y_int(impreview->ih);
+		display_texture_i(sx1, sx2, sy1, sy2, (int*)impreview->data, impreview->iw, impreview->ih, 0, 1, 0, 1, 1, 0);
+		int
+			imx=screen2image_x_int(mx),
+			imy=screen2image_y_int(my);
+		const char *imtypestr="?";
+		switch(imagetype)
+		{
+		case IM_UNINITIALIZED: imtypestr="IM_UNINITIALIZED"; break;
+		case IM_GRAYSCALE:     imtypestr="IM_GRAYSCALE";     break;
+		case IM_RGBA:          imtypestr="IM_RGBA";          break;
+		case IM_BAYER:         imtypestr="IM_BAYER";         break;
+		case IM_BAYER_SEPARATE:imtypestr="IM_BAYER_SEPARATE";break;
+		}
+		if((unsigned)imx<(unsigned)impreview->iw&&(unsigned)imy<(unsigned)impreview->ih)
+		{
+			unsigned char *p=impreview->data+((impreview->iw*imy+imx)<<2);
+			int color;
+			memcpy(&color, p, sizeof(color));
+			GUIPrint(0, 0, h-tdy, 1, "M(%d, %d) / %dx%d  x%lf  %s  RGBA(%3d, %3d, %3d, %3d)=0x%08X", imx, imy, impreview->iw, impreview->ih, zoom, imtypestr, p[0], p[1], p[2], p[3], color);
+		}
+		else
+			GUIPrint(0, 0, h-tdy, 1, "M(%d, %d) / %dx%d  x%lf  %s", imx, imy, impreview->iw, impreview->ih, zoom, imtypestr);
 	}
 	extern int mouse_bypass;
 	static double t=0;
 	double t2=time_ms();
-	GUIPrint(0, 0, 0, 1, "fps %lf  bypass %d", 1000./(t2-t), mouse_bypass);
+	GUIPrint(0, 0, 0, 1, "fps %lf", 1000./(t2-t));
 	t=t2;
 	swapbuffers();
 }

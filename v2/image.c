@@ -3,7 +3,42 @@
 #include<string.h>
 static const char file[]=__FILE__;
 
-void image_blit(ImageHandle dst, int x, int y, unsigned char *src, int iw, int ih)
+static void copy_row(unsigned char *dst, int dstpxoffset, int dstdepth, const unsigned char *src, int srcpxoffset, int srcdepth, int npx)
+{
+	if(srcdepth==dstdepth)
+	{
+		int idxshift=dstdepth==16?3:2;
+		memcpy(dst+(dstpxoffset<<idxshift), src+(srcpxoffset<<idxshift), npx<<idxshift);
+	}
+	else
+	{
+		int srcstride=srcdepth==16?2:1, dststride=dstdepth==16?2:1;
+		const unsigned char *srcptr=src+(srcpxoffset<<(srcdepth==16?3:2));
+		unsigned char *dstptr=dst+(dstpxoffset<<(dstdepth==16?3:2));
+		if(srcstride==2)
+		{
+			++srcptr;//skip low byte
+			for(int k=0;k<(npx<<2);++k)
+			{
+				*dstptr=*srcptr;
+				++dstptr;
+				srcptr+=2;
+			}
+		}
+		else
+		{
+			for(int k=0;k<(npx<<2);++k)
+			{
+				dstptr[0]=0;
+
+				dstptr[1]=*srcptr;
+				dstptr+=2;
+				++srcptr;
+			}
+		}
+	}
+}
+void image_blit(ImageHandle dst, int x, int y, const unsigned char *src, int iw, int ih, int srcdepth)
 {
 	int srcx1=0, srcx2=iw,
 		srcy1=0, srcy2=ih;
@@ -16,20 +51,22 @@ void image_blit(ImageHandle dst, int x, int y, unsigned char *src, int iw, int i
 	if(dstx1<dstx2&&dsty1<dsty2)
 	{
 		for(int srcy=srcy1, dsty=dsty1;srcy<srcy2;++srcy, ++dsty)
-			memcpy(dst->data+((dst->iw*dsty+dstx1)<<2), src+((iw*srcy+srcx1)<<2), (size_t)(dstx2-dstx1)<<2);
+			copy_row(dst->data, dst->iw*dsty+dstx1, dst->depth, src, iw*srcy+srcx1, srcdepth, dstx2-dstx1);
+			//memcpy(dst->data+((dst->iw*dsty+dstx1)<<idxshift), src+((iw*srcy+srcx1)<<idxshift), (size_t)(dstx2-dstx1)<<idxshift);
 	}
 }
-ImageHandle image_construct(int xcap, int ycap, unsigned char *src, int iw, int ih)
+ImageHandle image_construct(int xcap, int ycap, int dstdepth, const unsigned char *src, int iw, int ih, int srcdepth)
 {
 	ptrdiff_t res;
 	ImageHandle image;
+	int idxshift=dstdepth==16?3:2;
 
 	if(!xcap)
 		xcap=iw;
 	if(!ycap)
 		ycap=ih;
 	res=(ptrdiff_t)xcap*ycap;
-	image=(ImageHandle)malloc(sizeof(ImageHeader)+(res<<2));
+	image=(ImageHandle)malloc(sizeof(ImageHeader)+(res<<idxshift));
 	if(!image)
 	{
 		LOG_ERROR("Allocation error");
@@ -39,10 +76,12 @@ ImageHandle image_construct(int xcap, int ycap, unsigned char *src, int iw, int 
 	image->ycap=ycap;
 	image->iw=iw;
 	image->ih=ih;
+	image->depth=dstdepth;
+	image->reserved0=0;
 	if(src)
-		image_blit(image, 0, 0, src, iw, ih);
+		image_blit(image, 0, 0, src, iw, ih, srcdepth);
 	else
-		memset(image->data, 0, res<<2);
+		memset(image->data, 0, res<<idxshift);
 	return image;
 }
 void image_free(ImageHandle *image)
@@ -52,7 +91,8 @@ void image_free(ImageHandle *image)
 }
 void image_resize(ImageHandle *image, int w, int h)
 {
-	ImageHandle im2=image_construct(0, 0, 0, w, h);
+	ImageHandle im2=image_construct(0, 0, 0, image[0]->depth, w, h, image[0]->depth);
+	image_blit(im2, 0, 0, image[0]->data, image[0]->iw, image[0]->ih, image[0]->depth);
 	image_free(image);
 	*image=im2;
 }

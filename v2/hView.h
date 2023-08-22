@@ -13,6 +13,11 @@ extern "C"
 #endif
 
 
+//	#define HVIEW_INCLUDE_LIBAVIF
+	#define HVIEW_INCLUDE_LIBHEIF	//https://github.com/strukturag/libheif
+	#define HVIEW_INCLUDE_LIBRAW	//https://www.libraw.org/download#stable
+
+
 #define TIMER_ID_KEYBOARD 1
 #define TIMER_ID_MONITOR 2
 #define TIMER_MONITOR_MS 100
@@ -609,11 +614,11 @@ void depth_test(int enable);
 //hView
 typedef struct ImageHeaderStruct//greyscale image object
 {
-	int xcap, ycap, iw, ih;//cap >= dim
+	int xcap, ycap, iw, ih, depth, reserved0;//cap >= dim, depth 8 or 16
 	unsigned char data[];
 } ImageHeader, *ImageHandle;
-void image_blit(ImageHandle dst, int x, int y, unsigned char *src, int iw, int ih);
-ImageHandle image_construct(int xcap, int ycap, unsigned char *src, int iw, int ih);
+void image_blit(ImageHandle dst, int x, int y, const unsigned char *src, int iw, int ih, int srcdepth);
+ImageHandle image_construct(int xcap, int ycap, int dstdepth, const unsigned char *src, int iw, int ih, int srcdepth);
 void image_free(ImageHandle *image);
 void image_resize(ImageHandle *image, int w, int h);
 
@@ -634,6 +639,18 @@ extern double
 #define image2screen_y(IY)             ((IY-wpy)*zoom)
 #define image2screen_x_int(IX)         (int)floor(image2screen_x(IX))
 #define image2screen_y_int(IY)         (int)floor(image2screen_y(IY))
+
+typedef enum ImageTypeEnum
+{
+	IM_UNINITIALIZED,
+	IM_GRAYSCALE,	//RGBA where R, G, and B are the same
+	IM_RGBA,
+	IM_BAYER,		//if bayer matrix is RGGB then in quads of {0xAA0000RR, 0xAA00GG00;  0xAA00GG00, 0xAABB0000}
+	IM_BAYER_SEPARATE,//stored same as bayer, channels are shown separately
+} ImageType;
+extern ImageType imagetype;
+extern int imagedepth;
+extern char bayer[4];
 
 
 #ifdef __cplusplus
