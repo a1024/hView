@@ -977,14 +977,14 @@ void print_line_flush(ArrayHandle vertices, float zoom)
 			select_texture(sdf_atlas_txid, u_sdftext_atlas);
 
 			glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);							GL_CHECK(error);
-			glBufferData(GL_ARRAY_BUFFER, vertices->count*vertices->esize, vertices->data, GL_STATIC_DRAW);GL_CHECK(error);
+			glBufferData(GL_ARRAY_BUFFER, (int)(vertices->count*vertices->esize), vertices->data, GL_STATIC_DRAW);GL_CHECK(error);
 			glVertexAttribPointer(a_sdftext_coords, 4, GL_FLOAT, GL_TRUE, 0, 0);	GL_CHECK(error);
 
 		//	glBindBuffer(GL_ARRAY_BUFFER, 0);										GL_CHECK(error);
 		//	glVertexAttribPointer(a_sdftext_coords, 4, GL_FLOAT, GL_TRUE, 0, vptr);	GL_CHECK(error);
 
 			glEnableVertexAttribArray(a_sdftext_coords);	GL_CHECK(error);
-			glDrawArrays(GL_QUADS, 0, vertices->count);		GL_CHECK(error);
+			glDrawArrays(GL_QUADS, 0, (int)vertices->count);GL_CHECK(error);
 			glDisableVertexAttribArray(a_sdftext_coords);	GL_CHECK(error);
 		}
 		else
@@ -993,14 +993,14 @@ void print_line_flush(ArrayHandle vertices, float zoom)
 			select_texture(font_txid, u_text_atlas);
 
 			glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);							GL_CHECK(error);
-			glBufferData(GL_ARRAY_BUFFER, vertices->count*vertices->esize, vertices->data, GL_STATIC_DRAW);GL_CHECK(error);//set vertices & texcoords
+			glBufferData(GL_ARRAY_BUFFER, (int)(vertices->count*vertices->esize), vertices->data, GL_STATIC_DRAW);GL_CHECK(error);//set vertices & texcoords
 			glVertexAttribPointer(a_text_coords, 4, GL_FLOAT, GL_TRUE, 0, 0);		GL_CHECK(error);
 
 		//	glBindBuffer(GL_ARRAY_BUFFER, 0);									GL_CHECK(error);
 		//	glVertexAttribPointer(a_text_coords, 4, GL_FLOAT, GL_TRUE, 0, vptr);GL_CHECK(error);
 
 			glEnableVertexAttribArray(a_text_coords);		GL_CHECK(error);
-			glDrawArrays(GL_QUADS, 0, vertices->count);		GL_CHECK(error);//draw the quads: 4 vertices per character quad
+			glDrawArrays(GL_QUADS, 0, (int)vertices->count);GL_CHECK(error);//draw the quads: 4 vertices per character quad
 			glDisableVertexAttribArray(a_text_coords);		GL_CHECK(error);
 		}
 #ifndef NO_3D

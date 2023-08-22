@@ -31,6 +31,7 @@ int imagedepth=0;
 char bayer[4]={0};//shift ammounts for the 4 Bayer mosaic components, -1 for grayscale, example: RGGB is {0, 8, 8, 16}
 
 static ArrayHandle text_vertices=0;
+int pxlabels_hex=1;
 
 void update_image(int settitle, int render)
 {
@@ -155,38 +156,7 @@ int io_keydn(IOKey key, char c)
 #undef		AK
 		timer_start(10, TIMER_ID_KEYBOARD);
 		break;
-
-	case 'O':
-		if(GET_KEY_STATE(KEY_CTRL))
-		{
-			ArrayHandle fn2=dialog_open_file(0, 0, 0);
-			if(fn2)
-			{
-				ImageHandle im2=0;
-				load_media(fn2->data, &im2);
-				if(im2)
-				{
-					image_free(&image);
-					image=im2;
-					if(fn)
-						array_free(&fn);
-					fn=filter_path(fn2->data, 1);
-					update_image(1, 0);
-				}
-				array_free(&fn2);
-				return image!=0;
-			}
-		}
-		break;
 		
-	case 'R':
-		wpx=0, wpy=0, zoom=1;
-		imagecentered=0;
-		return 1;
-	case 'C':
-		center_image();
-		return 1;
-
 	case KEY_LEFT:
 	case KEY_RIGHT:
 		if(fn)
@@ -243,6 +213,39 @@ int io_keydn(IOKey key, char c)
 			}
 		}
 		break;
+	case 'O':
+		if(GET_KEY_STATE(KEY_CTRL))
+		{
+			ArrayHandle fn2=dialog_open_file(0, 0, 0);
+			if(fn2)
+			{
+				ImageHandle im2=0;
+				load_media(fn2->data, &im2);
+				if(im2)
+				{
+					image_free(&image);
+					image=im2;
+					if(fn)
+						array_free(&fn);
+					fn=filter_path(fn2->data, 1);
+					update_image(1, 0);
+				}
+				array_free(&fn2);
+				return image!=0;
+			}
+		}
+		break;
+		
+	case 'R':
+		wpx=0, wpy=0, zoom=1;
+		imagecentered=0;
+		return 1;
+	case 'C':
+		center_image();
+		return 1;
+	case 'H':
+		pxlabels_hex=!pxlabels_hex;
+		return 1;
 	}
 	return 0;
 }
@@ -284,21 +287,43 @@ void io_timer()
 	if(keyboard['D'])//move window right
 		wpx+=delta/zoom;
 }
-void print_pixellabels(int ix1, int ix2, int iy1, int iy2, unsigned short *ptr, int component, char label, int txtcolor)
+void print_pixellabels(int ix1, int ix2, int iy1, int iy2, int xoffset, int yoffset, int component, char label, long long txtcolors, int is_bayer)
 {
-	txtcolor=set_text_color(txtcolor);
-	for(int iy=MAXVAR(iy1, 0), yend=MINVAR(iy2+2, image->ih);iy<yend;++iy)
+	unsigned short *ptr=(unsigned short*)image->data+((image->iw*yoffset+xoffset)<<2);
+	const char *format;
+	if(pxlabels_hex)
 	{
-		int ky=image2screen_y_int(iy);
-		for(int ix=MAXVAR(ix1, 0), xend=MINVAR(ix2+2, image->iw);ix<xend;++ix)
+		if(imagedepth<=4)
+			format="%c %01X";
+		else if(imagedepth<=8)
+			format="%c %02X";
+		else if(imagedepth<=12)
+			format="%c %03X";
+		else
+			format="%c%04X";
+	}
+	else
+		format="%c%5d";
+	txtcolors=set_text_colors(txtcolors);
+	int iy=MAXVAR(iy1, 0);
+	iy>>=is_bayer;
+	iy<<=is_bayer;
+	float fontsize=1, labeloffset=is_bayer?0:tdy*fontsize*component;
+	for(int yend=MINVAR(iy2+2, image->ih);iy<yend;iy+=1<<is_bayer)
+	{
+		int ky=image2screen_y_int(iy+yoffset);
+		int ix=MAXVAR(ix1, 0);
+		ix>>=is_bayer;
+		ix<<=is_bayer;
+		for(int xend=MINVAR(ix2+2, image->iw);ix<xend;ix+=1<<is_bayer)
 		{
-			int kx=image2screen_x_int(ix)+3;
-			int idx=(image->iw*iy+ix)<<3;
-			GUIPrint_enqueue(&text_vertices, 0, (float)kx, (float)ky+tdy*component, 1, "%c%5d", label, ptr[component]>>(16-imagedepth));
+			int kx=image2screen_x_int(ix+xoffset);
+			int idx=(image->iw*iy+ix)<<2;
+			GUIPrint_enqueue(&text_vertices, 0, (float)kx, (float)ky+labeloffset, fontsize, format, label, ptr[idx+component]>>(16-imagedepth));
 		}
 	}
-	print_line_flush(text_vertices, 1);
-	txtcolor=set_text_color(txtcolor);
+	print_line_flush(text_vertices, fontsize);
+	txtcolors=set_text_colors(txtcolors);
 }
 void io_render()
 {
@@ -324,7 +349,7 @@ void io_render()
 		case IM_BAYER:         imtypestr="IM_BAYER";         break;
 		case IM_BAYER_SEPARATE:imtypestr="IM_BAYER_SEPARATE";break;
 		}
-		if(zoom>=64)
+		if(zoom>=48)
 		{
 			int csx1=CLAMP(0, sx1, w),
 				csx2=CLAMP(0, sx2, w);
@@ -334,22 +359,41 @@ void io_render()
 				ix2=screen2image_x_int(csx2);
 			int iy1=screen2image_y_int(csy1),
 				iy2=screen2image_y_int(csy2);
-			unsigned short *ptr=(unsigned short*)image->data;
-			print_pixellabels(ix1, ix2, iy1, iy2, ptr, 0, 'r', 0xFF0000FF);
-			print_pixellabels(ix1, ix2, iy1, iy2, ptr, 1, 'g', 0xFF00FF00);
-			print_pixellabels(ix1, ix2, iy1, iy2, ptr, 2, 'b', 0xFFFF0000);
-			if(zoom>=96)
-				print_pixellabels(ix1, ix2, iy1, iy2, ptr, 3, 'a', 0xFFFFFFFF);
+			const char labels[]="rgb";
+			long long theme[]=
+			{
+				0xC00000FF80000000,
+				0xC000FF0080000000,
+				0xC0FF000080FFFFFF,
+				0xC0FFFFFF80000000,
+			};
+			if(imagetype==IM_GRAYSCALE)
+				print_pixellabels(ix1, ix2, iy1, iy2, 0, 0, 0, 'g', theme[3], 0);
+			else if(imagetype==IM_RGBA)
+			{
+				print_pixellabels(ix1, ix2, iy1, iy2, 0, 0, 0, 'r', theme[0], 0);
+				print_pixellabels(ix1, ix2, iy1, iy2, 0, 0, 1, 'g', theme[1], 0);
+				print_pixellabels(ix1, ix2, iy1, iy2, 0, 0, 2, 'b', theme[2], 0);
+				if(zoom>=96)
+					print_pixellabels(ix1, ix2, iy1, iy2, 0, 0, 3, 'a', theme[3], 0);
+			}
+			else if(imagetype==IM_BAYER)
+			{
+				print_pixellabels(ix1, ix2, iy1, iy2, 0, 0, bayer[0], labels[bayer[0]], theme[bayer[0]], 1);
+				print_pixellabels(ix1, ix2, iy1, iy2, 1, 0, bayer[1], labels[bayer[1]], theme[bayer[1]], 1);
+				print_pixellabels(ix1, ix2, iy1, iy2, 0, 1, bayer[2], labels[bayer[2]], theme[bayer[2]], 1);
+				print_pixellabels(ix1, ix2, iy1, iy2, 1, 1, bayer[3], labels[bayer[3]], theme[bayer[3]], 1);
+			}
 		}
 		if((unsigned)imx<(unsigned)impreview->iw&&(unsigned)imy<(unsigned)impreview->ih)
 		{
 			unsigned char *p=impreview->data+((impreview->iw*imy+imx)<<2);
 			int color;
 			memcpy(&color, p, sizeof(color));
-			GUIPrint(0, 0, h-tdy, 1, "M(%d, %d) / %dx%d  x%lf  %s  RGBA(%3d, %3d, %3d, %3d)=0x%08X", imx, imy, impreview->iw, impreview->ih, zoom, imtypestr, p[0], p[1], p[2], p[3], color);
+			GUIPrint(0, 0, h-tdy, 1, "XY(%d, %d) / WH %dx%d  x%lf  %s  RGBA(%3d, %3d, %3d, %3d)=0x%08X", imx, imy, impreview->iw, impreview->ih, zoom, imtypestr, p[0], p[1], p[2], p[3], color);
 		}
 		else
-			GUIPrint(0, 0, h-tdy, 1, "M(%d, %d) / %dx%d  x%lf  %s", imx, imy, impreview->iw, impreview->ih, zoom, imtypestr);
+			GUIPrint(0, 0, h-tdy, 1, "XY(%d, %d) / WH %dx%d  x%lf  %s", imx, imy, impreview->iw, impreview->ih, zoom, imtypestr);
 	}
 	extern int mouse_bypass;
 	static double t=0;

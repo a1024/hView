@@ -89,14 +89,14 @@ int load_raw(const char *filename, ImageHandle *image)
 		LOG_WARNING("Libraw error %d: %s", error, libraw_strerror(error));
 		return -1;
 	}
-
-	error=libraw_unpack(decoder);	CHECK_LIBRAW(error);
-
+	
 	int iw2=decoder->sizes.raw_width;
 	int ih2=decoder->sizes.raw_height;
+	error=libraw_unpack(decoder);	CHECK_LIBRAW(error);
+
 	imagedepth=ceil_log2(decoder->color.maximum);
 	imagetype=IM_BAYER;
-	char color_sh[]={32, 16, 0, 16};//RGBG
+	char color_sh[]={2, 1, 0, 1};//RGBG
 	bayer[0]=color_sh[libraw_COLOR(decoder, 0, 0)];
 	bayer[1]=color_sh[libraw_COLOR(decoder, 0, 1)];
 	bayer[2]=color_sh[libraw_COLOR(decoder, 1, 0)];
@@ -118,7 +118,7 @@ int load_raw(const char *filename, ImageHandle *image)
 			{
 				for(int kx=0;kx<iw2;++kx)
 				{
-					int sh=bayer[(ky&1)<<1|kx&1]+16-imagedepth;
+					int sh=(bayer[(ky&1)<<1|kx&1]<<4)+16-imagedepth;
 					*dst=0xFFFF000000000000|(unsigned long long)*src<<sh;
 					++dst;
 					++src;
@@ -142,7 +142,7 @@ int load_raw(const char *filename, ImageHandle *image)
 			{
 				for(int kx=0;kx<iw2;++kx)
 				{
-					int sh=bayer[(ky&1)<<1|kx&1]+16-imagedepth;
+					int sh=(bayer[(ky&1)<<1|kx&1]<<4)+16-imagedepth;
 					*dst=0xFFFF000000000000|(unsigned long long)src[iw2*(ih2-1-ky)+kx]<<sh;
 					++dst;
 				}
@@ -168,7 +168,7 @@ int load_raw(const char *filename, ImageHandle *image)
 			{
 				for(int kx=0;kx<iw2;++kx)
 				{
-					int sh=bayer[(ky&1)<<1|kx&1]+16-imagedepth;
+					int sh=(bayer[(ky&1)<<1|kx&1]<<4)+16-imagedepth;
 					*dst=0xFFFF000000000000|(unsigned long long)src[ih2*kx+ih2-1-ky]<<sh;
 					++dst;
 				}
@@ -194,7 +194,7 @@ int load_raw(const char *filename, ImageHandle *image)
 			{
 				for(int kx=0;kx<iw2;++kx)
 				{
-					int sh=bayer[(ky&1)<<1|kx&1]+16-imagedepth;
+					int sh=(bayer[(ky&1)<<1|kx&1]<<4)+16-imagedepth;
 					*dst=0xFFFF000000000000|(unsigned long long)src[ih2*(iw2-1-kx)+ky]<<sh;
 					++dst;
 				}
@@ -216,11 +216,9 @@ int load_raw(const char *filename, ImageHandle *image)
 int load_media(const char *filename, ImageHandle *image)//TODO special loader for HEIC, AVIF, RAW
 {
 	int len=(int)strlen(filename);
-#ifdef HVIEW_INCLUDE_LIBAVIF
-	if(!_stricmp(filename+len-5, ".AVIF"))
-		return load_avif(filename, image);
-#endif
 #ifdef HVIEW_INCLUDE_LIBHEIF
+	if(!_stricmp(filename+len-5, ".AVIF"))//libheif opens avif too
+		return load_heic(filename, image);
 	if(!_stricmp(filename+len-5, ".HEIC"))
 		return load_heic(filename, image);
 #endif

@@ -13,7 +13,6 @@ extern "C"
 #endif
 
 
-//	#define HVIEW_INCLUDE_LIBAVIF
 	#define HVIEW_INCLUDE_LIBHEIF	//https://github.com/strukturag/libheif
 	#define HVIEW_INCLUDE_LIBRAW	//https://www.libraw.org/download#stable
 
@@ -639,8 +638,8 @@ extern double
 #define screen2image_y_int(SY)         (int)floor(screen2image_y(SY))
 #define screen2image_x_int_rounded(SX) (int)floor(screen2image_x(SX)+0.5)
 #define screen2image_y_int_rounded(SY) (int)floor(screen2image_y(SY)+0.5)
-#define image2screen_x(IX)             ((IX-wpx)*zoom)
-#define image2screen_y(IY)             ((IY-wpy)*zoom)
+#define image2screen_x(IX)             (((IX)-wpx)*zoom)
+#define image2screen_y(IY)             (((IY)-wpy)*zoom)
 #define image2screen_x_int(IX)         (int)floor(image2screen_x(IX))
 #define image2screen_y_int(IY)         (int)floor(image2screen_y(IY))
 

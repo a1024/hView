@@ -4,6 +4,8 @@
 include_directories(
 	#includes - laptop
 	"C:/Programs/ffmpeg-6.0-full_build-shared/include"
+	"C:/Projects/a/LibRaw-0.21.1"
+	"C:/Projects/a/libheif"
 
 	#includes - desktop
 	"E:/Programs/ffmpeg-6.0-full_build-shared/include"
@@ -14,6 +16,7 @@ include_directories(
 link_directories(
 	#libraries - laptop
 	"C:/Programs/ffmpeg-6.0-full_build-shared/lib"
+	"C:/Projects/hView/hView"
 
 	#libraries - desktop
 	"E:/Programs/ffmpeg-6.0-full_build-shared/lib"

@@ -91,7 +91,7 @@ void image_free(ImageHandle *image)
 }
 void image_resize(ImageHandle *image, int w, int h)
 {
-	ImageHandle im2=image_construct(0, 0, 0, image[0]->depth, w, h, image[0]->depth);
+	ImageHandle im2=image_construct(0, 0, image[0]->depth, 0, w, h, image[0]->depth);
 	image_blit(im2, 0, 0, image[0]->data, image[0]->iw, image[0]->ih, image[0]->depth);
 	image_free(image);
 	*image=im2;
