@@ -30,6 +30,8 @@ ImageType imagetype=IM_UNINITIALIZED;
 int imagedepth=0;
 char bayer[4]={0};//shift ammounts for the 4 Bayer mosaic components, -1 for grayscale, example: RGGB is {0, 8, 8, 16}
 
+static ArrayHandle text_vertices=0;
+
 void update_image(int settitle, int render)
 {
 	if(!image)
@@ -282,6 +284,22 @@ void io_timer()
 	if(keyboard['D'])//move window right
 		wpx+=delta/zoom;
 }
+void print_pixellabels(int ix1, int ix2, int iy1, int iy2, unsigned short *ptr, int component, char label, int txtcolor)
+{
+	txtcolor=set_text_color(txtcolor);
+	for(int iy=MAXVAR(iy1, 0), yend=MINVAR(iy2+2, image->ih);iy<yend;++iy)
+	{
+		int ky=image2screen_y_int(iy);
+		for(int ix=MAXVAR(ix1, 0), xend=MINVAR(ix2+2, image->iw);ix<xend;++ix)
+		{
+			int kx=image2screen_x_int(ix)+3;
+			int idx=(image->iw*iy+ix)<<3;
+			GUIPrint_enqueue(&text_vertices, 0, (float)kx, (float)ky+tdy*component, 1, "%c%5d", label, ptr[component]>>(16-imagedepth));
+		}
+	}
+	print_line_flush(text_vertices, 1);
+	txtcolor=set_text_color(txtcolor);
+}
 void io_render()
 {
 	if(h<=0)
@@ -305,6 +323,23 @@ void io_render()
 		case IM_RGBA:          imtypestr="IM_RGBA";          break;
 		case IM_BAYER:         imtypestr="IM_BAYER";         break;
 		case IM_BAYER_SEPARATE:imtypestr="IM_BAYER_SEPARATE";break;
+		}
+		if(zoom>=64)
+		{
+			int csx1=CLAMP(0, sx1, w),
+				csx2=CLAMP(0, sx2, w);
+			int csy1=CLAMP(0, sy1, h),
+				csy2=CLAMP(0, sy2, h);
+			int ix1=screen2image_x_int(csx1),
+				ix2=screen2image_x_int(csx2);
+			int iy1=screen2image_y_int(csy1),
+				iy2=screen2image_y_int(csy2);
+			unsigned short *ptr=(unsigned short*)image->data;
+			print_pixellabels(ix1, ix2, iy1, iy2, ptr, 0, 'r', 0xFF0000FF);
+			print_pixellabels(ix1, ix2, iy1, iy2, ptr, 1, 'g', 0xFF00FF00);
+			print_pixellabels(ix1, ix2, iy1, iy2, ptr, 2, 'b', 0xFFFF0000);
+			if(zoom>=96)
+				print_pixellabels(ix1, ix2, iy1, iy2, ptr, 3, 'a', 0xFFFFFFFF);
 		}
 		if((unsigned)imx<(unsigned)impreview->iw&&(unsigned)imy<(unsigned)impreview->ih)
 		{

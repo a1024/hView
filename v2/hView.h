@@ -580,10 +580,14 @@ int toggle_sdftext();
 int set_text_color(int color_txt);
 int set_bk_color(int color_bk);
 long long set_text_colors(long long colors);//0xBKBKBKBK_TXTXTXTX
-float print_line(float tab_origin, float x, float y, float zoom, const char *msg, int msg_length, int req_cols, int *ret_idx, int *ret_cols);//returns text width
+float print_line_immediate(float tab_origin, float x, float y, float zoom, const char *msg, int msg_length, int req_cols, int *ret_idx, int *ret_cols);//returns text width
 float GUIPrint(float tab_origin, float x, float y, float zoom, const char *format, ...);//returns text width
 extern int g_printed;
 float GUIPrint_append(float tab_origin, float x, float y, float zoom, int show, const char *format, ...);
+
+float GUIPrint_enqueue(ArrayHandle *vertices, float tab_origin, float x, float y, float zoom, const char *format, ...);
+float print_line_enqueue(ArrayHandle *vertices, float tab_origin, float x, float y, float zoom, const char *msg, int msg_length, int req_cols, int *ret_idx, int *ret_cols);
+void print_line_flush(ArrayHandle vertices, float zoom);
 
 void display_texture(int x1, int x2, int y1, int y2, unsigned txid, float alpha, float tx1, float tx2, float ty1, float ty2);
 void display_texture_i(int x1, int x2, int y1, int y2, int *rgb, int txw, int txh, float tx1, float tx2, float ty1, float ty2, float alpha, int linear);
