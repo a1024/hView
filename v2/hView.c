@@ -226,6 +226,7 @@ int io_keydn(IOKey key, char c)
 			"Ctrl O: Open image\n"
 			"E: Reset view to topleft corner at 1:1\n"
 			"C: Fit image to window\n"
+			"Q: Equalize histogram\n"
 			"Ctrl C: Copy pixel values from screen (when zoomed in)\n"
 			"H: Toggle histogram\n"
 			"Ctrl H: Toggle hexadecimal pixel labels\n"
@@ -339,6 +340,8 @@ int io_keydn(IOKey key, char c)
 		}
 		break;
 		
+	case 'Q'://equalization
+		break;
 	case 'E':
 		wpx=0, wpy=0, zoom=1;
 		imagecentered=0;

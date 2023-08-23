@@ -11,7 +11,15 @@
 extern "C"
 {
 #endif
-
+//v	copy pixels as text
+//v	histogram
+//v	cross-section profile
+//	equalization
+//	contrast
+//	ctrl S
+//	separate components
+//v	bitplanes
+//	animation
 
 	#define HVIEW_INCLUDE_LIBHEIF	//https://github.com/strukturag/libheif
 	#define HVIEW_INCLUDE_LIBRAW	//https://www.libraw.org/download#stable
