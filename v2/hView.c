@@ -1,4 +1,6 @@
 #include"hView.h"
+#include<stdlib.h>
+#include<string.h>
 #include<math.h>
 static const char file[]=__FILE__;
 
@@ -76,6 +78,73 @@ void calc_hist()
 				int comp=bayer[(ky&1)<<1|kx&1];
 				unsigned char sym=impreview->data[(impreview->iw*ky+kx)<<2|comp];
 				++histogram[comp<<8|sym];
+			}
+		}
+		break;
+	}
+}
+static int integrate_hist(int *hist, int nlevels, int *CDF)
+{
+	int sum=0;
+	for(int sym=0;sym<nlevels;++sym)
+	{
+		CDF[sym]=sum;
+		sum+=hist[sym];
+	}
+	return sum;
+}
+void equalize()
+{
+	if(!impreview)
+		return;
+	calc_hist();
+	int *CDF=(int*)malloc(256*sizeof(int));
+	if(!CDF)
+	{
+		LOG_ERROR("Allocation error");
+		return;
+	}
+	int res=impreview->iw*impreview->ih, fsum;
+	unsigned char *ptr=(unsigned char*)impreview->data;
+	switch(imagetype)
+	{
+	case IM_GRAYSCALE:
+		fsum=integrate_hist(histogram, 256, CDF);
+		for(int k=0;k<res;++k)
+		{
+			int val=ptr[k<<2];
+			val=(int)((long long)CDF[val]*255/fsum);
+			ptr[k<<2  ]=val;
+			ptr[k<<2|1]=val;
+			ptr[k<<2|2]=val;
+		}
+		break;
+	case IM_RGBA:
+		for(int kc=0;kc<3;++kc)
+		{
+			fsum=integrate_hist(histogram+(kc<<8), 256, CDF);
+			for(int k=0;k<res;++k)
+			{
+				int val=ptr[k<<2|kc];
+				val=(int)((long long)CDF[val]*255/fsum);
+				ptr[k<<2|kc]=val;
+			}
+		}
+		break;
+	case IM_BAYER:
+		for(int kb=0;kb<4;++kb)
+		{
+			int xoffset=kb&1, yoffset=kb>>1, kc=bayer[kb];
+			fsum=integrate_hist(histogram+(kc<<8), 256, CDF);
+			for(int ky=yoffset;ky<impreview->ih;ky+=2)
+			{
+				for(int kx=xoffset;kx<impreview->iw;kx+=2)
+				{
+					int idx=impreview->iw*ky+kx;
+					int val=ptr[idx<<2|kc];
+					val=(int)((long long)CDF[val]*255/fsum);
+					ptr[idx<<2|kc]=val;
+				}
 			}
 		}
 		break;
@@ -341,7 +410,10 @@ int io_keydn(IOKey key, char c)
 		break;
 		
 	case 'Q'://equalization
-		break;
+		equalize();
+		if(hist_on)
+			calc_hist();
+		return 1;
 	case 'E':
 		wpx=0, wpy=0, zoom=1;
 		imagecentered=0;
@@ -781,7 +853,7 @@ void io_render()
 		case IM_BAYER_SEPARATE:imtypestr="IM_BAYER_SEPARATE";break;
 		}
 		//g_printed=0;
-		GUIPrint_append(0, 0, h-tdy, 1, 0, "XY(%5d, %5d) / WH %dx%d  x%lf  %s  %d bitdepth", imx, imy, impreview->iw, impreview->ih, zoom, imtypestr, imagedepth);
+		GUIPrint_append(0, 0, h-tdy, 1, 0, "XY(%5d, %5d) / WH %dx%d  x%lf  %s  bitdepth %d", imx, imy, impreview->iw, impreview->ih, zoom, imtypestr, imagedepth);
 		if(bitmode==1)
 			GUIPrint_append(0, 0, h-tdy, 1, 0, "  Bitplane %d", bitplane);
 		else if(bitmode==2)
@@ -806,7 +878,7 @@ void io_render()
 				{
 					const char labels[]="RGB";
 					int comp=(imy&1)<<1|imx&1;
-					GUIPrint_append(0, 0, h-tdy, 1, 0, "  %c(%5d)=0x%04X", labels[bayer[comp]], (unsigned)p[bayer[comp]], (unsigned)p[bayer[comp]]);
+					GUIPrint_append(0, 0, h-tdy, 1, 0, "  %c%c%c%c  %c(%5d)=0x%04X", labels[bayer[0]], labels[bayer[1]], labels[bayer[2]], labels[bayer[3]], labels[bayer[comp]], (unsigned)p[bayer[comp]], (unsigned)p[bayer[comp]]);
 				}
 				break;
 			}
