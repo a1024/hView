@@ -775,8 +775,8 @@ void draw_2d_flush(ArrayHandle vertices, int color, unsigned primitive)
 #ifndef NO_3D
 	glDisable(GL_DEPTH_TEST);
 #endif
-	glDrawArrays(primitive, 0, vertices->count);	GL_CHECK(error);
-	glDisableVertexAttribArray(a_2D_coords);		GL_CHECK(error);
+	glDrawArrays(primitive, 0, (int)vertices->count);	GL_CHECK(error);
+	glDisableVertexAttribArray(a_2D_coords);			GL_CHECK(error);
 #ifndef NO_3D
 	glEnable(GL_DEPTH_TEST);
 #endif

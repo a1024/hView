@@ -590,7 +590,7 @@ void draw_histogram(int *hist, int nlevels, int color, int y1, int y2)
 			fmax=hist[sym];
 	}
 	for(int sym=0;sym<nlevels;++sym)
-		draw_rect_enqueue(&vertices_2d, (float)sym*w/nlevels, (float)(sym+1)*w/nlevels, y2-(float)hist[sym]*(y2-y1)/fmax, y2);
+		draw_rect_enqueue(&vertices_2d, (float)sym*w/nlevels, (float)(sym+1)*w/nlevels, y2-(float)hist[sym]*(y2-y1)/fmax, (float)y2);
 	draw_2d_flush(vertices_2d, color, GL_TRIANGLES);
 }
 void draw_profile_x(int comp, int color)//horizontal cross-section profile		to see the color/spatial correlation
@@ -615,7 +615,8 @@ void draw_profile_x(int comp, int color)//horizontal cross-section profile		to s
 		default:
 			return;
 		}
-		int ix, y2;
+		int ix;
+		float y2;
 		float gain=(h>>1)/255.f;
 		for(int kx=0;kx<w;++kx)
 		{
@@ -629,7 +630,7 @@ void draw_profile_x(int comp, int color)//horizontal cross-section profile		to s
 				y2=h-tdy-row[ix<<lgstride]*gain;
 			else
 				y2=h-tdy;
-			draw_curve_enqueue(&vertices_2d, (float)kx, (float)y2);
+			draw_curve_enqueue(&vertices_2d, (float)kx, y2);
 		}
 		draw_2d_flush(vertices_2d, color, GL_LINE_STRIP);
 	}
@@ -656,8 +657,9 @@ void draw_profile_y(int comp, int color)//vertical cross-section profile
 		default:
 			return;
 		}
-
-		int iy, x2;
+		
+		float x2;
+		int iy;
 		float gain=(w>>1)/255.f;
 		for(int ky=0;ky<h;++ky)
 		{
@@ -671,7 +673,7 @@ void draw_profile_y(int comp, int color)//vertical cross-section profile
 				x2=col[iy*stride]*gain;
 			else
 				x2=0;
-			draw_curve_enqueue(&vertices_2d, (float)x2, (float)ky);
+			draw_curve_enqueue(&vertices_2d, x2, (float)ky);
 		}
 		draw_2d_flush(vertices_2d, color, GL_LINE_STRIP);
 	}
@@ -730,12 +732,12 @@ void io_render()
 			switch(imagetype)
 			{
 			case IM_GRAYSCALE:
-				draw_histogram(histogram, 256, 0x80808080, tdy, h-tdy);
+				draw_histogram(histogram, 256, 0x80808080, (int)tdy, (int)(h-tdy));
 				break;
 			case IM_RGBA:
 			case IM_BAYER:
 				{
-					int y1=tdy, y2=h-tdy, dy=y2-y1;
+					int y1=(int)tdy, y2=(int)(h-tdy), dy=(int)(y2-y1);
 					draw_histogram(histogram    , 256, 0x800000FF, y1       , y1+dy/3);
 					draw_histogram(histogram+256, 256, 0x8000FF00, y1+dy  /3, y1+dy*2/3);
 					draw_histogram(histogram+512, 256, 0x80FF0000, y1+dy*2/3, y2);
