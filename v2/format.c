@@ -3,6 +3,7 @@
 #include<libavcodec/avcodec.h>
 #include<libavutil/opt.h>
 #include<libavutil/fifo.h>
+#include<libavutil/imgutils.h>
 #include<libavfilter/buffersrc.h>
 #include<libavfilter/buffersink.h>
 #include<libswscale/swscale.h>
@@ -63,7 +64,7 @@ int load_heic(const char *filename, ImageHandle *image)
 	long long t2=__rdtsc();
 	LOG_ERROR("HEIC: %lld cycles", t2-t1);
 #endif
-	*image=image_construct(0, 0, 16, data, iw2, ih2, 8);
+	*image=image_construct(0, 0, 16, data, iw2, ih2, 0, 8);
 	//assign_from_RGBA8((int*)data, iw2, ih2);
 	imagedepth=8;
 	imagetype=IM_RGBA;
@@ -107,7 +108,7 @@ int load_raw(const char *filename, ImageHandle *image)
 	{
 	case 0:
 		{
-			*image=image_construct(0, 0, 16, 0, iw2, ih2, 16);
+			*image=image_construct(0, 0, 16, 0, iw2, ih2, 0, 16);
 			if(!*image)
 			{
 				LOG_ERROR("realloc returned null");
@@ -128,7 +129,7 @@ int load_raw(const char *filename, ImageHandle *image)
 		break;
 	case 3://upside-down
 		{
-			*image=image_construct(0, 0, 16, 0, iw2, ih2, 16);
+			*image=image_construct(0, 0, 16, 0, iw2, ih2, 0, 16);
 			if(!*image)
 			{
 				LOG_ERROR("realloc returned null");
@@ -157,7 +158,7 @@ int load_raw(const char *filename, ImageHandle *image)
 			bayer[3]=bayer[2];
 			bayer[2]=temp;
 			SWAPVAR(iw2, ih2, temp);
-			*image=image_construct(0, 0, 16, 0, iw2, ih2, 16);
+			*image=image_construct(0, 0, 16, 0, iw2, ih2, 0, 16);
 			if(!*image)
 			{
 				LOG_ERROR("realloc returned null");
@@ -183,7 +184,7 @@ int load_raw(const char *filename, ImageHandle *image)
 			bayer[3]=bayer[1];
 			bayer[1]=temp;
 			SWAPVAR(iw2, ih2, temp);
-			*image=image_construct(0, 0, 16, 0, iw2, ih2, 16);
+			*image=image_construct(0, 0, 16, 0, iw2, ih2, 0, 16);
 			if(!*image)
 			{
 				LOG_ERROR("realloc returned null");
@@ -339,7 +340,10 @@ int load_media(const char *filename, ImageHandle *image)//TODO special loader fo
 				struct SwsContext *swsctx=sws_getContext(frame->width, frame->height, frame->format, frame2->width, frame2->height, frame2->format, SWS_FAST_BILINEAR, 0, 0, 0);
 				sws_scale(swsctx, frame->data, frame->linesize, 0, frame->height, frame2->data, frame2->linesize);
 
-				*image=image_construct(0, 0, 16, frame2->data[0], frame2->width, frame2->height, 16);
+				int padding=abs(frame2->linesize[0])/8-frame2->width;//division by 8 is because a single pixel is 64-bit (8 bytes)
+				if(padding<0)
+					padding=0;
+				*image=image_construct(0, 0, 16, frame2->data[0], frame2->width, frame2->height, padding, 16);
 				if(!*image)
 				{
 					LOG_ERROR("Allocation error");

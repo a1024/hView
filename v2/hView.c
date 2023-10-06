@@ -162,7 +162,7 @@ void update_image(int settitle, int render)
 	{
 		if(impreview)
 			image_free(&impreview);
-		impreview=image_construct(0, 0, 8, 0, image->iw, image->ih, image->depth);
+		impreview=image_construct(0, 0, 8, 0, image->iw, image->ih, 0, image->depth);
 	}
 	if(bitmode==1)
 	{
@@ -200,7 +200,7 @@ void update_image(int settitle, int render)
 		}
 	}
 	else
-		image_blit(impreview, 0, 0, image->data, image->iw, image->ih, image->depth);
+		image_blit(impreview, 0, 0, image->data, image->iw, image->ih, image->xcap-image->iw, image->depth);
 	if(hist_on)
 		calc_hist();
 	if(render)

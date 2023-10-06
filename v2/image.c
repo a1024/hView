@@ -41,8 +41,9 @@ static void copy_row(unsigned char *dst, int dstpxoffset, int dstdepth, const un
 		}
 	}
 }
-void image_blit(ImageHandle dst, int x, int y, const unsigned char *src, int iw, int ih, int srcdepth)
+void image_blit(ImageHandle dst, int x, int y, const unsigned char *src, int iw, int ih, int rowpad, int srcdepth)
 {
+	int rowlen=iw+rowpad;
 	int srcx1=0, srcx2=iw,
 		srcy1=0, srcy2=ih;
 	int dstx1=x, dstx2=x+iw,
@@ -54,11 +55,11 @@ void image_blit(ImageHandle dst, int x, int y, const unsigned char *src, int iw,
 	if(dstx1<dstx2&&dsty1<dsty2)
 	{
 		for(int srcy=srcy1, dsty=dsty1;srcy<srcy2;++srcy, ++dsty)
-			copy_row(dst->data, dst->iw*dsty+dstx1, dst->depth, src, iw*srcy+srcx1, srcdepth, dstx2-dstx1);
-			//memcpy(dst->data+((dst->iw*dsty+dstx1)<<idxshift), src+((iw*srcy+srcx1)<<idxshift), (size_t)(dstx2-dstx1)<<idxshift);
+			copy_row(dst->data, dst->xcap*dsty+dstx1, dst->depth, src, rowlen*srcy+srcx1, srcdepth, dstx2-dstx1);
+			//memcpy(dst->data+((dst->iw*dsty+dstx1)<<idxshift), src+((iw*srcy+srcx1)<<idxshift), (size_t)(dstx2-dstx1)<<idxshift);//X
 	}
 }
-ImageHandle image_construct(int xcap, int ycap, int dstdepth, const unsigned char *src, int iw, int ih, int srcdepth)
+ImageHandle image_construct(int xcap, int ycap, int dstdepth, const unsigned char *src, int iw, int ih, int rowpad, int srcdepth)
 {
 	ptrdiff_t res;
 	ImageHandle image;
@@ -82,7 +83,7 @@ ImageHandle image_construct(int xcap, int ycap, int dstdepth, const unsigned cha
 	image->depth=dstdepth;
 	image->reserved0=0;
 	if(src)
-		image_blit(image, 0, 0, src, iw, ih, srcdepth);
+		image_blit(image, 0, 0, src, iw, ih, rowpad, srcdepth);
 	else
 		memset(image->data, 0, res<<idxshift);
 	return image;
@@ -94,8 +95,8 @@ void image_free(ImageHandle *image)
 }
 void image_resize(ImageHandle *image, int w, int h)
 {
-	ImageHandle im2=image_construct(0, 0, image[0]->depth, 0, w, h, image[0]->depth);
-	image_blit(im2, 0, 0, image[0]->data, image[0]->iw, image[0]->ih, image[0]->depth);
+	ImageHandle im2=image_construct(0, 0, image[0]->depth, 0, w, h, 0, image[0]->depth);
+	image_blit(im2, 0, 0, image[0]->data, image[0]->iw, image[0]->ih, image[0]->xcap-image[0]->iw, image[0]->depth);
 	image_free(image);
 	*image=im2;
 }

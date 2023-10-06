@@ -632,8 +632,8 @@ typedef struct ImageHeaderStruct//greyscale image object
 	int xcap, ycap, iw, ih, depth, reserved0;//cap >= dim, depth 8 or 16
 	unsigned char data[];
 } ImageHeader, *ImageHandle;
-void image_blit(ImageHandle dst, int x, int y, const unsigned char *src, int iw, int ih, int srcdepth);
-ImageHandle image_construct(int xcap, int ycap, int dstdepth, const unsigned char *src, int iw, int ih, int srcdepth);
+void image_blit(ImageHandle dst, int x, int y, const unsigned char *src, int iw, int ih, int rowpad, int srcdepth);
+ImageHandle image_construct(int xcap, int ycap, int dstdepth, const unsigned char *src, int iw, int ih, int rowpad, int srcdepth);
 void image_free(ImageHandle *image);
 void image_resize(ImageHandle *image, int w, int h);
 
