@@ -29,7 +29,9 @@ double mousewheel_zoom=2;//mouse wheel factor
 double wpx=0, wpy=0;//window position (top-left corner) in image coordinates
 
 ArrayHandle fn=0;
-ImageHandle image=0, impreview=0;
+ImageHandle
+	image=0,//16bit
+	impreview=0;//8bit
 ImageType imagetype=IM_UNINITIALIZED;
 int imagedepth=0;
 char bayer[4]={0};//shift ammounts for the 4 Bayer mosaic components, -1 for grayscale, example: RGGB is {0, 8, 8, 16}
@@ -573,6 +575,10 @@ int io_keydn(IOKey key, char c)
 			MODVAR(bitplane, bitplane, n);
 			update_image(0, 1);
 		}
+		break;
+	case KEY_SPACE:
+		if(imagetype==IM_BAYER)
+			test48(image, imagedepth, bayer);
 		break;
 	}
 	return 0;

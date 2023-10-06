@@ -191,8 +191,7 @@ typedef struct DListStruct
 void dlist_init(DListHandle list, size_t objsize, size_t objpernode, void (*destructor)(void*));
 void dlist_copy(DListHandle dst, DListHandle src);
 void dlist_clear(DListHandle list);
-void dlist_appendtoarray(DListHandle list, ArrayHandle *dst);
-//void dlist_appendtoarrayandclear(DListHandle list, ArrayHandle *dst);
+size_t dlist_appendtoarray(DListHandle list, ArrayHandle *dst);
 
 void* dlist_push_back1(DListHandle list, const void *obj);//shallow copy of obj
 void* dlist_push_back(DListHandle list, const void *data, size_t count);

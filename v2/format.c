@@ -211,6 +211,11 @@ int load_raw(const char *filename, ImageHandle *image)
 }
 #endif
 
+//int load_netbpm(const char *filename, ImageHandle *image)
+//{
+//	ArrayHandle text=load_file(filename, 1, 0, 1);
+//}
+
 //https://github.com/ShootingKing-AM/ffmpeg-pseudocode-tutorial
 //https://github.com/leandromoreira/ffmpeg-libav-tutorial/blob/master/README.md
 int load_media(const char *filename, ImageHandle *image)//TODO special loader for HEIC, AVIF, RAW
@@ -235,6 +240,13 @@ int load_media(const char *filename, ImageHandle *image)//TODO special loader fo
 	)
 		return load_raw(filename, image);
 #endif
+	//if(
+	//	!_stricmp(filename+len-4, ".PBM")||
+	//	!_stricmp(filename+len-4, ".PGM")||
+	//	!_stricmp(filename+len-4, ".PPM")
+	//)
+	//	return load_netbpm(filename, image);
+
 	int error;
 	AVFormatContext *formatContext=avformat_alloc_context();
 	if(!formatContext)
@@ -321,19 +333,19 @@ int load_media(const char *filename, ImageHandle *image)//TODO special loader fo
 				}
 				frame2->width=frame->width;
 				frame2->height=frame->height;
-				frame2->format=AV_PIX_FMT_RGBA;
+				frame2->format=AV_PIX_FMT_RGBA64LE;
 				av_frame_get_buffer(frame2, 32);
 
 				struct SwsContext *swsctx=sws_getContext(frame->width, frame->height, frame->format, frame2->width, frame2->height, frame2->format, SWS_FAST_BILINEAR, 0, 0, 0);
 				sws_scale(swsctx, frame->data, frame->linesize, 0, frame->height, frame2->data, frame2->linesize);
 
-				*image=image_construct(0, 0, 16, frame2->data[0], frame2->width, frame2->height, 8);
+				*image=image_construct(0, 0, 16, frame2->data[0], frame2->width, frame2->height, 16);
 				if(!*image)
 				{
 					LOG_ERROR("Allocation error");
 					return -1;
 				}
-				imagedepth=8;
+				imagedepth=16;
 				imagetype=IM_RGBA;
 
 				//int res=image[0]->iw*image[0]->ih;

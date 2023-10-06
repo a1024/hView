@@ -676,6 +676,14 @@ typedef enum ProfilePlotModeEnum
 extern ProfilePlotMode profileplotmode;
 
 
+//tests
+
+//T48: lossless raw image codec
+int t48_encode(const unsigned short *src, int iw, int ih, int idepth, char *bayer, ArrayHandle *data, int loud);
+int t48_decode(const unsigned char *data, size_t srclen, int iw, int ih, int idepth, char *bayer, unsigned short *dst, int loud);
+void test48(ImageHandle image, int idepth, char *bayer);
+
+
 #ifdef __cplusplus
 }
 #endif

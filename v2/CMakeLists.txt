@@ -29,6 +29,7 @@ add_executable(hView WIN32
 	"graphics.c"
 	"hView.c"
 	"image.c"
+	"tests.c"
 	"util.c"
 	"window.c"
 )
