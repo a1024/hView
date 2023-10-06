@@ -349,7 +349,12 @@ int load_media(const char *filename, ImageHandle *image)//TODO special loader fo
 					LOG_ERROR("Allocation error");
 					return -1;
 				}
-				imagedepth=16;
+				
+				AVPixFmtDescriptor const *desc=av_pix_fmt_desc_get(frame->format);
+				int bpp0=av_get_bits_per_pixel(desc);
+				//int bpp=av_get_bits_per_sample(codec->id);//returns 0
+
+				imagedepth=bpp0/desc->nb_components;
 				imagetype=IM_RGBA;
 
 				//int res=image[0]->iw*image[0]->ih;
@@ -361,7 +366,7 @@ int load_media(const char *filename, ImageHandle *image)//TODO special loader fo
 
 				sws_freeContext(swsctx);
 				av_frame_free(&frame2);
-				break;//get one frame
+				break;//get just the first frame
 			}
 		}
 		av_packet_unref(packet);
