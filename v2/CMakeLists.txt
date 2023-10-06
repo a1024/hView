@@ -23,7 +23,7 @@ link_directories(
 	"E:/C/SDL2-2.0.12-MSVC/lib/x64"
 	"E:/C/hView-cpp/hView"
 )
-add_executable(hView WIN32
+add_executable(hView2 WIN32
 	"console.c"
 	"format.c"
 	"graphics.c"
@@ -35,5 +35,5 @@ add_executable(hView WIN32
 )
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
-	set_property(TARGET hView PROPERTY C_STANDARD 11)
+	set_property(TARGET hView2 PROPERTY C_STANDARD 11)
 endif()

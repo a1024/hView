@@ -263,9 +263,9 @@ int io_mousemove()//return true to redraw
 		//int X0=w>>1, Y0=h>>1;
 		//cam_turnMouse(cam, mx-X0, my-Y0, mouse_sensitivity);
 		set_mouse(w>>1, h>>1);
-		return !timer;
+		//return !timer;
 	}
-	return 1;
+	return !timer;//
 }
 int io_mousewheel(int forward)
 {
