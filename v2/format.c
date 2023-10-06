@@ -26,8 +26,31 @@
 #endif
 static const char file[]=__FILE__;
 
-
-#define CHECKAV(E) (!(E)||LOG_ERROR("%s", av_err2str(E)))
+static void update_globals(const char *fn, int iw, int ih)//accesses globals
+{
+	filesize=get_filesize(fn);
+	if(filesize>0)
+	{
+		switch(imagetype)
+		{
+		case IM_GRAYSCALE:
+			if(has_alpha)
+				format_CR=(double)iw*ih*imagedepth*2/(filesize*8);
+			else
+				format_CR=(double)iw*ih*imagedepth/(filesize*8);
+			break;
+		case IM_RGBA:
+			if(has_alpha)
+				format_CR=(double)iw*ih*imagedepth*4/(filesize*8);
+			else
+				format_CR=(double)iw*ih*imagedepth*3/(filesize*8);
+			break;
+		case IM_BAYER:
+			format_CR=(double)iw*ih*imagedepth/(filesize*8);
+			break;
+		}
+	}
+}
 
 #ifdef HVIEW_INCLUDE_LIBHEIF
 int load_heic(const char *filename, ImageHandle *image)
@@ -66,11 +89,15 @@ int load_heic(const char *filename, ImageHandle *image)
 #endif
 	*image=image_construct(0, 0, 16, data, iw2, ih2, 0, 8);
 	//assign_from_RGBA8((int*)data, iw2, ih2);
-	imagedepth=8;
+
+	has_alpha=heif_image_handle_has_alpha_channel(handle);
+	imagedepth=heif_image_handle_get_luma_bits_per_pixel(handle);
 	imagetype=IM_RGBA;
 
 	heif_image_release(img);
 	heif_image_handle_release(handle);
+	
+	update_globals(filename, image[0]->iw, image[0]->ih);
 	return 0;
 }
 #endif
@@ -208,14 +235,15 @@ int load_raw(const char *filename, ImageHandle *image)
 	}
 	libraw_free_image(decoder);
 	libraw_close(decoder);
+	
+	has_alpha=0;//only edited RAWs (eg: Photoshop) can have alpha
+	update_globals(filename, image[0]->iw, image[0]->ih);
 	return 0;
 }
 #endif
 
-//int load_netbpm(const char *filename, ImageHandle *image)
-//{
-//	ArrayHandle text=load_file(filename, 1, 0, 1);
-//}
+
+#define CHECKAV(E) (!(E)||LOG_ERROR("%s", av_err2str(E)))
 
 //https://github.com/ShootingKing-AM/ffmpeg-pseudocode-tutorial
 //https://github.com/leandromoreira/ffmpeg-libav-tutorial/blob/master/README.md
@@ -241,12 +269,6 @@ int load_media(const char *filename, ImageHandle *image)//TODO special loader fo
 	)
 		return load_raw(filename, image);
 #endif
-	//if(
-	//	!_stricmp(filename+len-4, ".PBM")||
-	//	!_stricmp(filename+len-4, ".PGM")||
-	//	!_stricmp(filename+len-4, ".PPM")
-	//)
-	//	return load_netbpm(filename, image);
 
 	int error;
 	AVFormatContext *formatContext=avformat_alloc_context();
@@ -354,6 +376,7 @@ int load_media(const char *filename, ImageHandle *image)//TODO special loader fo
 				int bpp0=av_get_bits_per_pixel(desc);
 				//int bpp=av_get_bits_per_sample(codec->id);//returns 0
 
+				has_alpha=desc->nb_components==4||desc->nb_components==2;
 				imagedepth=bpp0/desc->nb_components;
 				imagetype=IM_RGBA;
 
@@ -377,5 +400,7 @@ int load_media(const char *filename, ImageHandle *image)//TODO special loader fo
 	av_packet_free(&packet);
 	av_frame_free(&frame);
 	avcodec_free_context(&codecContext);
+	
+	update_globals(filename, image[0]->iw, image[0]->ih);
 	return 0;
 }

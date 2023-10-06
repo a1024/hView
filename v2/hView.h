@@ -666,6 +666,9 @@ typedef enum ImageTypeEnum
 extern ImageType imagetype;
 extern int imagedepth;
 extern char bayer[4];
+extern int has_alpha;
+extern ptrdiff_t filesize;
+extern double format_CR;
 
 typedef enum ProfilePlotModeEnum
 {

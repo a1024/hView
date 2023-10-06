@@ -35,6 +35,9 @@ ImageHandle
 ImageType imagetype=IM_UNINITIALIZED;
 int imagedepth=0;
 char bayer[4]={0};//shift ammounts for the 4 Bayer mosaic components, -1 for grayscale, example: RGGB is {0, 8, 8, 16}
+int has_alpha=0;
+ptrdiff_t filesize=0;
+double format_CR=0;
 
 static ArrayHandle vertices_text=0;
 int pxlabels_hex=1;
@@ -859,7 +862,7 @@ void io_render()
 		case IM_BAYER_SEPARATE:imtypestr="IM_BAYER_SEPARATE";break;
 		}
 		//g_printed=0;
-		GUIPrint_append(0, 0, h-tdy, 1, 0, "XY(%5d, %5d) / WH %dx%d  x%lf  %s  bitdepth %d", imx, imy, impreview->iw, impreview->ih, zoom, imtypestr, imagedepth);
+		GUIPrint_append(0, 0, h-tdy, 1, 0, "XY(%5d, %5d) / WH %dx%d  x%lf  %s  depth %d  CR %10.6lf", imx, imy, impreview->iw, impreview->ih, zoom, imtypestr, imagedepth, format_CR);
 		if(bitmode==1)
 			GUIPrint_append(0, 0, h-tdy, 1, 0, "  Bitplane %d", bitplane);
 		else if(bitmode==2)
