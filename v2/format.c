@@ -26,29 +26,50 @@
 #endif
 static const char file[]=__FILE__;
 
-static void update_globals(const char *fn, int iw, int ih)//accesses globals
+static void update_globals(const char *fn, ImageHandle image)//accesses globals
 {
 	filesize=get_filesize(fn);
 	if(filesize>0)
 	{
+		int nch=0;
+		if(has_alpha)
+		{
+			unsigned short *data=(unsigned short*)image->data;
+			has_alpha=0;
+			for(int k=0, res=image->iw*image->ih;k<res;++k)//check if alpha has information
+			{
+				if(data[k<<2|3]!=0xFFFF)
+				{
+					has_alpha=1;
+					break;
+				}
+			}
+		}
 		switch(imagetype)
 		{
 		case IM_GRAYSCALE:
-			if(has_alpha)
-				format_CR=(double)iw*ih*imagedepth*2/(filesize*8);
-			else
-				format_CR=(double)iw*ih*imagedepth/(filesize*8);
+			nch=1;
 			break;
 		case IM_RGBA:
-			if(has_alpha)
-				format_CR=(double)iw*ih*imagedepth*4/(filesize*8);
-			else
-				format_CR=(double)iw*ih*imagedepth*3/(filesize*8);
+			{
+				unsigned short *data=(unsigned short*)image->data;
+				imagetype=IM_GRAYSCALE;
+				for(int k=0, res=image->iw*image->ih;k<res;++k)//check for grayscale
+				{
+					if(data[k<<2]!=data[k<<2|1]||data[k<<2]!=data[k<<2|2])
+					{
+						imagetype=IM_RGBA;
+						break;
+					}
+				}
+				nch=imagetype==IM_GRAYSCALE?1:3;
+			}
 			break;
 		case IM_BAYER:
-			format_CR=(double)iw*ih*imagedepth/(filesize*8);
+			nch=1;
 			break;
 		}
+		format_CR=(double)image->iw*image->ih*imagedepth*(nch+has_alpha)/(filesize*8);
 	}
 }
 
@@ -97,7 +118,7 @@ int load_heic(const char *filename, ImageHandle *image)
 	heif_image_release(img);
 	heif_image_handle_release(handle);
 	
-	update_globals(filename, image[0]->iw, image[0]->ih);
+	update_globals(filename, *image);
 	return 0;
 }
 #endif
@@ -237,7 +258,7 @@ int load_raw(const char *filename, ImageHandle *image)
 	libraw_close(decoder);
 	
 	has_alpha=0;//only edited RAWs (eg: Photoshop) can have alpha
-	update_globals(filename, image[0]->iw, image[0]->ih);
+	update_globals(filename, *image);
 	return 0;
 }
 #endif
@@ -373,11 +394,12 @@ int load_media(const char *filename, ImageHandle *image)//TODO special loader fo
 				}
 				
 				AVPixFmtDescriptor const *desc=av_pix_fmt_desc_get(frame->format);
-				int bpp0=av_get_bits_per_pixel(desc);
+				//int bpp0=av_get_bits_per_pixel(desc);
 				//int bpp=av_get_bits_per_sample(codec->id);//returns 0
 
 				has_alpha=desc->nb_components==4||desc->nb_components==2;
-				imagedepth=bpp0/desc->nb_components;
+				imagedepth=desc->comp->depth;
+				//imagedepth=bpp0/desc->nb_components;//X
 				imagetype=IM_RGBA;
 
 				//int res=image[0]->iw*image[0]->ih;
@@ -401,6 +423,6 @@ int load_media(const char *filename, ImageHandle *image)//TODO special loader fo
 	av_frame_free(&frame);
 	avcodec_free_context(&codecContext);
 	
-	update_globals(filename, image[0]->iw, image[0]->ih);
+	update_globals(filename, *image);
 	return 0;
 }

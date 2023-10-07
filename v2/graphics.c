@@ -1226,7 +1226,7 @@ float GUIPrint_append(float tab_origin, float x, float y, float zoom, int show, 
 	g_printed+=len;
 	if(show)
 	{
-		width=print_line_immediate(0, x, y, 1, g_buf, g_printed, -1, 0, 0);
+		width=print_line_immediate(tab_origin, x, y, zoom, g_buf, g_printed, -1, 0, 0);
 		g_printed=0;
 	}
 	return width;

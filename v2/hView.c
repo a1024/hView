@@ -51,6 +51,22 @@ ProfilePlotMode profileplotmode=PROFILE_OFF;
 int bitmode=0,//0: off, 1: colorful bitplanes, 2: monochrome bitplanes
 	bitplane=-1;
 
+void center_image()
+{
+	if(!image)
+		return;
+	int wndw=w, wndh=h-17;
+	if((double)wndw/wndh>=(double)image->iw/image->ih)//window AR > image AR: fit height
+	{
+		if(wndh>0)
+			zoom=(double)wndh/image->ih;
+	}
+	else//window AR < image AR: fit width
+		zoom=(double)wndw/image->iw;
+	wpx=(image->iw-wndw/zoom)*0.5;//center image
+	wpy=(image->ih-wndh/zoom)*0.5;
+	imagecentered=1;
+}
 void calc_hist()
 {
 	if(!impreview)
@@ -206,6 +222,8 @@ void update_image(int settitle, int render)
 		image_blit(impreview, 0, 0, image->data, image->iw, image->ih, image->xcap-image->iw, image->depth);
 	if(hist_on)
 		calc_hist();
+	if(imagecentered)
+		center_image();
 	if(render)
 		io_render();
 }
@@ -235,22 +253,6 @@ int io_init(int argc, char **argv)//return false to abort
 	if(!image)
 		set_window_title("hView");
 	return 1;
-}
-void center_image()
-{
-	if(!image)
-		return;
-	int wndw=w, wndh=h-17;
-	if((double)wndw/wndh>=(double)image->iw/image->ih)//window AR > image AR: fit height
-	{
-		if(wndh>0)
-			zoom=(double)wndh/image->ih;
-	}
-	else//window AR < image AR: fit width
-		zoom=(double)wndw/image->iw;
-	wpx=(image->iw-wndw/zoom)*0.5;//center image
-	wpy=(image->ih-wndh/zoom)*0.5;
-	imagecentered=1;
 }
 void io_resize()
 {
@@ -869,17 +871,22 @@ void io_render()
 			GUIPrint_append(0, 0, h-tdy, 1, 0, "  Ch %d Bitplane %d", bitplane/imagedepth, bitplane%imagedepth);
 		if((unsigned)imx<(unsigned)impreview->iw&&(unsigned)imy<(unsigned)impreview->ih)
 		{
-			unsigned char *p=impreview->data+((impreview->iw*imy+imx)<<2);
+			int idx=(impreview->iw*imy+imx)<<2;
+			unsigned char *p=impreview->data+idx;
+			unsigned short *p0=(unsigned short*)image->data+idx;
 			switch(imagetype)
 			{
 			case IM_GRAYSCALE:
-				GUIPrint_append(0, 0, h-tdy, 1, 0, "  GRAY_ALPHA(%3d, %3d)", (unsigned)p[0], (unsigned)p[3]);
+				if(has_alpha)
+					GUIPrint_append(0, 0, h-tdy, 1, 0, "  GRAY_ALPHA(%3d, %3d)=0x%04X%04X", (unsigned)p[0], (unsigned)p[3], (unsigned)p0[0], (unsigned)p0[3]);
+				else
+					GUIPrint_append(0, 0, h-tdy, 1, 0, "  GRAY(%3d)=0x%04X", (unsigned)p[0], (unsigned)p0[0]);
 				break;
 			case IM_RGBA:
 				{
-					int color;
-					memcpy(&color, p, sizeof(color));
-					GUIPrint_append(0, 0, h-tdy, 1, 0, "  RGBA(%3d, %3d, %3d, %3d)=0x%08X", (unsigned)p[0], (unsigned)p[1], (unsigned)p[2], (unsigned)p[3], color);
+					long long color;
+					memcpy(&color, p0, sizeof(color));
+					GUIPrint_append(0, 0, h-tdy, 1, 0, "  RGBA(%3d, %3d, %3d, %3d)=0x%016llX", (unsigned)p[0], (unsigned)p[1], (unsigned)p[2], (unsigned)p[3], color);
 				}
 				break;
 			case IM_BAYER:
@@ -887,7 +894,7 @@ void io_render()
 				{
 					const char labels[]="RGB";
 					int comp=(imy&1)<<1|imx&1;
-					GUIPrint_append(0, 0, h-tdy, 1, 0, "  %c%c%c%c  %c(%5d)=0x%04X", labels[bayer[0]], labels[bayer[1]], labels[bayer[2]], labels[bayer[3]], labels[bayer[comp]], (unsigned)p[bayer[comp]], (unsigned)p[bayer[comp]]);
+					GUIPrint_append(0, 0, h-tdy, 1, 0, "  %c%c%c%c  %c(%5d)=0x%04X", labels[bayer[0]], labels[bayer[1]], labels[bayer[2]], labels[bayer[3]], labels[bayer[comp]], (unsigned)p0[bayer[comp]], (unsigned)p0[bayer[comp]]);
 				}
 				break;
 			}
