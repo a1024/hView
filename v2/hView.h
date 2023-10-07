@@ -637,7 +637,7 @@ ImageHandle image_construct(int xcap, int ycap, int dstdepth, const unsigned cha
 void image_free(ImageHandle *image);
 void image_resize(ImageHandle *image, int w, int h);
 
-int load_media(const char *filename, ImageHandle *image);//returns error (0 on success)
+int load_media(const char *filename, ImageHandle *image, int erroronfail);//returns error (0 on success)
 
 
 extern int imagecentered;
@@ -685,6 +685,11 @@ extern ProfilePlotMode profileplotmode;
 int t48_encode(const unsigned short *src, int iw, int ih, int idepth, char *bayer, ArrayHandle *data, int loud);
 int t48_decode(const unsigned char *data, size_t srclen, int iw, int ih, int idepth, char *bayer, unsigned short *dst, int loud);
 void test48(ImageHandle image, int idepth, char *bayer);
+
+//T49: lossless 16-bit image codec
+int t49_encode(const unsigned short *src, int iw, int ih, ArrayHandle *data, int loud);
+int t49_decode(const unsigned char *data, size_t srclen, int iw, int ih, unsigned short *dst, int loud);
+void test49(ImageHandle image, int idepth);
 
 
 #ifdef __cplusplus

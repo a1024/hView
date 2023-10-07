@@ -17,14 +17,46 @@
 #include<libheif/heif.h>
 #pragma comment(lib, "libheif-1.lib")
 #pragma comment(lib, "liblibde265.lib")
-#define CHECK_LIBHEIF(E) (!(E).code||LOG_ERROR("%s", (E).message))
+#define CHECK_LIBHEIF(E)\
+	do\
+	{\
+		if((E).code)\
+		{\
+			if(erroronfail)\
+				LOG_WARNING("%s", (E).message);\
+			return -1;\
+		}\
+	}while(0)
+//#define CHECK_LIBHEIF(E) (!(E).code||LOG_WARNING("%s", (E).message))
 #endif
 #ifdef HVIEW_INCLUDE_LIBRAW
 #include<libraw/libraw.h>
 #pragma comment(lib, "libraw.lib")
-#define CHECK_LIBRAW(E) ((E)==LIBRAW_SUCCESS||LOG_ERROR("Libraw error %d: %s", E, libraw_strerror(E)))
+#define CHECK_LIBRAW(E)\
+	do\
+	{\
+		if(E)\
+		{\
+			if(erroronfail)\
+				LOG_WARNING("Libraw error %d: %s", E, libraw_strerror(E));\
+			return -1;\
+		}\
+	}while(0)
+//#define CHECK_LIBRAW(E) ((E)==LIBRAW_SUCCESS||LOG_WARNING("Libraw error %d: %s", E, libraw_strerror(E)))
 #endif
 static const char file[]=__FILE__;
+
+#define CHECK_AV(E)\
+	do\
+	{\
+		if(E)\
+		{\
+			if(erroronfail)\
+				LOG_WARNING("%s", av_err2str(E));\
+			return -1;\
+		}\
+	}while(0)
+//#define CHECK_AV(E) (!(E)||LOG_WARNING("%s", av_err2str(E)))
 
 static void update_globals(const char *fn, ImageHandle image)//accesses globals
 {
@@ -32,9 +64,26 @@ static void update_globals(const char *fn, ImageHandle image)//accesses globals
 	if(filesize>0)
 	{
 		int nch=0;
+		unsigned short *data=(unsigned short*)image->data;
+
+		if(imagedepth<16)
+		{
+			int half=1<<(16-imagedepth), mask=~(half-1);
+			half>>=1;
+			for(int k=0, res=image->iw*image->ih*4;k<res;++k)//round the pixels according to bitdepth
+			{
+				int val=data[k];
+				val+=half;
+				if(val>0xFFFF)
+					val=0xFFFF;
+				else
+					val&=mask;
+				data[k]=(unsigned short)val;
+			}
+		}
+		
 		if(has_alpha)
 		{
-			unsigned short *data=(unsigned short*)image->data;
 			has_alpha=0;
 			for(int k=0, res=image->iw*image->ih;k<res;++k)//check if alpha has information
 			{
@@ -52,7 +101,6 @@ static void update_globals(const char *fn, ImageHandle image)//accesses globals
 			break;
 		case IM_RGBA:
 			{
-				unsigned short *data=(unsigned short*)image->data;
 				imagetype=IM_GRAYSCALE;
 				for(int k=0, res=image->iw*image->ih;k<res;++k)//check for grayscale
 				{
@@ -74,18 +122,19 @@ static void update_globals(const char *fn, ImageHandle image)//accesses globals
 }
 
 #ifdef HVIEW_INCLUDE_LIBHEIF
-int load_heic(const char *filename, ImageHandle *image)
+int load_heic(const char *filename, ImageHandle *image, int erroronfail)
 {
 	struct heif_context *ctx=heif_context_alloc();
 #ifdef BENCHMARK
 	long long t1=__rdtsc();
 #endif
-	struct heif_error error=heif_context_read_from_file(ctx, g_buf, 0);	//CHECK_LIBHEIF(error);//TODO: file may not exist
-	if(error.code)
-	{
-		LOG_WARNING("%s", error.message);
-		return -1;
-	}
+	struct heif_error error=heif_context_read_from_file(ctx, g_buf, 0);	CHECK_LIBHEIF(error);//TODO: file may not exist
+	//if(error.code)
+	//{
+	//	if(erroronfail)
+	//		LOG_WARNING("%s", error.message);
+	//	return -1;
+	//}
 
 	struct heif_image_handle *handle=0;
 	error=heif_context_get_primary_image_handle(ctx, &handle);			CHECK_LIBHEIF(error);//get a handle to the primary image
@@ -98,7 +147,8 @@ int load_heic(const char *filename, ImageHandle *image)
 	error=heif_decode_image(handle, &img, heif_colorspace_RGB, heif_chroma_interleaved_RGBA, 0);	CHECK_LIBHEIF(error);
 	if(!img)
 	{
-		LOG_ERROR("LibHEIF decode error");
+		if(erroronfail)
+			LOG_WARNING("LibHEIF decode error");
 		return -1;
 	}
 
@@ -106,7 +156,7 @@ int load_heic(const char *filename, ImageHandle *image)
 	const uint8_t *data=heif_image_get_plane_readonly(img, heif_channel_interleaved, &stride);	CHECK_LIBHEIF(error);
 #ifdef BENCHMARK
 	long long t2=__rdtsc();
-	LOG_ERROR("HEIC: %lld cycles", t2-t1);
+	LOG_WARNING("HEIC: %lld cycles", t2-t1);
 #endif
 	*image=image_construct(0, 0, 16, data, iw2, ih2, 0, 8);
 	//assign_from_RGBA8((int*)data, iw2, ih2);
@@ -123,19 +173,20 @@ int load_heic(const char *filename, ImageHandle *image)
 }
 #endif
 #ifdef HVIEW_INCLUDE_LIBRAW
-int load_raw(const char *filename, ImageHandle *image)
+int load_raw(const char *filename, ImageHandle *image, int erroronfail)
 {
 	libraw_data_t *decoder=libraw_init(0);
 	if(!decoder)
 	{
-		LOG_ERROR("Failed to initialize libraw decoder");
+		LOG_WARNING("Failed to initialize libraw decoder");
 		return -1;
 	}
 	//int error=libraw_open_wfile(decoder, filename);
 	int error=libraw_open_file(decoder, filename);
 	if(error)
 	{
-		LOG_WARNING("Libraw error %d: %s", error, libraw_strerror(error));
+		if(erroronfail)
+			LOG_WARNING("Libraw error %d: %s", error, libraw_strerror(error));
 		return -1;
 	}
 	
@@ -159,7 +210,7 @@ int load_raw(const char *filename, ImageHandle *image)
 			*image=image_construct(0, 0, 16, 0, iw2, ih2, 0, 16);
 			if(!*image)
 			{
-				LOG_ERROR("realloc returned null");
+				LOG_WARNING("realloc returned null");
 				return 0;
 			}
 			unsigned long long *dst=(unsigned long long*)image[0]->data;
@@ -180,7 +231,7 @@ int load_raw(const char *filename, ImageHandle *image)
 			*image=image_construct(0, 0, 16, 0, iw2, ih2, 0, 16);
 			if(!*image)
 			{
-				LOG_ERROR("realloc returned null");
+				LOG_WARNING("realloc returned null");
 				return 0;
 			}
 			unsigned long long *dst=(unsigned long long*)image[0]->data;
@@ -209,7 +260,7 @@ int load_raw(const char *filename, ImageHandle *image)
 			*image=image_construct(0, 0, 16, 0, iw2, ih2, 0, 16);
 			if(!*image)
 			{
-				LOG_ERROR("realloc returned null");
+				LOG_WARNING("realloc returned null");
 				return 0;
 			}
 			unsigned long long *dst=(unsigned long long*)image[0]->data;
@@ -235,7 +286,7 @@ int load_raw(const char *filename, ImageHandle *image)
 			*image=image_construct(0, 0, 16, 0, iw2, ih2, 0, 16);
 			if(!*image)
 			{
-				LOG_ERROR("realloc returned null");
+				LOG_WARNING("realloc returned null");
 				return 0;
 			}
 			unsigned long long *dst=(unsigned long long*)image[0]->data;
@@ -251,7 +302,7 @@ int load_raw(const char *filename, ImageHandle *image)
 		}
 		break;
 	default:
-		LOG_ERROR("Invalid RAW image orientation");
+		LOG_WARNING("Invalid RAW image orientation");
 		break;
 	}
 	libraw_free_image(decoder);
@@ -264,18 +315,17 @@ int load_raw(const char *filename, ImageHandle *image)
 #endif
 
 
-#define CHECKAV(E) (!(E)||LOG_ERROR("%s", av_err2str(E)))
-
 //https://github.com/ShootingKing-AM/ffmpeg-pseudocode-tutorial
 //https://github.com/leandromoreira/ffmpeg-libav-tutorial/blob/master/README.md
-int load_media(const char *filename, ImageHandle *image)//TODO special loader for HEIC, AVIF, RAW
+int load_media(const char *filename, ImageHandle *image, int erroronfail)//TODO special loader for HEIC, AVIF, RAW
 {
 	int len=(int)strlen(filename);
 #ifdef HVIEW_INCLUDE_LIBHEIF
-	if(!_stricmp(filename+len-5, ".AVIF"))//libheif opens avif too
-		return load_heic(filename, image);
-	if(!_stricmp(filename+len-5, ".HEIC"))
-		return load_heic(filename, image);
+	if(
+		!_stricmp(filename+len-5, ".AVIF")||//libheif opens avif too (NEED LIBAVIF)
+		!_stricmp(filename+len-5, ".HEIC")
+	)
+		return load_heic(filename, image, erroronfail);
 #endif
 #ifdef HVIEW_INCLUDE_LIBRAW
 	if(
@@ -288,19 +338,19 @@ int load_media(const char *filename, ImageHandle *image)//TODO special loader fo
 		!_stricmp(filename+len-4, ".KDC")||
 		!_stricmp(filename+len-4, ".DCR")
 	)
-		return load_raw(filename, image);
+		return load_raw(filename, image, erroronfail);
 #endif
 
 	int error;
 	AVFormatContext *formatContext=avformat_alloc_context();
 	if(!formatContext)
 	{
-		LOG_ERROR("Allocation error");
+		LOG_WARNING("Allocation error");
 		return -1;
 	}
 	error=avformat_open_input(&formatContext, filename, 0, 0);
-	CHECKAV(error);
-	error=avformat_find_stream_info(formatContext, 0);	CHECKAV(error);
+	CHECK_AV(error);
+	error=avformat_find_stream_info(formatContext, 0);	CHECK_AV(error);
 
 	AVCodec const *codec=0;
 	AVCodecParameters *codecParameters=0;
@@ -327,22 +377,24 @@ int load_media(const char *filename, ImageHandle *image)//TODO special loader fo
 	}
 	if(video_stream_index==-1)//FIXME
 	{
-		LOG_WARNING("Cannot open \'%s\'", filename);
+		if(erroronfail)
+			LOG_WARNING("Cannot open \'%s\'", filename);
 		return -1;
 	}
 	AVCodecContext *codecContext=avcodec_alloc_context3(codec);
 	if(!codecContext)
 	{
-		LOG_ERROR("Allocation error");
+		if(erroronfail)
+			LOG_WARNING("Allocation error");
 		return -1;
 	}
-	error=avcodec_parameters_to_context(codecContext, codecParameters);	CHECKAV(error);
-	error=avcodec_open2(codecContext, codec, NULL);	CHECKAV(error);
+	error=avcodec_parameters_to_context(codecContext, codecParameters);	CHECK_AV(error);
+	error=avcodec_open2(codecContext, codec, NULL);	CHECK_AV(error);
 	AVFrame *frame=av_frame_alloc();
 	AVPacket *packet=av_packet_alloc();
 	if(!frame||!packet)
 	{
-		LOG_ERROR("Allocation error");
+		LOG_WARNING("Allocation error");
 		return -1;
 	}
 	while((error=av_read_frame(formatContext, packet))>=0)
@@ -350,29 +402,31 @@ int load_media(const char *filename, ImageHandle *image)//TODO special loader fo
 		if(packet->stream_index==video_stream_index)
 		{
 			//int result=decode_packet(packet, codecContext, frame);
-			error=avcodec_send_packet(codecContext, packet);	CHECKAV(error);
+			error=avcodec_send_packet(codecContext, packet);	CHECK_AV(error);
 			while(error>=0)
 			{
 				error=avcodec_receive_frame(codecContext, frame);
 				if(error==AVERROR(EAGAIN)||error==AVERROR_EOF)
 					break;
-				CHECKAV(error);
+				CHECK_AV(error);
 			
 				enum AVPixelFormat format=frame->format;
 				if(!sws_isSupportedInput(format))
 				{
-					LOG_ERROR("Unsupported input pixel format %d", format);
+					if(erroronfail)
+						LOG_WARNING("Unsupported input pixel format %d", format);
 					return -1;
 				}
 				if(!sws_isSupportedOutput(AV_PIX_FMT_RGB32))
 				{
-					LOG_ERROR("Unsupported output pixel format %d", format);
+					if(erroronfail)
+						LOG_WARNING("Unsupported output pixel format %d", format);
 					return -1;
 				}
 				AVFrame *frame2=av_frame_alloc();
 				if(!frame2)
 				{
-					LOG_ERROR("Allocation error");
+					LOG_WARNING("Allocation error");
 					return -1;
 				}
 				frame2->width=frame->width;
@@ -380,7 +434,7 @@ int load_media(const char *filename, ImageHandle *image)//TODO special loader fo
 				frame2->format=AV_PIX_FMT_RGBA64LE;
 				av_frame_get_buffer(frame2, 32);
 
-				struct SwsContext *swsctx=sws_getContext(frame->width, frame->height, frame->format, frame2->width, frame2->height, frame2->format, SWS_FAST_BILINEAR, 0, 0, 0);
+				struct SwsContext *swsctx=sws_getContext(frame->width, frame->height, frame->format, frame2->width, frame2->height, frame2->format, 0, 0, 0, 0);
 				sws_scale(swsctx, frame->data, frame->linesize, 0, frame->height, frame2->data, frame2->linesize);
 
 				int padding=abs(frame2->linesize[0])/8-frame2->width;//division by 8 is because a single pixel is 64-bit (8 bytes)
@@ -389,7 +443,7 @@ int load_media(const char *filename, ImageHandle *image)//TODO special loader fo
 				*image=image_construct(0, 0, 16, frame2->data[0], frame2->width, frame2->height, padding, 16);
 				if(!*image)
 				{
-					LOG_ERROR("Allocation error");
+					LOG_WARNING("Allocation error");
 					return -1;
 				}
 				

@@ -244,7 +244,7 @@ int io_init(int argc, char **argv)//return false to abort
 	if(argc>0)
 	{
 		fn=filter_path(argv[0], 1);
-		load_media((char*)fn->data, &image);
+		load_media((char*)fn->data, &image, 1);
 		if(image)
 			update_image(1, 0);
 		else
@@ -372,7 +372,7 @@ int io_keydn(IOKey key, char c)
 				for(int k=currentidx+step;MODVAR(k, k, (int)filenames->count), k!=currentidx;k+=step)
 				{
 					fn2=array_at(&filenames, k);
-					if(!load_media(fn2[0]->data, &im2))
+					if(!load_media(fn2[0]->data, &im2, 0))
 					{
 						currentidx=k;
 						break;
@@ -400,8 +400,8 @@ int io_keydn(IOKey key, char c)
 			if(fn2)
 			{
 				ImageHandle im2=0;
-				load_media(fn2->data, &im2);
-				if(im2)
+				int error=load_media(fn2->data, &im2, 1);
+				if(im2&&!error)
 				{
 					image_free(&image);
 					image=im2;
@@ -582,8 +582,13 @@ int io_keydn(IOKey key, char c)
 		}
 		break;
 	case KEY_SPACE:
-		if(imagetype==IM_BAYER)
-			test48(image, imagedepth, bayer);
+		if(image)
+		{
+			if(imagetype==IM_BAYER)
+				test48(image, imagedepth, bayer);
+			else
+				test49(image, imagedepth);
+		}
 		break;
 	}
 	return 0;
