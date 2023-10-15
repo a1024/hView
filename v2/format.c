@@ -49,7 +49,7 @@ static const char file[]=__FILE__;
 #define CHECK_AV(E)\
 	do\
 	{\
-		if(E)\
+		if(E<0)\
 		{\
 			if(erroronfail)\
 				LOG_WARNING("%s", av_err2str(E));\
@@ -479,4 +479,185 @@ int load_media(const char *filename, ImageHandle *image, int erroronfail)//TODO 
 	
 	update_globals(filename, *image);
 	return 0;
+}
+
+
+int save_media(const char *fn, ImageHandle image, int erroronfail)
+{
+	enum AVPixelFormat srcfmt=image->depth==16?AV_PIX_FMT_RGBA64LE:AV_PIX_FMT_RGBA;
+	int error=0;
+	AVFormatContext *oc=0;
+	error=avformat_alloc_output_context2(&oc, 0, 0, fn);	CHECK_AV(error);
+	if(!oc&&erroronfail)
+	{
+		LOG_WARNING("Allocation error");
+		return -1;
+	}
+	AVStream *stream=avformat_new_stream(oc, 0);
+	if(!stream)
+	{
+		LOG_WARNING("Allocation error");
+		return -1;
+	}
+	
+	int len=(int)strlen(fn);//get short name
+	int k=len-1;
+	for(;k>=0&&fn[k]!='.';--k);
+	k+=k!=0;//skip '.'
+	k=len-k;
+	char ext[MAX_PATH]={0};
+	for(int k2=0;k2<k+1;++k2)
+		ext[k2]=tolower(fn[len-k+k2]);
+
+	enum AVCodecID codecid=AV_CODEC_ID_NONE;
+		 if(!strcmp(ext, "png"))    codecid=AV_CODEC_ID_PNG;
+	else if(!strcmp(ext, "jxl"))    codecid=AV_CODEC_ID_JPEGXL;
+	else if(!strcmp(ext, "webp"))   codecid=AV_CODEC_ID_WEBP;
+	else if(!strcmp(ext, "jpg"))    codecid=AV_CODEC_ID_MJPEG;
+	else if(!strcmp(ext, "gif"))    codecid=AV_CODEC_ID_GIF;
+	else if(!strcmp(ext, "jp2"))    codecid=AV_CODEC_ID_JPEG2000;
+	else if(!strcmp(ext, "bmp"))    codecid=AV_CODEC_ID_BMP;
+	else if(!strcmp(ext, "tif"))    codecid=AV_CODEC_ID_TIFF;
+	else if(!strcmp(ext, "qoi"))    codecid=AV_CODEC_ID_QOI;
+	else if(!strcmp(ext, "ljpg"))   codecid=AV_CODEC_ID_LJPEG;
+	else if(!strcmp(ext, "jls"))    codecid=AV_CODEC_ID_JPEGLS;
+	else if(!strcmp(ext, "loco"))   codecid=AV_CODEC_ID_LOCO;
+	else if(!strcmp(ext, "ppm"))    codecid=AV_CODEC_ID_PPM;
+	else if(!strcmp(ext, "pbm"))    codecid=AV_CODEC_ID_PBM;
+	else if(!strcmp(ext, "pgm"))    codecid=AV_CODEC_ID_PGM;
+	else if(!strcmp(ext, "pam"))    codecid=AV_CODEC_ID_PAM;
+	if(codecid==AV_CODEC_ID_NONE)
+	{
+		LOG_WARNING("Cannot save as \'%s\'", fn);
+		return -1;
+	}
+
+	//AVOutputFormat const *dstfmt=av_guess_format(ext, 0, 0);//gives NULL, should be video_codec AV_CODEC_ID_PNG
+	//if(!dstfmt)
+	//{
+	//	LOG_WARNING("Cannot save \'%s\'", fn);
+	//	return -1;
+	//}
+	AVCodec const *codec=avcodec_find_encoder(codecid);
+	if(!codec)
+	{
+		LOG_WARNING("Cannot save \'%s\'", fn);
+		return -1;
+	}
+
+	AVCodecContext *cc=avcodec_alloc_context3(codec);
+	if(!cc)
+	{
+		LOG_WARNING("Allocation error");
+		return -1;
+	}
+	
+	//snprintf(g_buf, G_BUF_SIZE, "w=%d", image->iw);
+	//error=av_set_options_string(cc, g_buf, "=", ":");	CHECK_AV(error);//Option not found
+	//snprintf(g_buf, G_BUF_SIZE, "h=%d", image->ih);
+	//error=av_set_options_string(cc, g_buf, "=", ":");	CHECK_AV(error);
+
+	//snprintf(g_buf, G_BUF_SIZE, "%d", image->iw);
+	//error=av_opt_set(cc, "width", g_buf, 0);		CHECK_AV(error);
+	//snprintf(g_buf, G_BUF_SIZE, "%d", image->ih);
+	//error=av_opt_set(cc, "height", g_buf, 0);	CHECK_AV(error);
+
+#if 1
+	//avcodec.h(line 426)
+	cc->width=image->iw;
+	cc->height=image->ih;
+	cc->pix_fmt=srcfmt;
+	cc->time_base.num=1;
+	cc->time_base.den=1;
+	cc->gop_size=0;
+	cc->max_b_frames=0;
+	//cc->bit_rate=?;
+#endif
+
+	//TODO set codec options (which depend on the codec)
+	AVDictionary *opt=0;
+	av_dict_set(&opt, "slow", 0, 0);
+
+	error=avcodec_open2(cc, codec, &opt);	CHECK_AV(error);//-22: Invalid Argument
+	AVFrame *frame=av_frame_alloc();
+	frame->width=image->iw;
+	frame->height=image->ih;
+	frame->format=image->depth==16?AV_PIX_FMT_RGBA64LE:AV_PIX_FMT_RGBA;
+	error=av_frame_get_buffer(frame, 0);		CHECK_AV(error);
+	av_image_fill_arrays(frame->data, frame->linesize, image->data, srcfmt, image->iw, image->ih, 1);
+
+	AVPacket packet;
+	av_init_packet(&packet);
+	packet.data=0;
+	packet.size=0;
+
+	//save file
+	FILE *f=fopen(fn, "wb");
+	if(!f)
+		LOG_WARNING("Cannot save \'%s\'", fn);
+	else
+	{
+		error=avcodec_send_frame(cc, frame);	CHECK_AV(error);
+		while(error>=0)
+		{
+			error=avcodec_receive_packet(cc, &packet);
+			if(error==AVERROR(EAGAIN)||error==AVERROR_EOF)
+				break;
+			CHECK_AV(error);
+
+			fwrite(packet.data, 1, packet.size, f);
+			av_packet_unref(&packet);
+		}
+
+		//flush encoder
+		error=avcodec_send_frame(cc, 0);		CHECK_AV(error);
+		while(error>=0)
+		{
+			error=avcodec_receive_packet(cc, &packet);
+			if(error==AVERROR(EAGAIN)||error==AVERROR_EOF)
+				break;
+			CHECK_AV(error);
+
+			fwrite(packet.data, 1, packet.size, f);
+			av_packet_unref(&packet);
+		}
+		fclose(f);
+	}
+
+	av_frame_free(&frame);
+	avcodec_free_context(&cc);
+	avformat_free_context(oc);
+	return 0;
+}
+int save_media_as(ImageHandle image, int erroronfail)
+{
+	Filter filters[]=
+	{
+		{"\'Png is Not Gnu, which in turn is not Unix\' File (*.PNG)", ".PNG"},
+		{"JPEG XL File (*.JXL)", ".JXL"},
+		{"WebP File (*.WEBP)", ".WEBP"},
+		{"JPEG File (*.JPG)", ".JPG"},
+		{"GIF File (*.GIF)", ".GIF"},
+		{"JPEG2000 File (*.JP2)", ".JP2"},
+		{"BMP File (*.BMP)", ".BMP"},
+		{"TIFF File (*.TIF)", ".TIF"},
+		{"Quite OK Image (*.QOI)", ".QOI"},
+		{"Lossless JPEG (*.LJPG)", ".LJPG"},
+		{"JPEG-LS (*.JLS)", ".JLS"},
+		{"LOCO File (*.LOCO)", ".LOCO"},
+		{"PPM File (*.PPM)", ".PPM"},
+		{"PBM File (*.PBM)", ".PBM"},
+		{"PGM File (*.PGM)", ".PGM"},
+		{"PAM File (*.PAM)", ".PAM"},
+	};
+	int ext_selection=0, ret;
+	const char *fn=dialog_save_file(filters, _countof(filters), "Untitled.PNG", &ext_selection);
+	if(!fn)
+		ret=-2;
+	else
+	{
+		ret=save_media(fn, image, erroronfail);
+		free(fn);
+	}
+	return ret;
 }

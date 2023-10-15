@@ -31,8 +31,8 @@ ArrayHandle exedir=0;
 int fullscreen=0;
 RECT oldWindowSize={0};
 
-#define UTF8TOWCHAR(U8, LEN, RET_U16, BUF_SIZE, RET_LEN)    RET_LEN=MultiByteToWideChar(CP_UTF8, 0, U8, LEN, RET_U16, BUF_SIZE)
-#define WCHARTOUTF8(WSTR, LEN, RET_UTF8, BUF_SIZE, RET_LEN) RET_LEN=WideCharToMultiByte(CP_UTF8, 0, WSTR, LEN, RET_UTF8, BUF_SIZE, 0, 0)
+#define UTF8_TO_WCHAR(U8, LEN, RET_U16, BUF_SIZE, RET_LEN)    RET_LEN=MultiByteToWideChar(CP_UTF8, 0, U8, LEN, RET_U16, BUF_SIZE)
+#define WCHAR_TO_UTF8(WSTR, LEN, RET_UTF8, BUF_SIZE, RET_LEN) RET_LEN=WideCharToMultiByte(CP_UTF8, 0, WSTR, LEN, RET_UTF8, BUF_SIZE, 0, 0)
 
 const char* wm2str(int message)
 {
@@ -448,7 +448,7 @@ ArrayHandle dialog_open_folder()
 			wchar_t *fullpath=0;
 			hr=CALL_METHOD(pFileOpenDialog, GetResult, &pShellItem);
 			CALL_METHOD(pShellItem, GetDisplayName, SIGDN_FILESYSPATH, &fullpath);
-			WCHARTOUTF8(fullpath, (int)wcslen(fullpath), g_buf, G_BUF_SIZE, len);
+			WCHAR_TO_UTF8(fullpath, (int)wcslen(fullpath), g_buf, G_BUF_SIZE, len);
 
 			STR_COPY(arr, g_buf, len);
 
@@ -468,12 +468,12 @@ static ArrayHandle	prep_filters(Filter *filters, int nfilters)
 	{
 		int len=0;
 
-		UTF8TOWCHAR(filters[k].comment, (int)strlen(filters[k].comment)+1, g_wbuf, G_BUF_SIZE, len);
+		UTF8_TO_WCHAR(filters[k].comment, (int)strlen(filters[k].comment)+1, g_wbuf, G_BUF_SIZE, len);
 		if(!len)
 			break;
 		STR_APPEND(winfilts, g_wbuf, len, 1);
 
-		UTF8TOWCHAR(filters[k].ext, (int)strlen(filters[k].ext)+1, g_wbuf, G_BUF_SIZE, len);
+		UTF8_TO_WCHAR(filters[k].ext, (int)strlen(filters[k].ext)+1, g_wbuf, G_BUF_SIZE, len);
 		if(!len)
 			break;
 		STR_APPEND(winfilts, g_wbuf, len, 1);
@@ -494,7 +494,7 @@ ArrayHandle dialog_open_file(Filter *filters, int nfilters, int multiple)//TODO:
 		0, 0,//initial filename
 		0,
 		0,//dialog title
-		OFN_CREATEPROMPT|OFN_PATHMUSTEXIST|OFN_NOCHANGEDIR,//flags
+		OFN_CREATEPROMPT|OFN_PATHMUSTEXIST|OFN_NOCHANGEDIR,//flags		OFN_NOCHANGEDIR is ineffective for GetOpenFileName
 		0,//file offset
 		0,//extension offset
 		L"txt",//default extension
@@ -522,20 +522,20 @@ ArrayHandle dialog_open_file(Filter *filters, int nfilters, int multiple)//TODO:
 		wlen=(int)wcslen(ofn.lpstrFile);
 
 	int len=0;
-	WCHARTOUTF8(ofn.lpstrFile, wlen, g_buf, G_BUF_SIZE, len);
+	WCHAR_TO_UTF8(ofn.lpstrFile, wlen, g_buf, G_BUF_SIZE, len);
 	STR_COPY(result, g_buf, len);
 
 	return result;
 }
 //const wchar_t		initialname[]=L"Untitled.txt";
-const char* dialog_save_file(Filter *filters, int nfilters, const char *initialname)
+const char* dialog_save_file(Filter *filters, int nfilters, const char *initialname, int *ret_ext_idx)
 {
 	ArrayHandle winfilts=prep_filters(filters, nfilters);
 	
 	int len0=(int)strlen(initialname), ext_offset=0;
 	int len=0;
 	wchar_t def_ext[16]={0};//default extension
-	UTF8TOWCHAR(initialname, len0+1, g_wbuf, G_BUF_SIZE, len);
+	UTF8_TO_WCHAR(initialname, len0+1, g_wbuf, G_BUF_SIZE, len);
 	for(ext_offset=len0-1;ext_offset>=0&&initialname[ext_offset]!='.';--ext_offset);
 	memcpy(def_ext, g_wbuf+ext_offset, (len0+1-ext_offset)*sizeof(wchar_t));
 	//memcpy(g_wbuf, initialname, sizeof(initialname));
@@ -552,7 +552,7 @@ const char* dialog_save_file(Filter *filters, int nfilters, const char *initialn
 		0, 0,//initial filename
 		0,
 		0,//dialog title
-		OFN_NOTESTFILECREATE|OFN_PATHMUSTEXIST|OFN_EXTENSIONDIFFERENT|OFN_OVERWRITEPROMPT,
+		OFN_NOTESTFILECREATE|OFN_PATHMUSTEXIST|OFN_EXTENSIONDIFFERENT|OFN_OVERWRITEPROMPT|OFN_NOCHANGEDIR,
 		0, ext_offset,					//<- file offset & extension offset
 		def_ext,						//<- default extension (if user didn't type one)
 		0, 0,//data & hook
@@ -567,9 +567,13 @@ const char* dialog_save_file(Filter *filters, int nfilters, const char *initialn
 
 	int retlen=(int)wcslen(ofn.lpstrFile)+1;
 	char *ret=(char*)malloc(retlen+16);
-	WCHARTOUTF8(ofn.lpstrFile, retlen, ret, retlen+16, len);
+	WCHAR_TO_UTF8(ofn.lpstrFile, retlen, ret, retlen+16, len);
 	if(!len)
+	{
+		free(ret);
 		return 0;
+	}
+	if(ret_ext_idx)*ret_ext_idx=ofn.nFilterIndex;
 	return ret;
 
 	//int len=WideCharToMultiByte(CP_UTF8, 0, ofn.lpstrFile, wcslen(ofn.lpstrFile), g_buf, G_BUF_SIZE, 0, 0);	SYS_ASSERT(len);

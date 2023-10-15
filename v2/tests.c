@@ -113,31 +113,33 @@ void raw_ycmcb_inv(short *buf, int iw, int ih, int idepth)
 		}
 	}
 }
-void colortransform_ycmcb_fwd(short *buf, int iw, int ih)//3 channels, stride 4 bytes
+void colortransform_ycmcb_fwd(short *buf, int iw, int ih, int idepth)//3 channels, stride 4 bytes
 {
+	int mask=((1<<idepth)-1)<<(16-idepth);
 	for(ptrdiff_t k=0, len=(ptrdiff_t)iw*ih*4;k<len;k+=4)
 	{
 		short r=buf[k], g=buf[k|1], b=buf[k|2];
 
-		r-=g;   //r-g
-		g+=r>>1;//g+(r-g)/2 = (r+g)/2
-		b-=g;   //b-(r+g)/2
-		g+=b>>1;//(r+g)/2+(b-(r+g)/2)/2 = 1/4 r + 1/4 g + 1/2 b
+		r-=g;        //r-g
+		g+=r>>1&mask;//g+(r-g)/2 = (r+g)/2
+		b-=g;        //b-(r+g)/2
+		g+=b>>1&mask;//(r+g)/2+(b-(r+g)/2)/2 = 1/4 r + 1/4 g + 1/2 b
 
 		buf[k  ]=r;//Cm
 		buf[k|1]=g;//Y
 		buf[k|2]=b;//Cb
 	}
 }
-void colortransform_ycmcb_inv(short *buf, int iw, int ih)//3 channels, stride 4 bytes
+void colortransform_ycmcb_inv(short *buf, int iw, int ih, int idepth)//3 channels, stride 4 bytes
 {
+	int mask=((1<<idepth)-1)<<(16-idepth);
 	for(ptrdiff_t k=0, len=(ptrdiff_t)iw*ih*4;k<len;k+=4)
 	{
 		short r=buf[k], g=buf[k|1], b=buf[k|2];//Cm Y Cb
 		
-		g-=b>>1;
+		g-=b>>1&mask;
 		b+=g;
-		g-=r>>1;
+		g-=r>>1&mask;
 		r+=g;
 
 		buf[k  ]=r;
@@ -659,14 +661,14 @@ void test48(ImageHandle image, int idepth, char *bayer)
 //	#define T49_DISABLE_COUNTER
 
 #define T49_LR (int)(0.07*0x10000+0.5)
-//#define T49_NPRED 15		//just one predictor, for speed
+#define T49_NPRED 8
 
 #define T49_REACH 1
 #define T49_NNB (T49_REACH*(T49_REACH+1)*4)
 //#define T49_NPARAMS (T49_NNB*9+6)		//no pretrained params
 
 #ifndef T49_DISABLE_REC
-#define T49_N_REC_ESTIMATORS 6		//15
+#define T49_N_REC_ESTIMATORS 6		//15 max
 #define T49_NESTIMATORS (T49_N_REC_ESTIMATORS+1)
 //#define T49_NESTIMATORS ((T49_N_REC_ESTIMATORS+1)*T49_NMAPS)
 #else
@@ -674,20 +676,22 @@ void test48(ImageHandle image, int idepth, char *bayer)
 #endif
 typedef struct T49NodeStruct
 {
+#ifndef T49_DISABLE_COUNTER
 	int n[2];
+#endif
 #ifndef T49_DISABLE_REC
 	unsigned short rec[T49_N_REC_ESTIMATORS];
 #endif
 } T49Node;
-typedef struct T49CtxStruct//this codec is for raw (Bayer) images only
+typedef struct T49CtxStruct
 {
-	int context;
+	int context[T49_NPRED];
 	short idepth, cdepth;
 	ArrayHandle maps[4][16];
-	T49Node *node;
+	T49Node *node[T49_NPRED];
 
-	int p0arr[T49_NESTIMATORS], p0_0, p0;//p0_0 isn't clamped
-	int weights[4][16][T49_NESTIMATORS];
+	int p0arr[T49_NPRED*T49_NESTIMATORS], p0_0, p0;//p0_0 isn't clamped
+	int weights[4][16][T49_NPRED*T49_NESTIMATORS];
 	long long wsum;
 
 	int nnodes;
@@ -717,10 +721,10 @@ T49Ctx* t49_ctx_init(int nch, int idepth)
 		ctx->cdepth=8;
 	for(int kc=0;kc<nch;++kc)
 	{
-		for(int kb=idepth-1;kb>=0;--kb)
+		for(int kb=16-1;kb>16-1-ctx->idepth;--kb)
 		{
 			ArrayHandle *map=ctx->maps[kc]+kb;
-			int nnodes=1<<(ctx->cdepth+ctx->idepth-1-kb);
+			int nnodes=T49_NPRED<<(ctx->cdepth+16-1-kb);
 			ARRAY_ALLOC(T49Node, *map, 0, nnodes, 0, 0);
 			memfill(map[0]->data, &node0, map[0]->count*sizeof(node0), sizeof(node0));
 			ctx->nnodes+=nnodes;
@@ -732,7 +736,7 @@ void t49_ctx_clear(T49Ctx **ctx)
 {
 	for(int kc=0;kc<4;++kc)
 	{
-		for(int kb=ctx[0]->idepth-1;kb>=0;--kb)
+		for(int kb=16-1;kb>16-1-ctx[0]->idepth;--kb)
 			array_free(ctx[0]->maps[kc]+kb);
 	}
 	free(*ctx);
@@ -740,22 +744,38 @@ void t49_ctx_clear(T49Ctx **ctx)
 }
 void t49_ctx_get_context(T49Ctx *ctx, const unsigned short *buf, int iw, int ih, int kx, int ky, int kc)
 {
+	long long pred;
+
 	//clamped gradient predictor
 #if 1
 #define LOAD(X, Y) (unsigned)(kx+(X))<(unsigned)iw&&(unsigned)(ky+(Y))<(unsigned)ih?buf[(iw*(ky+(Y))+kx+(X))<<2|kc]:0
 	short
-		N=LOAD(0, -1),
-		W=LOAD(-1, 0),
-		NW=LOAD(-1, -1);
+		WW=LOAD(-2,  0),
+		NN=LOAD( 0, -2),
+		N =LOAD( 0, -1),
+		W =LOAD(-1,  0),
+		NW=LOAD(-1, -1),
+		NE=LOAD( 1, -1);
 #undef  LOAD
+
+	int j=-1;
+
 	short vmin, vmax;
 	if(N<W)
 		vmin=N, vmax=W;
 	else
 		vmin=W, vmax=N;
-	int pred=N+W-NW;
+	pred=N+W-NW;
 	pred=CLAMP(vmin, pred, vmax);
-	ctx->context=pred;
+	ctx->context[++j]=(int)pred;
+
+	ctx->context[++j]=N;
+	ctx->context[++j]=W;
+	ctx->context[++j]=(N+W)/2+(NE-NW)/4;
+	ctx->context[++j]=NW;
+	pred=(W*2-WW+N*2-NN)>>1, ctx->context[++j]=CLAMP(vmin, pred, vmax);
+	pred=W*2-WW, ctx->context[++j]=CLAMP(vmin, pred, vmax);
+	pred=N*2-NN, ctx->context[++j]=CLAMP(vmin, pred, vmax);
 #endif
 
 	//average predictor
@@ -765,7 +785,8 @@ void t49_ctx_get_context(T49Ctx *ctx, const unsigned short *buf, int iw, int ih,
 #else
 	const int dil=2;
 #endif
-	long long pred=0, den=0;
+	long long den=0;
+	pred=0;
 	for(int ky2=-T49_REACH;ky2<0;++ky2)
 	{
 		for(int kx2=-T49_REACH;kx2<=T49_REACH;++kx2)
@@ -785,16 +806,18 @@ void t49_ctx_get_context(T49Ctx *ctx, const unsigned short *buf, int iw, int ih,
 		{
 			int idx2=(iw*ky+kx+kx2*dil)<<2|kc;
 			int weight=0x10000/abs(kx2);
-			pred+=(long long)(buf[idx2]-0x8000)*weight;
+			pred+=(long long)buf[idx2]*weight;
 			den+=weight;
 		}
 	}
-	ctx->context=den?(int)(pred/den):0;
+	ctx->context[++j]=den?(int)(pred/den):0;
 #endif
-	ctx->context+=0x8000;
-	ctx->context>>=16-ctx->idepth;
-	ctx->context=CLAMP(0, ctx->context, (1<<ctx->idepth)-1);
-	ctx->context>>=ctx->idepth-ctx->cdepth;
+	for(int k=0;k<T49_NPRED;++k)
+	{
+		ctx->context[k]+=0x8000;
+		ctx->context[k]=CLAMP(0, ctx->context[k], 0xFFFF);
+		ctx->context[k]>>=16-ctx->cdepth;
+	}
 }
 void t49_ctx_estimate_p0(T49Ctx *ctx, int kc, int kb)
 {
@@ -804,23 +827,28 @@ void t49_ctx_estimate_p0(T49Ctx *ctx, int kc, int kb)
 	long long sum;
 	T49Node *node;
 
-	int k2=0;
-	ArrayHandle map=ctx->maps[kc][kb];
-	node=ctx->node=(T49Node*)array_at(&map, ctx->context);
+	for(int kp=0;kp<T49_NPRED;++kp)
+	{
+		int k2=0;
+		ArrayHandle map=ctx->maps[kc][kb];
+		node=ctx->node[kp]=(T49Node*)array_at(&map, ctx->context[kp]);
 		
-	sum=node->n[0]+node->n[1];
-	ctx->p0arr[p0idx+k2]=sum?(int)(((long long)node->n[0]<<16)/sum):0x8000;
-	++k2;
-#ifndef T49_DISABLE_REC
-	for(;k2<T49_N_REC_ESTIMATORS+1;++k2)
-		ctx->p0arr[p0idx+k2]=node->rec[k2-1];
+#ifndef T49_DISABLE_COUNTER
+		sum=node->n[0]+node->n[1];
+		ctx->p0arr[p0idx+k2]=sum?(int)(((long long)node->n[0]<<16)/sum):0x8000;
+		++k2;
 #endif
-	p0idx+=k2;
+#ifndef T49_DISABLE_REC
+		for(;k2<T49_N_REC_ESTIMATORS+1;++k2)
+			ctx->p0arr[p0idx+k2]=node->rec[k2-1];
+#endif
+		p0idx+=k2;
+	}
 
 
 	sum=0;
 	ctx->wsum=0;
-	for(int k=0;k<T49_NESTIMATORS;++k)
+	for(int k=0;k<T49_NPRED*T49_NESTIMATORS;++k)
 	{
 #ifdef T49_DISABLE_COUNTER
 		if(k%(T49_N_REC_ESTIMATORS+1))//
@@ -858,7 +886,7 @@ void t49_ctx_update(T49Ctx *ctx, int kc, int kb, int bit)
 		long long dL_dp0=-(1LL<<32)/p_bit;//fixed 47.16 bit
 		dL_dp0^=-bit;
 		dL_dp0+=bit;
-		for(int k=0;k<T49_NESTIMATORS;++k)
+		for(int k=0;k<T49_NPRED*T49_NESTIMATORS;++k)
 		{
 			int diff=ctx->p0arr[k]-ctx->p0;//fixed 15.16 bit
 			long long grad = dL_dp0*diff/ctx->wsum;
@@ -871,23 +899,27 @@ void t49_ctx_update(T49Ctx *ctx, int kc, int kb, int bit)
 
 	//update
 	T49Node *node;
-
-	node=ctx->node;
-	++node->n[bit];
-#ifndef T49_DISABLE_REC
-	for(int k=0;k<T49_N_REC_ESTIMATORS;++k)
+	for(int kp=0;kp<T49_NPRED;++kp)
 	{
-		int lgden=k;
-		//int lgden=(k+1)<<1;
-		int temp=node->rec[k]+(((!bit<<16)-node->rec[k])>>lgden);
-		node->rec[k]=CLAMP(1, temp, 0xFFFF);
-	}
+		node=ctx->node[kp];
+#ifndef T49_DISABLE_COUNTER
+		++node->n[bit];
 #endif
-	ctx->context|=bit<<(ctx->cdepth+ctx->idepth-1-kb);
+#ifndef T49_DISABLE_REC
+		for(int k=0;k<T49_N_REC_ESTIMATORS;++k)
+		{
+			int lgden=k+1;
+			//int lgden=k;
+			//int lgden=(k+1)<<1;
+			int temp=node->rec[k]+(((!bit<<16)-node->rec[k])>>lgden);
+			node->rec[k]=CLAMP(1, temp, 0xFFFF);
+		}
+#endif
+		ctx->context[kp]|=bit<<(ctx->cdepth+16-1-kb);
+	}
 }
-int t49_encode(const unsigned short *src, int iw, int ih, ArrayHandle *data, int loud)
+int t49_encode(const unsigned short *src, int iw, int ih, int idepth, ArrayHandle *data, int loud)
 {
-	const int idepth=16;
 	int res=iw*ih;
 	double t_start=time_ms();
 	if(loud)
@@ -907,7 +939,7 @@ int t49_encode(const unsigned short *src, int iw, int ih, ArrayHandle *data, int
 	memcpy(buf2, src, (size_t)res*4*sizeof(short));
 	bufadd_i16((short*)buf2, iw*ih, 0x8000);//the buffer must be signed
 #ifndef T49_DISABLE_COLORTRANSFORM
-	colortransform_ycmcb_fwd((short*)buf2, iw, ih);
+	colortransform_ycmcb_fwd((short*)buf2, iw, ih, idepth);
 #endif
 
 	DList list;
@@ -928,10 +960,17 @@ int t49_encode(const unsigned short *src, int iw, int ih, ArrayHandle *data, int
 		{
 			for(int kc=0;kc<3;++kc)
 			{
+				//if(ky==2&&kx==24&&kc==1)//
+				//	printf("");
+
 				idx=(iw*ky+kx)<<2|kc;
+				int val=(short)buf2[idx]+0x8000;
 				t49_ctx_get_context(ctx, buf2, iw, ih, kx, ky, kc);
-				for(int kb=idepth-1;kb>=0;--kb)//MSB -> LSB
+				for(int kb=16-1;kb>16-1-idepth;--kb)//MSB -> LSB
 				{
+					//if(ky==1&&kx==22&&kc==2&&kb==7)//
+					//	printf("");
+
 					t49_ctx_estimate_p0(ctx, kc, kb);
 #ifdef T49_USE_ONE_ESTIMATOR
 					unsigned short p0=ctx->p0arr[T49_USE_ONE_ESTIMATOR];
@@ -940,7 +979,7 @@ int t49_encode(const unsigned short *src, int iw, int ih, ArrayHandle *data, int
 					unsigned short p0=ctx->p0;
 #endif
 
-					int bit=(buf2[idx]+0x8000)>>(16-idepth+kb)&1;
+					int bit=val>>kb&1;
 					abac_enc(&ac, p0, bit);
 				
 #ifndef T49_DISABLE_ZIPF
@@ -960,7 +999,7 @@ int t49_encode(const unsigned short *src, int iw, int ih, ArrayHandle *data, int
 			double csize=0;
 			for(int kc=0;kc<4;++kc)
 			{
-				for(int kb=idepth-1;kb>=0;--kb)
+				for(int kb=16-1;kb>16-1-idepth;--kb)
 					csize+=csizes[kc][kb];
 			}
 			printf("%5d/%5d  %6.2lf%%  CR%11f  CR_delta%11f\r", ky+1, ih, 100.*(ky+1)/ih, iw*(ky+1)*3*idepth/csize, iw*3*idepth/(csize-csize_prev));
@@ -984,9 +1023,9 @@ int t49_encode(const unsigned short *src, int iw, int ih, ArrayHandle *data, int
 #ifndef T49_DISABLE_ZIPF
 		double chsizes[5]={0};
 		printf("\t\tC0\t\tC1\t\tC2\n");
-		for(int kb=idepth-1;kb>=0;--kb)
+		for(int kb=16-1;kb>16-1-idepth;--kb)
 		{
-			printf("B%2d  ", kb);
+			printf("B%2d  ", kb-(16-idepth));
 			for(int kc=0;kc<3;++kc)
 			{
 				double size=csizes[kc][kb];
@@ -1021,9 +1060,8 @@ int t49_encode(const unsigned short *src, int iw, int ih, ArrayHandle *data, int
 	free(buf2);
 	return 1;
 }
-int t49_decode(const unsigned char *data, size_t srclen, int iw, int ih, unsigned short *dst, int loud)
+int t49_decode(const unsigned char *data, size_t srclen, int iw, int ih, int idepth, unsigned short *dst, int loud)
 {
-	const int idepth=16;
 	int res=iw*ih;
 	double t_start=time_ms();
 
@@ -1049,10 +1087,16 @@ int t49_decode(const unsigned char *data, size_t srclen, int iw, int ih, unsigne
 		{
 			for(int kc=0;kc<3;++kc)
 			{
+				//if(ky==2&&kx==24&&kc==1)//
+				//	printf("");
+
 				idx=(iw*ky+kx)<<2|kc;
 				t49_ctx_get_context(ctx, dst, iw, ih, kx, ky, kc);
-				for(int kb=idepth-1;kb>=0;--kb)//MSB -> LSB
+				for(int kb=16-1;kb>16-1-idepth;--kb)//MSB -> LSB
 				{
+					//if(ky==1&&kx==22&&kc==2&&kb==7)//
+					//	printf("");
+
 					t49_ctx_estimate_p0(ctx, kc, kb);
 #ifdef T49_USE_ONE_ESTIMATOR
 					unsigned short p0=ctx->p0arr[T49_USE_ONE_ESTIMATOR];
@@ -1062,7 +1106,7 @@ int t49_decode(const unsigned char *data, size_t srclen, int iw, int ih, unsigne
 #endif
 					
 					int bit=abac_dec(&ac, p0);
-					dst[idx]|=bit<<(16-idepth+kb);
+					dst[idx]|=bit<<kb;
 
 					t49_ctx_update(ctx, kc, kb, bit);
 				}
@@ -1073,7 +1117,7 @@ int t49_decode(const unsigned char *data, size_t srclen, int iw, int ih, unsigne
 			printf("%5d/%5d  %6.2lf%%\r", ky+1, ih, 100.*(ky+1)/ih);
 	}
 #ifndef T49_DISABLE_COLORTRANSFORM
-	colortransform_ycmcb_inv((short*)dst, iw, ih);
+	colortransform_ycmcb_inv((short*)dst, iw, ih, idepth);
 #endif
 	bufadd_i16((short*)dst, iw*ih, 0x8000);//the buffer must be signed
 	for(int k=0;k<res;++k)
@@ -1092,10 +1136,10 @@ void test49(ImageHandle image, int idepth)
 	console_start();
 
 	int iw=image->iw, ih=image->ih;
-	unsigned short *dst=(unsigned short*)malloc(iw*ih*4*sizeof(short));
 	ArrayHandle data=0;
-	t49_encode((unsigned short*)image->data, iw, ih, &data, 1);
-	t49_decode(data->data, data->count, iw, ih, dst, 1);
+	unsigned short *dst=(unsigned short*)malloc(iw*ih*4*sizeof(short));
+	t49_encode((unsigned short*)image->data, iw, ih, idepth, &data, 1);
+	t49_decode(data->data, data->count, iw, ih, idepth, dst, 1);
 	compare_bufs_u16(dst, (unsigned short*)image->data, iw, ih, 3, 4, "T49", 0);
 	free(dst);
 

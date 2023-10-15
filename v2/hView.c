@@ -292,6 +292,11 @@ static void count_active_keys(IOKey upkey)
 }
 int io_keydn(IOKey key, char c)
 {
+	if(key=='S'&&GET_KEY_STATE(KEY_CTRL))//'S' is a timer key, handled outside the switch block
+	{
+		save_media_as(impreview, 1);
+		return 1;
+	}
 	switch(key)
 	{
 	case KEY_F1:

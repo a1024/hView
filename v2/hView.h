@@ -221,7 +221,7 @@ typedef struct FilterStruct
 } Filter;
 ArrayHandle dialog_open_folder();
 ArrayHandle	dialog_open_file(Filter *filters, int nfilters, int multiple);
-const char*	dialog_save_file(Filter *filters, int nfilters, const char *initialname);
+const char*	dialog_save_file(Filter *filters, int nfilters, const char *initialname, int *ret_ext_idx);
 
 void get_window_title(char *buf, int len);
 void set_window_title(const char *format, ...);
@@ -637,7 +637,10 @@ ImageHandle image_construct(int xcap, int ycap, int dstdepth, const unsigned cha
 void image_free(ImageHandle *image);
 void image_resize(ImageHandle *image, int w, int h);
 
-int load_media(const char *filename, ImageHandle *image, int erroronfail);//returns error (0 on success)
+//the following 3 functions return: a negative value on failure; 0 on success
+int load_media(const char *filename, ImageHandle *image, int erroronfail);
+int save_media(const char *fn, ImageHandle image, int erroronfail);
+int save_media_as(ImageHandle image, int erroronfail);
 
 
 extern int imagecentered;
@@ -687,8 +690,8 @@ int t48_decode(const unsigned char *data, size_t srclen, int iw, int ih, int ide
 void test48(ImageHandle image, int idepth, char *bayer);
 
 //T49: lossless 16-bit image codec
-int t49_encode(const unsigned short *src, int iw, int ih, ArrayHandle *data, int loud);
-int t49_decode(const unsigned char *data, size_t srclen, int iw, int ih, unsigned short *dst, int loud);
+int t49_encode(const unsigned short *src, int iw, int ih, int idepth, ArrayHandle *data, int loud);
+int t49_decode(const unsigned char *data, size_t srclen, int iw, int ih, int idepth, unsigned short *dst, int loud);
 void test49(ImageHandle image, int idepth);
 
 
