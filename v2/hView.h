@@ -642,7 +642,7 @@ void image_resize(ImageHandle *image, int w, int h);
 //the following 3 functions return: a negative value on failure; 0 on success
 int load_media(const char *filename, ImageHandle *image, int erroronfail);
 int save_media(const char *fn, ImageHandle image, int erroronfail);
-int save_media_as(ImageHandle image, int erroronfail);
+int save_media_as(ImageHandle image, const char *initialname, int namelen, int erroronfail);
 
 ImageHandle paste_bmp_from_clipboard();
 

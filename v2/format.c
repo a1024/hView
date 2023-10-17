@@ -58,6 +58,10 @@ static const char file[]=__FILE__;
 	}while(0)
 //#define CHECK_AV(E) (!(E)||LOG_WARNING("%s", av_err2str(E)))
 
+int   slic2_save(const char *filename, int iw, int ih, int nch, int depth, const void *src);
+void* slic2_load(const char *filename, int *ret_iw, int *ret_ih, int *ret_nch, int *ret_depth, int *ret_dummy_alpha, int force_alpha);
+
+
 static void update_globals(const char *fn, ImageHandle image)//accesses globals
 {
 	filesize=get_filesize(fn);
@@ -376,6 +380,22 @@ int load_media(const char *filename, ImageHandle *image, int erroronfail)//TODO 
 		return load_raw(filename, image, erroronfail);
 #endif
 
+	if(
+		!_stricmp(filename+len-4, ".SLI")
+	)
+	{
+		int iw=0, ih=0, nch=0, dummy_alpha=0;
+		void *ret=slic2_load(filename, &iw, &ih, &nch, &imagedepth, &dummy_alpha, 1);
+		if(!ret)
+			return -1;
+		has_alpha=(nch==4||nch==2)&&!dummy_alpha;
+		imagetype=IM_RGBA;
+		*image=image_construct(iw, ih, 16, ret, iw, ih, 0, imagedepth<=8?8:16);
+		free(ret);
+		update_globals(filename, *image);
+		return 0;
+	}
+
 	int error;
 	AVFormatContext *formatContext=avformat_alloc_context();
 	if(!formatContext)
@@ -664,34 +684,49 @@ int save_media(const char *fn, ImageHandle image, int erroronfail)
 	avformat_free_context(oc);
 	return 0;
 }
-int save_media_as(ImageHandle image, int erroronfail)
+int save_media_as(ImageHandle image, const char *initialname, int namelen, int erroronfail)
 {
 	Filter filters[]=
 	{
 		{"\'Png is Not Gnu, which in turn is not Unix\' File (*.PNG)", ".PNG"},
 		{"JPEG XL File (*.JXL)", ".JXL"},
-		{"WebP File (*.WEBP)", ".WEBP"},
-		{"JPEG File (*.JPG)", ".JPG"},
-		{"GIF File (*.GIF)", ".GIF"},
-		{"JPEG2000 File (*.JP2)", ".JP2"},
-		{"BMP File (*.BMP)", ".BMP"},
+		{"Simple Lossless Image Codec (*.SLI)", ".SLI"},
+		//{"WebP File (*.WEBP)", ".WEBP"},//error
+		//{"JPEG File (*.JPG)", ".JPG"},//error
+		//{"GIF File (*.GIF)", ".GIF"},//error
+		//{"JPEG2000 File (*.JP2)", ".JP2"},//error
+		//{"BMP File (*.BMP)", ".BMP"},//error
 		{"TIFF File (*.TIF)", ".TIF"},
 		{"Quite OK Image (*.QOI)", ".QOI"},
-		{"Lossless JPEG (*.LJPG)", ".LJPG"},
-		{"JPEG-LS (*.JLS)", ".JLS"},
-		{"LOCO File (*.LOCO)", ".LOCO"},
-		{"PPM File (*.PPM)", ".PPM"},
-		{"PBM File (*.PBM)", ".PBM"},
-		{"PGM File (*.PGM)", ".PGM"},
-		{"PAM File (*.PAM)", ".PAM"},
+		//{"Lossless JPEG (*.LJPG)", ".LJPG"},//error
+		//{"JPEG-LS (*.JLS)", ".JLS"},//error
+		//{"LOCO File (*.LOCO)", ".LOCO"},//error
+		//{"PPM File (*.PPM)", ".PPM"},//error
+		//{"PBM File (*.PBM)", ".PBM"},//error
+		//{"PGM File (*.PGM)", ".PGM"},//error
+		//{"PAM File (*.PAM)", ".PAM"},//error
 	};
+	ArrayHandle name;
+	STR_COPY(name, initialname, namelen);
+	STR_APPEND(name, ".PNG", 4, 1);
 	int ext_selection=0, ret;
-	char *fn=dialog_save_file(filters, _countof(filters), "Untitled.PNG", &ext_selection);
+	char *fn=dialog_save_file(filters, _countof(filters), name->data, &ext_selection);
+	array_free(&name);
 	if(!fn)
 		ret=-2;
 	else
 	{
-		ret=save_media(fn, image, erroronfail);
+		if(ext_selection==3)//.SLI
+		{
+			ret=slic2_save(fn, image->iw, image->ih, 4, image->depth, image->data);
+			if(!ret)
+			{
+				LOG_WARNING("Failed to save \'%s\'", fn);
+				ret=-1;
+			}
+		}
+		else
+			ret=save_media(fn, image, erroronfail);
 		free(fn);
 	}
 	return ret;

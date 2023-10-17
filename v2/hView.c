@@ -307,7 +307,14 @@ int io_keydn(IOKey key, char c)
 					impreview->data[k<<2|3]=0xFF;
 			}
 		case 'S':
-			save_media_as(impreview, 1);
+			{
+				int kslash=0, kdot=0;
+				for(kdot=(int)fn->count-1;kdot>=0&&fn->data[kdot]!='.';--kdot);
+				kslash=kdot-1;
+				for(kslash=kdot-1;kslash>=0&&fn->data[kslash]!='/'&&fn->data[kslash]!='\\';--kslash);
+				++kslash;
+				save_media_as(impreview, (char*)fn->data+kslash, kdot-kslash, 1);
+			}
 			return 1;
 		}
 	}
