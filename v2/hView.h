@@ -221,13 +221,15 @@ typedef struct FilterStruct
 } Filter;
 ArrayHandle dialog_open_folder();
 ArrayHandle	dialog_open_file(Filter *filters, int nfilters, int multiple);
-const char*	dialog_save_file(Filter *filters, int nfilters, const char *initialname, int *ret_ext_idx);
+char*       dialog_save_file(Filter *filters, int nfilters, const char *initialname, int *ret_ext_idx);
 
 void get_window_title(char *buf, int len);
 void set_window_title(const char *format, ...);
 
 int copy_to_clipboard(const char *a, int size);
 ArrayHandle paste_from_clipboard(int loud);
+
+int copy_bmp_to_clipboard(const unsigned char *rgba, int iw, int ih);
 
 #define GET_KEY_STATE(KEY)	(keyboard[KEY]=(GetAsyncKeyState(KEY)>>15)!=0)
 
@@ -642,6 +644,8 @@ int load_media(const char *filename, ImageHandle *image, int erroronfail);
 int save_media(const char *fn, ImageHandle image, int erroronfail);
 int save_media_as(ImageHandle image, int erroronfail);
 
+ImageHandle paste_bmp_from_clipboard();
+
 
 extern int imagecentered;
 extern double
@@ -672,6 +676,7 @@ extern char bayer[4];
 extern int has_alpha;
 extern ptrdiff_t filesize;
 extern double format_CR;
+extern unsigned char background[4];
 
 typedef enum ProfilePlotModeEnum
 {

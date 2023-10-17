@@ -118,6 +118,41 @@ static void update_globals(const char *fn, ImageHandle image)//accesses globals
 			break;
 		}
 		format_CR=(double)image->iw*image->ih*imagedepth*(nch+has_alpha)/(filesize*8);
+
+		long long sum[3]={0}, count=0;//set background as far as possible from averate border color in RGB space
+		for(int kx=0;kx<image->iw;++kx)//accumulate top edge
+		{
+			sum[0]+=data[kx<<2|0];
+			sum[1]+=data[kx<<2|1];
+			sum[2]+=data[kx<<2|2];
+			++count;
+		}
+		for(int kx=0;kx<image->iw;++kx)//accumulate bottom edge
+		{
+			sum[0]+=data[(image->iw*(image->ih-1)+kx)<<2|0];
+			sum[1]+=data[(image->iw*(image->ih-1)+kx)<<2|1];
+			sum[2]+=data[(image->iw*(image->ih-1)+kx)<<2|2];
+			++count;
+		}
+		for(int ky=0;ky<image->ih;++ky)//accumulate left edge
+		{
+			sum[0]+=data[image->iw*ky<<2|0];
+			sum[1]+=data[image->iw*ky<<2|1];
+			sum[2]+=data[image->iw*ky<<2|2];
+			++count;
+		}
+		for(int ky=0;ky<image->ih;++ky)//accumulate right edge
+		{
+			sum[0]+=data[(image->iw*ky+image->iw-1)<<2|0];
+			sum[1]+=data[(image->iw*ky+image->iw-1)<<2|1];
+			sum[2]+=data[(image->iw*ky+image->iw-1)<<2|2];
+			++count;
+		}
+		memset(background, 0, sizeof(background));
+		int comp;
+		comp=(int)(sum[0]/count>>8), background[0]=(unsigned char)(CLAMP(0, comp, 255)+128);
+		comp=(int)(sum[1]/count>>8), background[1]=(unsigned char)(CLAMP(0, comp, 255)+128);
+		comp=(int)(sum[2]/count>>8), background[2]=(unsigned char)(CLAMP(0, comp, 255)+128);
 	}
 }
 
@@ -586,10 +621,10 @@ int save_media(const char *fn, ImageHandle image, int erroronfail)
 	error=av_frame_get_buffer(frame, 0);		CHECK_AV(error);
 	av_image_fill_arrays(frame->data, frame->linesize, image->data, srcfmt, image->iw, image->ih, 1);
 
-	AVPacket packet;
-	av_init_packet(&packet);
-	packet.data=0;
-	packet.size=0;
+	AVPacket packet={0};
+	//av_init_packet(&packet);//deprecated warning
+	//packet.data=0;
+	//packet.size=0;
 
 	//save file
 	FILE *f=fopen(fn, "wb");
@@ -651,7 +686,7 @@ int save_media_as(ImageHandle image, int erroronfail)
 		{"PAM File (*.PAM)", ".PAM"},
 	};
 	int ext_selection=0, ret;
-	const char *fn=dialog_save_file(filters, _countof(filters), "Untitled.PNG", &ext_selection);
+	char *fn=dialog_save_file(filters, _countof(filters), "Untitled.PNG", &ext_selection);
 	if(!fn)
 		ret=-2;
 	else

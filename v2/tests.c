@@ -773,9 +773,9 @@ void t49_ctx_get_context(T49Ctx *ctx, const unsigned short *buf, int iw, int ih,
 	ctx->context[++j]=W;
 	ctx->context[++j]=(N+W)/2+(NE-NW)/4;
 	ctx->context[++j]=NW;
-	pred=(W*2-WW+N*2-NN)>>1, ctx->context[++j]=CLAMP(vmin, pred, vmax);
-	pred=W*2-WW, ctx->context[++j]=CLAMP(vmin, pred, vmax);
-	pred=N*2-NN, ctx->context[++j]=CLAMP(vmin, pred, vmax);
+	pred=(W*2-WW+N*2-NN)>>1, ctx->context[++j]=(int)CLAMP(vmin, pred, vmax);
+	pred=W*2-WW, ctx->context[++j]=(int)CLAMP(vmin, pred, vmax);
+	pred=N*2-NN, ctx->context[++j]=(int)CLAMP(vmin, pred, vmax);
 #endif
 
 	//average predictor

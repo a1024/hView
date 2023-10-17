@@ -38,6 +38,7 @@ char bayer[4]={0};//shift ammounts for the 4 Bayer mosaic components, -1 for gra
 int has_alpha=0;
 ptrdiff_t filesize=0;
 double format_CR=0;
+unsigned char background[]={0, 0, 0, 255};
 
 static ArrayHandle vertices_text=0;
 int pxlabels_hex=1;
@@ -292,10 +293,23 @@ static void count_active_keys(IOKey upkey)
 }
 int io_keydn(IOKey key, char c)
 {
-	if(key=='S'&&GET_KEY_STATE(KEY_CTRL))//'S' is a timer key, handled outside the switch block
+	if(GET_KEY_STATE(KEY_CTRL))//timer keys handled outside the switch block
 	{
-		save_media_as(impreview, 1);
-		return 1;
+		switch(key)
+		{
+		case 'A'://set alpha to one
+			{
+				unsigned short *data=(unsigned short*)image->data;
+				ptrdiff_t res=image->iw*image->ih;
+				for(ptrdiff_t k=0;k<res;++k)
+					data[k<<2|3]=0xFFFF;
+				for(ptrdiff_t k=0;k<res;++k)
+					impreview->data[k<<2|3]=0xFF;
+			}
+		case 'S':
+			save_media_as(impreview, 1);
+			return 1;
+		}
 	}
 	switch(key)
 	{
@@ -431,9 +445,33 @@ int io_keydn(IOKey key, char c)
 		imagecentered=0;
 		return 1;
 	case 'C':
-		if(GET_KEY_STATE(KEY_CTRL))
+		if(GET_KEY_STATE(KEY_CTRL))//copy screen contents
 		{
-			if(zoom>=ZOOM_LIMIT_LABEL)
+			if(!image||!impreview)
+				break;
+			if(zoom<ZOOM_LIMIT_LABEL)
+			{
+				int x1=screen2image_x_int_rounded(0), y1=screen2image_y_int_rounded(0),
+					x2=screen2image_x_int_rounded(w), y2=screen2image_y_int_rounded(h);
+				if(x1<0)x1=0;
+				if(y1<0)y1=0;
+				if(x2>impreview->iw)x2=impreview->iw;
+				if(y2>impreview->ih)y2=impreview->ih;
+				int iw=x2-x1, ih=y2-y1;
+				if(iw>0&&ih>0)
+				{
+					ImageHandle crop=image_construct(iw, ih, 8, impreview->data+((impreview->iw*(ptrdiff_t)y1+x1)<<2), iw, ih, impreview->xcap-iw, impreview->depth);
+					for(ptrdiff_t k=0, res=crop->iw*crop->ih;k<res;++k)//swap red & blue (8-bit)
+					{
+						unsigned char temp=crop->data[k<<2|0];
+						crop->data[k<<2|0]=crop->data[k<<2|2];
+						crop->data[k<<2|2]=temp;
+					}
+					copy_bmp_to_clipboard(crop->data, crop->iw, crop->ih);
+					image_free(&crop);
+				}
+			}
+			else
 			{
 				ArrayHandle str;
 				STR_ALLOC(str, 0);
@@ -537,6 +575,23 @@ int io_keydn(IOKey key, char c)
 		else
 			center_image();
 		return 1;
+	case 'V':
+		if(GET_KEY_STATE(KEY_CTRL))
+		{
+			ImageHandle im2=paste_bmp_from_clipboard();
+			if(im2)
+			{
+				image_free(&image);
+				image_free(&impreview);
+				image=image_construct(im2->iw, im2->ih, 16, im2->data, im2->iw, im2->ih, im2->xcap-im2->iw, im2->depth);
+				impreview=im2;
+				imagetype=IM_RGBA;
+				if(imagecentered)
+					center_image();
+				return 1;
+			}
+		}
+		break;
 	case 'H':
 		if(GET_KEY_STATE(KEY_CTRL))//toggle pixel label base
 			pxlabels_hex=!pxlabels_hex;
@@ -775,6 +830,11 @@ void io_render()
 {
 	if(h<=0)
 		return;
+	if(!background[3])
+	{
+		background[3]=255;
+		glClearColor(background[0]/255.f, background[1]/255.f, background[2]/255.f, 1);
+	}
 	glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
 
 	if(impreview)
