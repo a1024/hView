@@ -14,9 +14,9 @@ extern "C"
 //v	copy pixels as text
 //v	histogram
 //v	cross-section profile
-//	equalization
+//v	equalization
 //	contrast
-//	ctrl S
+//v	ctrl S
 //	separate components
 //v	bitplanes
 //	animation
