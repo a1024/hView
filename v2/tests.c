@@ -442,7 +442,7 @@ void t48_ctx_update(T48Ctx *ctx, int kc, int kb, int bit)
 int t48_encode(const unsigned short *src, int iw, int ih, int idepth, char *bayer, ArrayHandle *data, int loud)
 {
 	int res=iw*ih;
-	double t_start=time_ms();
+	double t_start=time_sec();
 	if(loud)
 	{
 		acme_strftime(g_buf, G_BUF_SIZE, "%Y-%m-%d_%H-%M-%S");
@@ -530,7 +530,7 @@ int t48_encode(const unsigned short *src, int iw, int ih, int idepth, char *baye
 		printf("\n");//skip progress line
 
 		//printf("Used %f MB of memory\n", (float)ctx->nnodes*sizeof(T48Node)/(1024*1024));
-		timedelta2str(g_buf, G_BUF_SIZE, time_ms()-t_start);
+		timedelta2str(g_buf, G_BUF_SIZE, time_sec()-t_start);
 		printf("Encode elapsed %s\n", g_buf);
 		
 #ifndef T48_DISABLE_ZIPF
@@ -577,7 +577,7 @@ int t48_encode(const unsigned short *src, int iw, int ih, int idepth, char *baye
 int t48_decode(const unsigned char *data, size_t srclen, int iw, int ih, int idepth, char *bayer, unsigned short *dst, int loud)
 {
 	int res=iw*ih;
-	double t_start=time_ms();
+	double t_start=time_sec();
 
 	unsigned short *buf=(unsigned short*)malloc((size_t)res*sizeof(short));
 	T48Ctx *ctx=t48_ctx_init(idepth);
@@ -627,7 +627,7 @@ int t48_decode(const unsigned char *data, size_t srclen, int iw, int ih, int ide
 	if(loud)
 	{
 		printf("\n");//skip progress line
-		timedelta2str(g_buf, G_BUF_SIZE, time_ms()-t_start);
+		timedelta2str(g_buf, G_BUF_SIZE, time_sec()-t_start);
 		printf("Decode elapsed %s\n", g_buf);
 	}
 	t48_ctx_clear(&ctx);
@@ -921,7 +921,7 @@ void t49_ctx_update(T49Ctx *ctx, int kc, int kb, int bit)
 int t49_encode(const unsigned short *src, int iw, int ih, int idepth, ArrayHandle *data, int loud)
 {
 	int res=iw*ih;
-	double t_start=time_ms();
+	double t_start=time_sec();
 	if(loud)
 	{
 		acme_strftime(g_buf, G_BUF_SIZE, "%Y-%m-%d_%H-%M-%S");
@@ -1017,7 +1017,7 @@ int t49_encode(const unsigned short *src, int iw, int ih, int idepth, ArrayHandl
 		printf("\n");//skip progress line
 
 		//printf("Used %f MB of memory\n", (float)ctx->nnodes*sizeof(T49Node)/(1024*1024));
-		timedelta2str(g_buf, G_BUF_SIZE, time_ms()-t_start);
+		timedelta2str(g_buf, G_BUF_SIZE, time_sec()-t_start);
 		printf("Encode elapsed %s\n", g_buf);
 		
 #ifndef T49_DISABLE_ZIPF
@@ -1063,7 +1063,7 @@ int t49_encode(const unsigned short *src, int iw, int ih, int idepth, ArrayHandl
 int t49_decode(const unsigned char *data, size_t srclen, int iw, int ih, int idepth, unsigned short *dst, int loud)
 {
 	int res=iw*ih;
-	double t_start=time_ms();
+	double t_start=time_sec();
 
 	T49Ctx *ctx=t49_ctx_init(3, idepth);
 	if(!ctx)
@@ -1125,7 +1125,7 @@ int t49_decode(const unsigned char *data, size_t srclen, int iw, int ih, int ide
 	if(loud)
 	{
 		printf("\n");//skip progress line
-		timedelta2str(g_buf, G_BUF_SIZE, time_ms()-t_start);
+		timedelta2str(g_buf, G_BUF_SIZE, time_sec()-t_start);
 		printf("Decode elapsed %s\n", g_buf);
 	}
 	t49_ctx_clear(&ctx);
