@@ -413,9 +413,9 @@ int io_keydn(IOKey key, char c)
 					array_free(&fn);
 					fn=filter_path(fn2[0]->data, 1);
 					update_image(1, 1);
-					return 1;
 				}
 				array_free(&filenames);
+				return 1;
 			}
 		}
 		break;
@@ -989,8 +989,8 @@ void io_render()
 	}
 	extern int mouse_bypass;
 	static double t=0;
-	double t2=time_sec();
-	GUIPrint(0, 0, 0, 1, "fps %11lf", 1/(t2-t));
+	double t2=time_ms();
+	GUIPrint(0, 0, 0, 1, "fps %lf", 1000./(t2-t));
 	t=t2;
 	swapbuffers();
 }

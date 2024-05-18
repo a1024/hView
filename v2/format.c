@@ -242,14 +242,6 @@ int load_raw(const char *filename, ImageHandle *image, int erroronfail)
 	bayer[3]=color_sh[libraw_COLOR(decoder, 1, 1)];
 	unsigned short *src=decoder->rawdata.raw_image;
 	int res=iw2*ih2;
-	int ret=0;
-	if(!src)
-	{
-		if(erroronfail)
-			LOG_WARNING("Cannot open \'%s\'", filename);
-		ret=-1;
-		goto libraw_fail;
-	}
 	switch(decoder->sizes.flip)
 	{
 	case 0:
@@ -258,7 +250,7 @@ int load_raw(const char *filename, ImageHandle *image, int erroronfail)
 			if(!*image)
 			{
 				LOG_WARNING("realloc returned null");
-				return -1;
+				return 0;
 			}
 			unsigned long long *dst=(unsigned long long*)image[0]->data;
 			for(int ky=0;ky<ih2;++ky)
@@ -279,7 +271,7 @@ int load_raw(const char *filename, ImageHandle *image, int erroronfail)
 			if(!*image)
 			{
 				LOG_WARNING("realloc returned null");
-				return -1;
+				return 0;
 			}
 			unsigned long long *dst=(unsigned long long*)image[0]->data;
 			char temp;
@@ -308,7 +300,7 @@ int load_raw(const char *filename, ImageHandle *image, int erroronfail)
 			if(!*image)
 			{
 				LOG_WARNING("realloc returned null");
-				return -1;
+				return 0;
 			}
 			unsigned long long *dst=(unsigned long long*)image[0]->data;
 			for(int ky=0;ky<ih2;++ky)
@@ -334,7 +326,7 @@ int load_raw(const char *filename, ImageHandle *image, int erroronfail)
 			if(!*image)
 			{
 				LOG_WARNING("realloc returned null");
-				return -1;
+				return 0;
 			}
 			unsigned long long *dst=(unsigned long long*)image[0]->data;
 			for(int ky=0;ky<ih2;++ky)
@@ -352,13 +344,12 @@ int load_raw(const char *filename, ImageHandle *image, int erroronfail)
 		LOG_WARNING("Invalid RAW image orientation");
 		break;
 	}
-	has_alpha=0;//only edited RAWs (eg: Photoshop) can have alpha
-	update_globals(filename, *image);
-
-libraw_fail:
 	libraw_free_image(decoder);
 	libraw_close(decoder);
-	return ret;
+	
+	has_alpha=0;//only edited RAWs (eg: Photoshop) can have alpha
+	update_globals(filename, *image);
+	return 0;
 }
 #endif
 

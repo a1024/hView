@@ -267,7 +267,7 @@ int floor_log10(double x)
 	sh= x<nmask[1];      logn-=sh;
 	return logn;
 }
-double power(double x, int y)
+double			power(double x, int y)
 {
 	double mask[]={1, 0}, product=1;
 	if(y<0)
@@ -283,23 +283,27 @@ double power(double x, int y)
 	}
 	return product;
 }
-double _10pow(int n)
+double			_10pow(int n)
 {
-	static double powersof10[616]={0};
-	if(!powersof10[308])
+	static double *mask=0;
+	int k;
+//	const double _ln10=log(10.);
+	if(!mask)
 	{
-		int k;
+		mask=(double*)malloc(616*sizeof(double));
 		for(k=-308;k<308;++k)		//23.0
-			powersof10[k+308]=power(10., k);
-		//	powersof10[k+308]=exp(k*_ln10);//inaccurate
+			mask[k+308]=power(10., k);
+		//	mask[k+308]=exp(k*_ln10);//inaccurate
 	}
 	if(n<-308)
 		return 0;
 	if(n>307)
 		return _HUGE;
-	return powersof10[n+308];
+	return mask[n+308];
 }
-int acme_isdigit(char c, char base)
+int				minimum(int a, int b){return a<b?a:b;}
+int				maximum(int a, int b){return a>b?a:b;}
+int				acme_isdigit(char c, char base)
 {
 	switch(base)
 	{
@@ -311,19 +315,18 @@ int acme_isdigit(char c, char base)
 	return 0;
 }
 
-double			time_sec()
+double			time_ms()
 {
 #ifdef _MSC_VER
-	static long long t0=0;
+	static double inv_f=0;
 	LARGE_INTEGER li;
-	double t;
+	//if(!inv_f)
+	//{
+		QueryPerformanceFrequency(&li);//<Windows.h>
+		inv_f=1/(double)li.QuadPart;
+	//}
 	QueryPerformanceCounter(&li);
-	if(!t0)
-		t0=li.QuadPart;
-	t=(double)(li.QuadPart-t0);
-	QueryPerformanceFrequency(&li);
-	t/=(double)li.QuadPart;
-	return t;
+	return 1000.*(double)li.QuadPart*inv_f;
 #else
 	struct timespec t;
 	clock_gettime(CLOCK_REALTIME, &t);//<time.h>

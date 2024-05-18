@@ -199,7 +199,7 @@ static void slic2_dlist_clear(C2DListHandle list)
 		list->nbytes=list->nnodes=0;
 	}
 }
-static unsigned char* slic2_dlist_appendtoarray(C2DListHandle list, size_t *ret_size)
+static unsigned char* slic2_dlist_toarray(C2DListHandle list, size_t *ret_size)
 {
 	C2DNodeHandle it;
 	unsigned char *dst=(unsigned char*)malloc(list->nnodes*list->nodebytes);
@@ -606,7 +606,7 @@ typedef struct SLI2HeaderStruct
 	int iw, ih;
 
 	unsigned char nch, depth;//nch: 1, 2, 3 or 4, depth: [1~16]
-	short alpha;
+	short alpha;		//TODO (generalize) if palette is degenerate, skip encoding channel
 
 	unsigned short palettesizes[4];//per channel, nonzero means enabled (depth must be > 8)
 	unsigned short hist[4][SLIC2_HISTLEN];
@@ -664,7 +664,7 @@ unsigned char* slic2_encode(int iw, int ih, int nch, int depth, const void *src,
 			memset(hist, 0, histlen*sizeof(int));
 			for(int k=0;k<res;++k)
 			{
-				unsigned short val=src0[nch*k+kc];
+				unsigned short val=src0[nch*k+kc]>>(16-depth);
 				++hist[val];
 			}
 			int palettesize=0;
@@ -672,11 +672,14 @@ unsigned char* slic2_encode(int iw, int ih, int nch, int depth, const void *src,
 				palettesize+=hist[k]!=0;
 			if(palettesize<=(1<<(depth-8)))
 			{
+				if(palettesize>1)
 				{
 					int sh, temp;
 					FLOOR_LOG2_16BIT(truedepth[kc], palettesize-1, sh, temp);//truedepth = number of bits in maximum unsigned symbol
 					++truedepth[kc];
 				}
+				else
+					truedepth[kc]=1;
 				slic2_header.palettesizes[kc]=palettesize;
 				palettes[kc]=(unsigned short*)malloc(palettesize*sizeof(short));
 				for(int k=0, idx=0;k<histlen;++k)
@@ -810,7 +813,7 @@ unsigned char* slic2_encode(int iw, int ih, int nch, int depth, const void *src,
 			}//x-loop
 		}//y-loop
 
-		for(int kt=0, sum=0, overflow=0;kt<SLIC2_HISTLEN;++kt)
+		for(int kt=0, sum=0;kt<SLIC2_HISTLEN;++kt)
 		{
 			unsigned freq=CDF2[kt];
 			CDF2[kt]=(unsigned)((unsigned long long)sum*(0x10000LL-SLIC2_HISTLEN)/res)+kt;
@@ -829,7 +832,7 @@ unsigned char* slic2_encode(int iw, int ih, int nch, int depth, const void *src,
 		}
 	}//channel-loop
 	SLIC2_ENC_FLUSH(&ec);
-	unsigned char *ret=slic2_dlist_appendtoarray(&list, ret_size);
+	unsigned char *ret=slic2_dlist_toarray(&list, ret_size);
 	slic2_dlist_clear(&list);
 	free(buf);
 	for(int kc=0;kc<4;++kc)
