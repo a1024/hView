@@ -3,7 +3,9 @@
 #include<tmmintrin.h>
 #define STB_IMAGE_IMPLEMENTATION
 #include"stb_image.h"
+#ifdef _MSC_VER
 #pragma comment(lib, "OpenGL32.lib")
+#endif
 static const char file[]=__FILE__;
 
 #define GLFUNC(X) t_##X X=0;

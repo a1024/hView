@@ -35,6 +35,7 @@ ImageHandle
 ImageType imagetype=IM_UNINITIALIZED;
 int imagedepth=0;
 char bayer[4]={0};//shift ammounts for the 4 Bayer mosaic components, -1 for grayscale, example: RGGB is {0, 8, 8, 16}
+int debayer_on=1;
 int has_alpha=0;
 ptrdiff_t filesize=0;
 double format_CR=0;
@@ -141,10 +142,11 @@ void equalize()
 			ptr[k<<2|2]=val;
 		}
 		break;
+	case IM_BAYER:
 	case IM_RGBA:
 		for(int kc=0;kc<3;++kc)
 		{
-			fsum=integrate_hist(histogram+(kc<<8), 256, CDF);
+			fsum=integrate_hist(histogram+((size_t)kc<<8), 256, CDF);
 			for(int k=0;k<res;++k)
 			{
 				int val=ptr[k<<2|kc];
@@ -153,23 +155,23 @@ void equalize()
 			}
 		}
 		break;
-	case IM_BAYER:
-		for(int kb=0;kb<4;++kb)
-		{
-			int xoffset=kb&1, yoffset=kb>>1, kc=bayer[kb];
-			fsum=integrate_hist(histogram+(kc<<8), 256, CDF);
-			for(int ky=yoffset;ky<impreview->ih;ky+=2)
-			{
-				for(int kx=xoffset;kx<impreview->iw;kx+=2)
-				{
-					int idx=impreview->iw*ky+kx;
-					int val=ptr[idx<<2|kc];
-					val=(int)((long long)CDF[val]*255/fsum);
-					ptr[idx<<2|kc]=val;
-				}
-			}
-		}
-		break;
+	//case IM_BAYER:
+	//	for(int kb=0;kb<4;++kb)
+	//	{
+	//		int xoffset=kb&1, yoffset=kb>>1, kc=bayer[kb];
+	//		fsum=integrate_hist(histogram+((size_t)kc<<8), 256, CDF);
+	//		for(int ky=yoffset;ky<impreview->ih;ky+=2)
+	//		{
+	//			for(int kx=xoffset;kx<impreview->iw;kx+=2)
+	//			{
+	//				int idx=impreview->iw*ky+kx;
+	//				int val=ptr[idx<<2|kc];
+	//				val=(int)((long long)CDF[val]*255/fsum);
+	//				ptr[idx<<2|kc]=val;
+	//			}
+	//		}
+	//	}
+	//	break;
 	}
 }
 void update_image(int settitle, int render)
@@ -220,7 +222,8 @@ void update_image(int settitle, int render)
 		}
 	}
 	else
-		image_blit(impreview, 0, 0, image->data, image->iw, image->ih, image->xcap-image->iw, image->depth);
+		image_export_rgb8(impreview, image, imagetype);
+	//	image_blit(impreview, 0, 0, image->data, image->iw, image->ih, image->xcap-image->iw, image->depth);
 	if(hist_on)
 		calc_hist();
 	if(imagecentered)
@@ -241,7 +244,14 @@ static void zoom_at(int xs, int ys, double factor)
 }
 int io_init(int argc, char **argv)//return false to abort
 {
-	//const int standard=__STDC_VERSION__;
+#ifdef _DEBUG
+	fn=filter_path("C:/Projects/datasets/dataset-RAW/6K9A8788.CR3", 1);
+	load_media((char*)fn->data, &image, 1);
+	if(image)
+		update_image(1, 0);
+	else
+		array_free(&fn);
+#else
 	if(argc>0)
 	{
 		fn=filter_path(argv[0], 1);
@@ -251,6 +261,7 @@ int io_init(int argc, char **argv)//return false to abort
 		else
 			array_free(&fn);
 	}
+#endif
 	if(!image)
 		set_window_title("hView");
 	return 1;
@@ -442,6 +453,10 @@ int io_keydn(IOKey key, char c)
 		}
 		break;
 		
+	case 'B':
+		debayer_on=!debayer_on;
+		update_image(0, 0);
+		return 1;
 	case 'Q'://equalization
 		equalize();
 		if(hist_on)

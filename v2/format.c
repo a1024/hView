@@ -15,8 +15,10 @@
 #endif
 #ifdef HVIEW_INCLUDE_LIBHEIF
 #include<libheif/heif.h>
+#ifdef _MSC_VER
 #pragma comment(lib, "libheif-1.lib")
 #pragma comment(lib, "liblibde265.lib")
+#endif
 #define CHECK_LIBHEIF(E)\
 	do\
 	{\
@@ -31,7 +33,9 @@
 #endif
 #ifdef HVIEW_INCLUDE_LIBRAW
 #include<libraw/libraw.h>
+#ifdef _MSC_VER
 #pragma comment(lib, "libraw.lib")
+#endif
 #define CHECK_LIBRAW(E)\
 	do\
 	{\
@@ -241,6 +245,11 @@ int load_raw(const char *filename, ImageHandle *image, int erroronfail)
 	bayer[2]=color_sh[libraw_COLOR(decoder, 1, 0)];
 	bayer[3]=color_sh[libraw_COLOR(decoder, 1, 1)];
 	unsigned short *src=decoder->rawdata.raw_image;
+	if(!src)
+	{
+		LOG_WARNING("LibRAW silently returned a nullptr");
+		return 0;
+	}
 	int res=iw2*ih2;
 	switch(decoder->sizes.flip)
 	{
@@ -249,7 +258,7 @@ int load_raw(const char *filename, ImageHandle *image, int erroronfail)
 			*image=image_construct(0, 0, 16, 0, iw2, ih2, 0, 16);
 			if(!*image)
 			{
-				LOG_WARNING("realloc returned null");
+				LOG_WARNING("Alloc error");
 				return 0;
 			}
 			unsigned long long *dst=(unsigned long long*)image[0]->data;
@@ -270,7 +279,7 @@ int load_raw(const char *filename, ImageHandle *image, int erroronfail)
 			*image=image_construct(0, 0, 16, 0, iw2, ih2, 0, 16);
 			if(!*image)
 			{
-				LOG_WARNING("realloc returned null");
+				LOG_WARNING("Alloc error");
 				return 0;
 			}
 			unsigned long long *dst=(unsigned long long*)image[0]->data;
@@ -299,7 +308,7 @@ int load_raw(const char *filename, ImageHandle *image, int erroronfail)
 			*image=image_construct(0, 0, 16, 0, iw2, ih2, 0, 16);
 			if(!*image)
 			{
-				LOG_WARNING("realloc returned null");
+				LOG_WARNING("Alloc error");
 				return 0;
 			}
 			unsigned long long *dst=(unsigned long long*)image[0]->data;
@@ -325,7 +334,7 @@ int load_raw(const char *filename, ImageHandle *image, int erroronfail)
 			*image=image_construct(0, 0, 16, 0, iw2, ih2, 0, 16);
 			if(!*image)
 			{
-				LOG_WARNING("realloc returned null");
+				LOG_WARNING("Alloc error");
 				return 0;
 			}
 			unsigned long long *dst=(unsigned long long*)image[0]->data;
@@ -369,6 +378,7 @@ int load_media(const char *filename, ImageHandle *image, int erroronfail)//TODO 
 #ifdef HVIEW_INCLUDE_LIBRAW
 	if(
 		!_stricmp(filename+len-4, ".CR2")||
+		!_stricmp(filename+len-4, ".CR3")||
 		!_stricmp(filename+len-4, ".CRW")||
 		!_stricmp(filename+len-4, ".NEF")||
 		!_stricmp(filename+len-4, ".REF")||

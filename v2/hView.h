@@ -631,9 +631,10 @@ void depth_test(int enable);
 //hView
 typedef struct ImageHeaderStruct//greyscale image object
 {
-	int xcap, ycap, iw, ih, depth, reserved0;//cap >= dim, depth 8 or 16
+	int xcap, ycap, iw, ih, depth, srcdepth;//cap >= dim, depth 8 or 16
 	unsigned char data[];
 } ImageHeader, *ImageHandle;
+void image_export_rgb8(ImageHandle dst, ImageHandle src, int imagetype);
 void image_blit(ImageHandle dst, int x, int y, const unsigned char *src, int iw, int ih, int rowpad, int srcdepth);
 ImageHandle image_construct(int xcap, int ycap, int dstdepth, const unsigned char *src, int iw, int ih, int rowpad, int srcdepth);
 void image_free(ImageHandle *image);
@@ -665,14 +666,15 @@ extern double
 typedef enum ImageTypeEnum
 {
 	IM_UNINITIALIZED,
-	IM_GRAYSCALE,	//RGBA where R, G, and B are the same
+	IM_GRAYSCALE,		//RGBA where R, G, and B have same value
 	IM_RGBA,
 	IM_BAYER,		//if bayer matrix is RGGB then in quads of {0xAA0000RR, 0xAA00GG00;  0xAA00GG00, 0xAABB0000}
-	IM_BAYER_SEPARATE,//stored same as bayer, channels are shown separately
+	IM_BAYER_SEPARATE,	//stored same as bayer, channels are shown separately
 } ImageType;
 extern ImageType imagetype;
 extern int imagedepth;
 extern char bayer[4];
+extern int debayer_on;
 extern int has_alpha;
 extern ptrdiff_t filesize;
 extern double format_CR;

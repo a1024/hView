@@ -8,13 +8,13 @@ static void copy_row(unsigned char *dst, int dstpxoffset, int dstdepth, const un
 	if(srcdepth==dstdepth)
 	{
 		int idxshift=dstdepth==16?3:2;
-		memcpy(dst+(dstpxoffset<<idxshift), src+(srcpxoffset<<idxshift), npx<<idxshift);
+		memcpy(dst+((size_t)dstpxoffset<<idxshift), src+((size_t)srcpxoffset<<idxshift), (size_t)npx<<idxshift);
 	}
 	else
 	{
 		int srcstride=srcdepth==16?2:1, dststride=dstdepth==16?2:1;
-		const unsigned char *srcptr=src+(srcpxoffset<<(srcdepth==16?3:2));
-		unsigned char *dstptr=dst+(dstpxoffset<<(dstdepth==16?3:2));
+		const unsigned char *srcptr=src+((size_t)srcpxoffset<<(srcdepth==16?3:2));
+		unsigned char *dstptr=dst+((size_t)dstpxoffset<<(dstdepth==16?3:2));
 		if(srcstride==2)//16 -> 8 bit
 		{
 			++srcptr;//skip low byte
@@ -59,6 +59,87 @@ void image_blit(ImageHandle dst, int x, int y, const unsigned char *src, int iw,
 			//memcpy(dst->data+((dst->iw*dsty+dstx1)<<idxshift), src+((iw*srcy+srcx1)<<idxshift), (size_t)(dstx2-dstx1)<<idxshift);//X
 	}
 }
+void image_export_rgb8(ImageHandle dst, ImageHandle src, int imagetype)
+{
+	if(src->iw!=dst->iw||src->ih!=dst->ih)
+	{
+		LOG_WARNING("Dimension mismatch WH %d*%d %d*%d", src->iw, src->ih, dst->iw, dst->ih);
+		return;
+	}
+	if(imagetype==IM_BAYER&&debayer_on)//superpixel (simplest)
+	{
+		unsigned short *srcptr=(unsigned short*)src->data;
+		char debayer[4]={0};//RGGB
+		for(int k=0;k<4;++k)
+		{
+			if(bayer[k]==0)
+			{
+				debayer[0]=k;
+				break;
+			}
+		}
+		for(int k=0, kd=1;k<4;++k)
+		{
+			if(bayer[k]==1)
+				debayer[kd++]=k;
+		}
+		for(int k=0;k<4;++k)
+		{
+			if(bayer[k]==2)
+			{
+				debayer[3]=k;
+				break;
+			}
+		}
+		for(int ky=0;ky<src->ih;ky+=2)
+		{
+			for(int kx=0;kx<src->iw;kx+=2)
+			{
+				int comp[]=
+				{
+					srcptr[(src->iw*(ky+0)+kx+0)<<2|bayer[0]],
+					srcptr[(src->iw*(ky+0)+kx+1)<<2|bayer[1]],
+					srcptr[(src->iw*(ky+1)+kx+0)<<2|bayer[2]],
+					srcptr[(src->iw*(ky+1)+kx+1)<<2|bayer[3]],
+				};
+				int rggb[]=
+				{
+					comp[debayer[0]],
+					comp[debayer[1]],
+					comp[debayer[2]],
+					comp[debayer[3]],
+				};
+				int idx;
+
+				idx=(dst->iw*(ky+0)+kx+0)<<2;
+				dst->data[idx|0]=rggb[3]>>8;
+				dst->data[idx|1]=(rggb[1]+rggb[2])>>9;
+				dst->data[idx|2]=rggb[0]>>8;
+				dst->data[idx|3]=255;
+
+				idx=(dst->iw*(ky+0)+kx+1)<<2;
+				dst->data[idx|0]=rggb[3]>>8;
+				dst->data[idx|1]=(rggb[1]+rggb[2])>>9;
+				dst->data[idx|2]=rggb[0]>>8;
+				dst->data[idx|3]=255;
+
+				idx=(dst->iw*(ky+1)+kx+0)<<2;
+				dst->data[idx|0]=rggb[3]>>8;
+				dst->data[idx|1]=(rggb[1]+rggb[2])>>9;
+				dst->data[idx|2]=rggb[0]>>8;
+				dst->data[idx|3]=255;
+
+				idx=(dst->iw*(ky+1)+kx+1)<<2;
+				dst->data[idx|0]=rggb[3]>>8;
+				dst->data[idx|1]=(rggb[1]+rggb[2])>>9;
+				dst->data[idx|2]=rggb[0]>>8;
+				dst->data[idx|3]=255;
+			}
+		}
+	}
+	else
+		image_blit(dst, 0, 0, src->data, src->iw, src->ih, src->xcap-src->iw, src->depth);
+}
 ImageHandle image_construct(int xcap, int ycap, int dstdepth, const unsigned char *src, int iw, int ih, int rowpad, int srcdepth)
 {
 	ptrdiff_t res;
@@ -81,7 +162,7 @@ ImageHandle image_construct(int xcap, int ycap, int dstdepth, const unsigned cha
 	image->iw=iw;
 	image->ih=ih;
 	image->depth=dstdepth;
-	image->reserved0=0;
+	image->srcdepth=srcdepth;
 	if(src)
 		image_blit(image, 0, 0, src, iw, ih, rowpad, srcdepth);
 	else
