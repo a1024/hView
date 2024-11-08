@@ -245,7 +245,11 @@ static void zoom_at(int xs, int ys, double factor)
 int io_init(int argc, char **argv)//return false to abort
 {
 #ifdef _DEBUG
-	fn=filter_path("C:/Projects/datasets/dataset-RAW/6K9A8788.CR3", 1);
+	fn=filter_path(
+		"E:/Share Box/Scope/20241107/20241107_164651_573.huf"
+	//	"E:/Share Box/Scope/20241107/20241107_164228_958.huf"
+	//	"C:/Projects/datasets/dataset-RAW/6K9A8788.CR3"
+		, 1);
 	load_media((char*)fn->data, &image, 1);
 	if(image)
 		update_image(1, 0);

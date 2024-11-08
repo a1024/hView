@@ -8,7 +8,7 @@
 	"E:/Programs/ffmpeg-6.0-full_build-shared/include"
 #	"E:/C/SDL2-2.0.12-MSVC/include"
 	"E:/C/a/libheif-1.12.0"
-	"E:/C/a/LibRaw-0.20.2"
+	"E:/C/a/LibRaw-0.21.2"
 )
 link_directories(
 	#libraries - laptop
