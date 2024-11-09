@@ -348,7 +348,7 @@ void t48_ctx_get_context(T48Ctx *ctx, const unsigned short *buf, int iw, int ih,
 #endif
 	ctx->context+=0x8000;
 	ctx->context>>=16-ctx->idepth;
-	ctx->context=CLAMP(0, ctx->context, (1<<ctx->idepth)-1);
+	CLAMP2(ctx->context, 0, (1<<ctx->idepth)-1);
 }
 void t48_ctx_estimate_p0(T48Ctx *ctx, int kc, int kb)
 {
@@ -387,7 +387,7 @@ void t48_ctx_estimate_p0(T48Ctx *ctx, int kc, int kb)
 	ctx->p0=ctx->wsum?(int)(sum/ctx->wsum):0x8000;
 	ctx->p0_0=ctx->p0;
 
-	ctx->p0=CLAMP(1, ctx->p0, 0xFFFF);
+	CLAMP2(ctx->p0, 1, 0xFFFF);
 }
 void t48_ctx_update(T48Ctx *ctx, int kc, int kb, int bit)
 {
@@ -418,7 +418,7 @@ void t48_ctx_update(T48Ctx *ctx, int kc, int kb, int bit)
 			long long grad = dL_dp0*diff/ctx->wsum;
 			long long wnew=T48_LR*grad>>16;
 			wnew=wk[k]-wnew;
-			wnew=CLAMP(1, wnew, 0xFFFF);
+			CLAMP2(wnew, 1, 0xFFFF);
 			wk[k]=(int)wnew;
 		}
 	}
@@ -434,7 +434,8 @@ void t48_ctx_update(T48Ctx *ctx, int kc, int kb, int bit)
 		int lgden=k;
 		//int lgden=(k+1)<<1;
 		int temp=node->rec[k]+(((!bit<<16)-node->rec[k])>>lgden);
-		node->rec[k]=CLAMP(1, temp, 0xFFFF);
+		CLAMP2(temp, 1, 0xFFFF);
+		node->rec[k]=temp;
 	}
 #endif
 	ctx->context|=bit<<(ctx->idepth+ctx->idepth-1-kb);
@@ -766,16 +767,22 @@ void t49_ctx_get_context(T49Ctx *ctx, const unsigned short *buf, int iw, int ih,
 	else
 		vmin=W, vmax=N;
 	pred=N+W-NW;
-	pred=CLAMP(vmin, pred, vmax);
+	CLAMP2(pred, vmin, vmax);
 	ctx->context[++j]=(int)pred;
 
 	ctx->context[++j]=N;
 	ctx->context[++j]=W;
 	ctx->context[++j]=(N+W)/2+(NE-NW)/4;
 	ctx->context[++j]=NW;
-	pred=(W*2-WW+N*2-NN)>>1, ctx->context[++j]=(int)CLAMP(vmin, pred, vmax);
-	pred=W*2-WW, ctx->context[++j]=(int)CLAMP(vmin, pred, vmax);
-	pred=N*2-NN, ctx->context[++j]=(int)CLAMP(vmin, pred, vmax);
+	pred=(W*2-WW+N*2-NN)>>1;
+	CLAMP2(pred, vmin, vmax);
+	ctx->context[++j]=(int)pred;
+	pred=W*2-WW;
+	CLAMP2(pred, vmin, vmax);
+	ctx->context[++j]=(int)pred;
+	pred=N*2-NN;
+	CLAMP2(pred, vmin, vmax);
+	ctx->context[++j]=(int)pred;
 #endif
 
 	//average predictor
@@ -815,7 +822,7 @@ void t49_ctx_get_context(T49Ctx *ctx, const unsigned short *buf, int iw, int ih,
 	for(int k=0;k<T49_NPRED;++k)
 	{
 		ctx->context[k]+=0x8000;
-		ctx->context[k]=CLAMP(0, ctx->context[k], 0xFFFF);
+		CLAMP2(ctx->context[k], 0, 0xFFFF);
 		ctx->context[k]>>=16-ctx->cdepth;
 	}
 }
@@ -861,7 +868,7 @@ void t49_ctx_estimate_p0(T49Ctx *ctx, int kc, int kb)
 	ctx->p0=ctx->wsum?(int)(sum/ctx->wsum):0x8000;
 	ctx->p0_0=ctx->p0;
 
-	ctx->p0=CLAMP(1, ctx->p0, 0xFFFF);
+	CLAMP2(ctx->p0, 1, 0xFFFF);
 }
 void t49_ctx_update(T49Ctx *ctx, int kc, int kb, int bit)
 {
@@ -892,7 +899,7 @@ void t49_ctx_update(T49Ctx *ctx, int kc, int kb, int bit)
 			long long grad = dL_dp0*diff/ctx->wsum;
 			long long wnew=T49_LR*grad>>16;
 			wnew=wk[k]-wnew;
-			wnew=CLAMP(1, wnew, 0xFFFF);
+			CLAMP2(wnew, 1, 0xFFFF);
 			wk[k]=(int)wnew;
 		}
 	}
@@ -912,7 +919,8 @@ void t49_ctx_update(T49Ctx *ctx, int kc, int kb, int bit)
 			//int lgden=k;
 			//int lgden=(k+1)<<1;
 			int temp=node->rec[k]+(((!bit<<16)-node->rec[k])>>lgden);
-			node->rec[k]=CLAMP(1, temp, 0xFFFF);
+			CLAMP2(temp, 1, 0xFFFF);
+			node->rec[k]=temp;
 		}
 #endif
 		ctx->context[kp]|=bit<<(ctx->cdepth+16-1-kb);

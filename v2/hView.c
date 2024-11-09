@@ -246,7 +246,8 @@ int io_init(int argc, char **argv)//return false to abort
 {
 #ifdef _DEBUG
 	fn=filter_path(
-		"E:/Share Box/Scope/20241107/20241107_164651_573.huf"
+		"E:/C/huf2gr/huf2gr/plane.gr"
+	//	"E:/Share Box/Scope/20241107/20241107_164651_573.huf"
 	//	"E:/Share Box/Scope/20241107/20241107_164228_958.huf"
 	//	"C:/Projects/datasets/dataset-RAW/6K9A8788.CR3"
 		, 1);
@@ -501,16 +502,17 @@ int io_keydn(IOKey key, char c)
 			{
 				ArrayHandle str;
 				STR_ALLOC(str, 0);
-				int sx1=image2screen_x_int(0), sx2=image2screen_x_int(impreview->iw),
+				int
+					sx1=image2screen_x_int(0), sx2=image2screen_x_int(impreview->iw),
 					sy1=image2screen_y_int(0), sy2=image2screen_y_int(impreview->ih);
-				int csx1=CLAMP(0, sx1, w),
-					csx2=CLAMP(0, sx2, w);
-				int csy1=CLAMP(0, sy1, h),
-					csy2=CLAMP(0, sy2, h);
-				int ix1=screen2image_x_int(csx1),
-					ix2=screen2image_x_int(csx2);
-				int iy1=screen2image_y_int(csy1),
-					iy2=screen2image_y_int(csy2);
+				int csx1=sx1, csx2=sx2;
+				int csy1=sy1, csy2=sy2;
+				CLAMP2(csx1, 0, w);
+				CLAMP2(csx2, 0, w);
+				CLAMP2(csy1, 0, h);
+				CLAMP2(csy2, 0, h);
+				int ix1=screen2image_x_int(csx1), ix2=screen2image_x_int(csx2);
+				int iy1=screen2image_y_int(csy1), iy2=screen2image_y_int(csy2);
 				const char *format;
 				if(pxlabels_hex)
 				{
@@ -865,21 +867,23 @@ void io_render()
 
 	if(impreview)
 	{
-		int sx1=image2screen_x_int(0), sx2=image2screen_x_int(impreview->iw),
+		int
+			sx1=image2screen_x_int(0), sx2=image2screen_x_int(impreview->iw),
 			sy1=image2screen_y_int(0), sy2=image2screen_y_int(impreview->ih);
 		display_texture_i(sx1, sx2, sy1, sy2, (int*)impreview->data, impreview->iw, impreview->ih, 0, 1, 0, 1, 1, 0);
-		int imx=screen2image_x_int(mx),
+		int
+			imx=screen2image_x_int(mx),
 			imy=screen2image_y_int(my);
 		if(zoom>=ZOOM_LIMIT_LABEL)
 		{
-			int csx1=CLAMP(0, sx1, w),
-				csx2=CLAMP(0, sx2, w);
-			int csy1=CLAMP(0, sy1, h),
-				csy2=CLAMP(0, sy2, h);
-			int ix1=screen2image_x_int(csx1),
-				ix2=screen2image_x_int(csx2);
-			int iy1=screen2image_y_int(csy1),
-				iy2=screen2image_y_int(csy2);
+			int csx1=sx1, csx2=sx2;
+			int csy1=sy1, csy2=sy2;
+			CLAMP2(csx1, 0, w);
+			CLAMP2(csx2, 0, w);
+			CLAMP2(csy1, 0, h);
+			CLAMP2(csy2, 0, h);
+			int ix1=screen2image_x_int(csx1), ix2=screen2image_x_int(csx2);
+			int iy1=screen2image_y_int(csy1), iy2=screen2image_y_int(csy2);
 			const char labels[]="rgb";
 			long long theme[]=
 			{

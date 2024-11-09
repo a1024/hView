@@ -308,7 +308,7 @@ SHADER_LIST
 #undef		SHADER
 #undef		UNIF
 
-#define		SHADER(NAME)		ShaderProgram shader_##NAME={"shader_" #NAME, src_vert_##NAME, src_frag_##NAME, attr_##NAME, unif_##NAME, COUNTOF(attr_##NAME), COUNTOF(unif_##NAME), 0};
+#define		SHADER(NAME)		ShaderProgram shader_##NAME={"shader_" #NAME, src_vert_##NAME, src_frag_##NAME, attr_##NAME, unif_##NAME, _countof(attr_##NAME), _countof(unif_##NAME), 0};
 SHADER_LIST
 #undef		SHADER
 

@@ -7,7 +7,7 @@ static void copy_row(unsigned char *dst, int dstpxoffset, int dstdepth, const un
 {
 	if(srcdepth==dstdepth)
 	{
-		int idxshift=dstdepth==16?3:2;
+		int idxshift=dstdepth==16?3:2;//16-bit -> 8 bytes, else 4 bytes
 		memcpy(dst+((size_t)dstpxoffset<<idxshift), src+((size_t)srcpxoffset<<idxshift), (size_t)npx<<idxshift);
 	}
 	else

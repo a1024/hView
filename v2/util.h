@@ -27,27 +27,146 @@ extern "C"
 #endif
 
 //utility
-#define COUNTOF(ARR)        (sizeof(ARR)/sizeof(*(ARR)))		//stdlib defines _countof
+#ifdef _MSC_VER
+#define	ALIGN(N) __declspec(align(N))
+#define INLINE static
+//#define sprintf_s snprintf
+#else
+#define	ALIGN(N) __attribute__((aligned(N)))
+#define INLINE static inline
+#ifndef _countof
+#define _countof(A) (sizeof(A)/sizeof(*(A)))
+#endif
+//#define _stricmp strcasecmp		//moved to source		because this interferes with later includes
+#endif
 #define BETWEEN_INC(LO, X, HI) ((unsigned)((X)-LO)<(unsigned)(HI+1-LO))
 #define BETWEEN_EXC(LO, X, HI) ((unsigned)((X)-LO)<(unsigned)(HI-LO))
-#define SWAPVAR(A, B, TEMP)	TEMP=A, A=B, B=TEMP
-#define SWAPMEM(A, B, TEMP, SIZE) memcpy(TEMP, A, SIZE), memcpy(A, B, SIZE), memcpy(B, TEMP, SIZE)
-#define MINVAR(A, B)        ((A)<(B)?(A):(B))
-#define MAXVAR(A, B)        ((A)>(B)?(A):(B))
-#define CLAMP(LO, X, HI)    ((X)>(LO)?(X)<(HI)?(X):(HI):(LO))
-//#define CLAMP(LO, X, HI)    ((X)<(LO)?(LO):((X)>(HI)?(HI):(X)))
+#define SWAPVAR(A, B, TEMP) TEMP=A, A=B, B=TEMP
+#define SWAPMEM(A, B, TEMP) memcpy(TEMP, A, sizeof(*(TEMP))), memcpy(A, B, sizeof(*(TEMP))), memcpy(B, TEMP, sizeof(*(TEMP)))
+#define ROTATE3(A, B, C, TEMP) TEMP=A, A=B, B=C, C=TEMP
+#define MINVAR(A, B) ((A)<(B)?(A):(B))
+#define MAXVAR(A, B) ((A)>(B)?(A):(B))
+#define CLAMP2(X, LO, HI)\
+	do\
+	{\
+		if((X)<(LO))X=LO;\
+		if((X)>(HI))X=HI;\
+	}while(0)
+//#define CLAMP(LO, X, HI) ((X)>(LO)?(X)<(HI)?(X):(HI):(LO))
+
+//include<smmintrin.h>	SSE4.1
+#define MEDIAN3_32(DST, A, B, C)\
+	do\
+	{\
+		ALIGN(16) int arr[4];\
+		__m128i va=_mm_set_epi32(0, 0, 0, A);\
+		__m128i vb=_mm_set_epi32(0, 0, 0, B);\
+		__m128i vc=_mm_set_epi32(0, 0, 0, C);\
+		__m128i _vmin=_mm_min_epi32(va, vb);\
+		__m128i _vmax=_mm_max_epi32(va, vb);\
+		vc=_mm_max_epi32(vc, _vmin);\
+		vc=_mm_min_epi32(vc, _vmax);\
+		_mm_store_si128((__m128i*)arr, vc);\
+		DST=arr[0];\
+	}while(0)
+
+//include<emmintrin.h>	SSE2
+#define MEDIAN3_16(DST, A, B, C)\
+	do\
+	{\
+		ALIGN(16) short arr[8];\
+		__m128i va=_mm_set_epi16(0, 0, 0, 0, 0, 0, 0, A);\
+		__m128i vb=_mm_set_epi16(0, 0, 0, 0, 0, 0, 0, B);\
+		__m128i vc=_mm_set_epi16(0, 0, 0, 0, 0, 0, 0, C);\
+		__m128i vmin=_mm_min_epi16(va, vb);\
+		__m128i vmax=_mm_max_epi16(va, vb);\
+		vc=_mm_max_epi16(vc, vmin);\
+		vc=_mm_min_epi16(vc, vmax);\
+		_mm_store_si128((__m128i*)arr, vc);\
+		DST=arr[0];\
+	}while(0)
+#define MEDIAN3(A, B, C) (B<A?B<C?C<A?C:A:B:A<C?C<B?C:B:A)//SLOW
+	
+//include<smmintrin.h>	SSE4.1
+#define CLAMP2_32(DST, X, LO, HI)\
+	do\
+	{\
+		ALIGN(16) int _dst[4];\
+		__m128i _mx=_mm_set_epi32(0, 0, 0, X);\
+		__m128i _vmin=_mm_set_epi32(0, 0, 0, LO);\
+		__m128i _vmax=_mm_set_epi32(0, 0, 0, HI);\
+		_mx=_mm_max_epi32(_mx, _vmin);\
+		_mx=_mm_min_epi32(_mx, _vmax);\
+		_mm_store_si128((__m128i*)_dst, _mx);\
+		DST=_dst[0];\
+	}while(0)
+#define CLAMP3_32(DST, X, A, B, C)\
+	do\
+	{\
+		ALIGN(16) int _dst[4];\
+		__m128i _mx=_mm_set_epi32(0, 0, 0, X);\
+		__m128i ma=_mm_set_epi32(0, 0, 0, A);\
+		__m128i mb=_mm_set_epi32(0, 0, 0, B);\
+		__m128i mc=_mm_set_epi32(0, 0, 0, C);\
+		__m128i vmin=_mm_min_epi32(ma, mb);\
+		__m128i vmax=_mm_max_epi32(ma, mb);\
+		vmin=_mm_min_epi32(vmin, mc);\
+		vmax=_mm_max_epi32(vmax, mc);\
+		_mx=_mm_max_epi32(_mx, vmin);\
+		_mx=_mm_min_epi32(_mx, vmax);\
+		_mm_store_si128((__m128i*)_dst, _mx);\
+		DST=_dst[0];\
+	}while(0)
+
+#define CONVERT_DOUBLE2INT(DST, SRC)\
+	do\
+	{\
+		ALIGN(16) int _c_[4];\
+		__m128d _a_=_mm_set_pd(0, SRC);\
+		__m128i _b_=_mm_cvtpd_epi32(_a_);\
+		_mm_store_si128((__m128i*)_c_, _b_);\
+		DST=_c_[0];\
+	}while(0)
+
+#define IDIV23(DST, NUM, DEN)\
+	do\
+	{\
+		__m128 mnum=_mm_set_ss(NUM);\
+		__m128 mden=_mm_set_ss(DEN);\
+		mnum=_mm_div_ss(mnum, mden);\
+		__m128i result=_mm_cvtps_epi32(mnum);\
+		DST=_mm_extract_epi32(result, 0);\
+	}while(0)
+
+#define IDIV52(DST, NUM, DEN)\
+	do\
+	{\
+		__m128d mnum=_mm_set_sd(NUM);\
+		__m128d mden=_mm_set_sd(DEN);\
+		mnum=_mm_div_sd(mnum, mden);\
+		__m128i result=_mm_cvtpd_epi32(mnum);\
+		DST=_mm_extract_epi32(result, 0);\
+	}while(0)
+
 #define MOVEOBJ(SRC, DST, SIZE) memcpy(DST, SRC, SIZE), memset(SRC, 0, SIZE)
 #define MODVAR(DST, SRC, N) DST=(SRC)%(N), DST+=(N)&-(DST<0)
+#define SHIFT_LEFT_SIGNED(X, SH) ((SH)<0?(X)>>-(SH):(X)<<(SH))
+#define SHIFT_RIGHT_SIGNED(X, SH) ((SH)<0?(X)<<-(SH):(X)>>(SH))
+#define UPDATE_MIN(M, X) if(M>X)M=X
+#define UPDATE_MAX(M, X) if(M<X)M=X
+#define THREEWAY(L, R) (((L)>(R))-((L)<(R)))
+#define MIX(V0, V1, X) ((V0)+((V1)-(V0))*(X))
+#define FLOOR_LOG2(X)		(sizeof(X)==8?63-(int)_lzcnt_u64((unsigned long long)(X)):31-(int)_lzcnt_u32((unsigned)(X)))
+#define FLOOR_LOG2_P1(X)	(sizeof(X)==8?64-(int)_lzcnt_u64((unsigned long long)(X)):32-(int)_lzcnt_u32((unsigned)(X)))
+//#define FLOOR_LOG2_64(X)	(63-(int)_lzcnt_u64(X))
+//#define FLOOR_LOG2_P1_64(X)	(64-(int)_lzcnt_u64(X))
+//#define FLOOR_LOG2_32(X)	(31-(int)_lzcnt_u32(X))
+//#define FLOOR_LOG2_P1_32(X)	(32-(int)_lzcnt_u32(X))
+#define LSB_IDX_64(X)	(int)_tzcnt_u64(X)
+#define LSB_IDX_32(X)	(int)_tzcnt_u32(X)
+#define LSB_IDX_16(X)	(int)_tzcnt_u16(X)
+#define HAMMING_WEIGHT(X) (int)(sizeof(X)==8?_mm_popcnt_u32(X):_mm_popcnt_u64(X))
 
-#ifdef _MSC_VER
-#define	ALIGN(N)	__declspec(align(N))
-#else
-#define	ALIGN(N)	__attribute__((aligned(N)))
-#endif
-
-#ifndef _MSC_VER
-#define sprintf_s	snprintf
-#endif
 #define G_BUF_SIZE	4096
 extern char g_buf[G_BUF_SIZE];
 
