@@ -1167,25 +1167,25 @@ int save_media_as(ImageHandle image, const char *initialname, int namelen, int e
 		{"\'Png is Not Gnu, which in turn is not Unix\' File (*.PNG)", ".PNG"},
 		{"JPEG XL File (*.JXL)", ".JXL"},
 		{"Simple Lossless Image Codec (*.SLI)", ".SLI"},
-		//{"WebP File (*.WEBP)", ".WEBP"},//error
-		//{"JPEG File (*.JPG)", ".JPG"},//error
-		//{"GIF File (*.GIF)", ".GIF"},//error
-		//{"JPEG2000 File (*.JP2)", ".JP2"},//error
-		//{"BMP File (*.BMP)", ".BMP"},//error
+	//	{"WebP File (*.WEBP)", ".WEBP"},//error
+	//	{"JPEG File (*.JPG)", ".JPG"},//error
+	//	{"GIF File (*.GIF)", ".GIF"},//error
+	//	{"JPEG2000 File (*.JP2)", ".JP2"},//error
+	//	{"BMP File (*.BMP)", ".BMP"},//error
 		{"TIFF File (*.TIF)", ".TIF"},
 		{"Quite OK Image (*.QOI)", ".QOI"},
-		//{"Lossless JPEG (*.LJPG)", ".LJPG"},//error
-		//{"JPEG-LS (*.JLS)", ".JLS"},//error
-		//{"LOCO File (*.LOCO)", ".LOCO"},//error
-		//{"PPM File (*.PPM)", ".PPM"},//error
-		//{"PBM File (*.PBM)", ".PBM"},//error
-		//{"PGM File (*.PGM)", ".PGM"},//error
-		//{"PAM File (*.PAM)", ".PAM"},//error
+	//	{"Lossless JPEG (*.LJPG)", ".LJPG"},//error
+	//	{"JPEG-LS (*.JLS)", ".JLS"},//error
+	//	{"LOCO File (*.LOCO)", ".LOCO"},//error
+		{"PPM File (*.PPM)", ".PPM"},//error
+	//	{"PBM File (*.PBM)", ".PBM"},//error
+		{"PGM File (*.PGM)", ".PGM"},//error
+	//	{"PAM File (*.PAM)", ".PAM"},//error
 	};
 	ArrayHandle name;
 	STR_COPY(name, initialname, namelen);
 	STR_APPEND(name, ".PNG", 4, 1);
-	int ext_selection=0, ret;
+	int ext_selection=0, ret=-1;
 	char *fn=dialog_save_file(filters, _countof(filters), name->data, &ext_selection);
 	array_free(&name);
 	if(!fn)
@@ -1200,6 +1200,61 @@ int save_media_as(ImageHandle image, const char *initialname, int namelen, int e
 				LOG_WARNING("Failed to save \'%s\'", fn);
 				ret=-1;
 			}
+		}
+		else if(ext_selection==6)//PPM
+		{
+			size_t res=(size_t)image->iw*image->ih, usize=3*res;
+			unsigned char *dstbuf=(unsigned char*)malloc(usize);
+			if(!dstbuf)
+			{
+				LOG_ERROR("Alloc error");
+				return -1;
+			}
+			for(int k=0, kd=0, ks=0;k<res;++k, kd+=3, ks+=4)
+			{
+				dstbuf[kd+0]=image->data[ks+0];
+				dstbuf[kd+1]=image->data[ks+1];
+				dstbuf[kd+2]=image->data[ks+2];
+			}
+			FILE *fdst=fopen(fn, "wb");
+			if(!fdst)
+			{
+				LOG_WARNING("Cannot open \"%s\" for writing", fn);
+				return -1;
+			}
+			fprintf(fdst, "P6\n%d %d\n255\n", image->iw, image->ih);
+			fwrite(dstbuf, 1, usize, fdst);
+			fclose(fdst);
+			free(dstbuf);
+			ret=0;
+		}
+		else if(ext_selection==7)//PGM
+		{
+			size_t res=(size_t)image->iw*image->ih, usize=res;
+			unsigned char *dstbuf=(unsigned char*)malloc(usize);
+			if(!dstbuf)
+			{
+				LOG_ERROR("Alloc error");
+				return -1;
+			}
+			for(int k=0, ks=0;k<res;++k, ks+=4)
+				dstbuf[k]=(
+					+(int)(0.2126*0x1000+0.5)*image->data[ks+0]
+					+(int)(0.7152*0x1000+0.5)*image->data[ks+1]
+					+(int)(0.0722*0x1000+0.5)*image->data[ks+2]
+					+0x800
+				)>>12;
+			FILE *fdst=fopen(fn, "wb");
+			if(!fdst)
+			{
+				LOG_WARNING("Cannot open \"%s\" for writing", fn);
+				return -1;
+			}
+			fprintf(fdst, "P5\n%d %d\n255\n", image->iw, image->ih);
+			fwrite(dstbuf, 1, usize, fdst);
+			fclose(fdst);
+			free(dstbuf);
+			ret=0;
 		}
 		else
 			ret=save_media(fn, image, erroronfail);

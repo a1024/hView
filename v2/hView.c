@@ -53,7 +53,7 @@ ProfilePlotMode profileplotmode=PROFILE_OFF;
 int bitmode=0,//0: off, 1: colorful bitplanes, 2: monochrome bitplanes
 	bitplane=-1;
 
-void center_image()
+static void center_image()
 {
 	if(!image)
 		return;
@@ -69,7 +69,7 @@ void center_image()
 	wpy=(image->ih-wndh/zoom)*0.5;
 	imagecentered=1;
 }
-void calc_hist()
+static void calc_hist()
 {
 	if(!impreview)
 		return;
@@ -116,7 +116,7 @@ static int integrate_hist(int *hist, int nlevels, int *CDF)
 	}
 	return sum;
 }
-void equalize()
+static void equalize()
 {
 	if(!impreview)
 		return;
@@ -174,7 +174,7 @@ void equalize()
 	//	break;
 	}
 }
-void update_image(int settitle, int render)
+static void update_image(int settitle, int render)
 {
 	if(!image)
 		return;
@@ -717,7 +717,7 @@ void io_timer()
 	if(keyboard['D'])//move window right
 		wpx+=delta/zoom;
 }
-void print_pixellabels(int ix1, int ix2, int iy1, int iy2, int xoffset, int yoffset, int component, char label, long long txtcolors, int is_bayer)
+static void print_pixellabels(int ix1, int ix2, int iy1, int iy2, int xoffset, int yoffset, int component, char label, long long txtcolors, int is_bayer)
 {
 	unsigned short *ptr=(unsigned short*)image->data+((image->iw*yoffset+xoffset)<<2);
 	const char *format;
@@ -755,7 +755,7 @@ void print_pixellabels(int ix1, int ix2, int iy1, int iy2, int xoffset, int yoff
 	print_line_flush(vertices_text, fontsize);
 	txtcolors=set_text_colors(txtcolors);
 }
-void draw_histogram(int *hist, int nlevels, int color, int y1, int y2)
+static void draw_histogram(int *hist, int nlevels, int color, int y1, int y2)
 {
 	int fmax=0;
 	for(int sym=0;sym<nlevels;++sym)
@@ -767,7 +767,7 @@ void draw_histogram(int *hist, int nlevels, int color, int y1, int y2)
 		draw_rect_enqueue(&vertices_2d, (float)sym*w/nlevels, (float)(sym+1)*w/nlevels, y2-(float)hist[sym]*(y2-y1)/fmax, (float)y2);
 	draw_2d_flush(vertices_2d, color, GL_TRIANGLES);
 }
-void draw_profile_x(int comp, int color)//horizontal cross-section profile		to see the color/spatial correlation
+static void draw_profile_x(int comp, int color)//horizontal cross-section profile		to see the color/spatial correlation
 {
 	int iy=screen2image_y_int(my);
 	if((unsigned)iy<(unsigned)impreview->ih)
@@ -809,7 +809,7 @@ void draw_profile_x(int comp, int color)//horizontal cross-section profile		to s
 		draw_2d_flush(vertices_2d, color, GL_LINE_STRIP);
 	}
 }
-void draw_profile_y(int comp, int color)//vertical cross-section profile
+static void draw_profile_y(int comp, int color)//vertical cross-section profile
 {
 	int ix=screen2image_x_int(mx);
 	if((unsigned)ix<(unsigned)impreview->iw)
