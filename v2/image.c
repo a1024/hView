@@ -95,6 +95,9 @@ void image_export_rgb8(ImageHandle dst, ImageHandle src, int imagetype)
 		{
 			for(int kx=0;kx<src->iw;kx+=2)
 			{
+				//if(ky==2016&&kx==1588)//
+				//	printf("");
+
 				int comp[]=
 				{
 					srcptr[(src->iw*(ky+0)+kx+0)<<2|bayer[0]],
@@ -112,27 +115,27 @@ void image_export_rgb8(ImageHandle dst, ImageHandle src, int imagetype)
 				int idx;
 
 				idx=(dst->iw*(ky+0)+kx+0)<<2;
-				dst->data[idx|0]=rggb[3]>>8;
+				dst->data[idx|0]=rggb[0]>>8;
 				dst->data[idx|1]=(rggb[1]+rggb[2])>>9;
-				dst->data[idx|2]=rggb[0]>>8;
+				dst->data[idx|2]=rggb[3]>>8;
 				dst->data[idx|3]=255;
 
 				idx=(dst->iw*(ky+0)+kx+1)<<2;
-				dst->data[idx|0]=rggb[3]>>8;
+				dst->data[idx|0]=rggb[0]>>8;
 				dst->data[idx|1]=(rggb[1]+rggb[2])>>9;
-				dst->data[idx|2]=rggb[0]>>8;
+				dst->data[idx|2]=rggb[3]>>8;
 				dst->data[idx|3]=255;
 
 				idx=(dst->iw*(ky+1)+kx+0)<<2;
-				dst->data[idx|0]=rggb[3]>>8;
+				dst->data[idx|0]=rggb[0]>>8;
 				dst->data[idx|1]=(rggb[1]+rggb[2])>>9;
-				dst->data[idx|2]=rggb[0]>>8;
+				dst->data[idx|2]=rggb[3]>>8;
 				dst->data[idx|3]=255;
 
 				idx=(dst->iw*(ky+1)+kx+1)<<2;
-				dst->data[idx|0]=rggb[3]>>8;
+				dst->data[idx|0]=rggb[0]>>8;
 				dst->data[idx|1]=(rggb[1]+rggb[2])>>9;
-				dst->data[idx|2]=rggb[0]>>8;
+				dst->data[idx|2]=rggb[3]>>8;
 				dst->data[idx|3]=255;
 			}
 		}

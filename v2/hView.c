@@ -87,7 +87,7 @@ static void calc_hist()
 	case IM_RGBA:
 		for(int k=0;k<res;++k)
 		{
-			unsigned char *p=impreview->data+(k<<2);
+			unsigned char *p=impreview->data+((size_t)k<<2);
 			++histogram[0<<8|p[0]];
 			++histogram[1<<8|p[1]];
 			++histogram[2<<8|p[2]];
@@ -246,7 +246,9 @@ int io_init(int argc, char **argv)//return false to abort
 {
 #ifdef _DEBUG
 	fn=filter_path(
-		"E:/C/huf2gr/huf2gr/plane.gr"
+		"D:/ML/mystery.gr"
+	//	"C:/dataset-20241107-gr/20241107_164228_958.gr"
+	//	"E:/C/huf2gr/huf2gr/plane.gr"
 	//	"E:/Share Box/Scope/20241107/20241107_164651_573.huf"
 	//	"E:/Share Box/Scope/20241107/20241107_164228_958.huf"
 	//	"C:/Projects/datasets/dataset-RAW/6K9A8788.CR3"
@@ -778,8 +780,8 @@ static void draw_profile_x(int comp, int color)//horizontal cross-section profil
 		int lgstride=0;
 		switch(imagetype)
 		{
-		case IM_GRAYSCALE:	row=impreview->data+(impreview->iw*iy<<2), lgstride=2;break;
-		case IM_RGBA:		row=impreview->data+(impreview->iw*iy<<2|comp), lgstride=2;break;
+		case IM_GRAYSCALE:	row=impreview->data+((size_t)impreview->iw*iy<<2|0	), lgstride=2;break;
+		case IM_RGBA:		row=impreview->data+((size_t)impreview->iw*iy<<2|comp	), lgstride=2;break;
 		case IM_BAYER:
 		case IM_BAYER_SEPARATE:
 			iy>>=1;
@@ -820,8 +822,8 @@ static void draw_profile_y(int comp, int color)//vertical cross-section profile
 		int stride=0;
 		switch(imagetype)
 		{
-		case IM_GRAYSCALE:	col=impreview->data+(ix<<2), stride=impreview->iw<<2;break;
-		case IM_RGBA:		col=impreview->data+(ix<<2|comp), stride=impreview->iw<<2;break;
+		case IM_GRAYSCALE:	col=impreview->data+((size_t)ix<<2|0	), stride=impreview->iw<<2;break;
+		case IM_RGBA:		col=impreview->data+((size_t)ix<<2|comp	), stride=impreview->iw<<2;break;
 		case IM_BAYER:
 		case IM_BAYER_SEPARATE:
 			ix>>=1;

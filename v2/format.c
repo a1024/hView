@@ -945,7 +945,7 @@ static short* gr_load(const char *srcfn, int *ret_iw, int *ret_ih, int *ret_nlev
 	ptrdiff_t srcsize=get_filesize(srcfn);
 	if(srcsize<1)
 	{
-		LOG_ERROR("Invalid file \"%s\"", srcfn);
+		LOG_ERROR("Cannot open \"%s\"", srcfn);
 		return 0;
 	}
 	{
@@ -1154,18 +1154,64 @@ int load_media(const char *filename, ImageHandle *image, int erroronfail)//TODO 
 		int iw=0, ih=0, nlevels=0;
 		char bayermatrix[4]={0};
 		short *buf=gr_load(filename, &iw, &ih, &nlevels, bayermatrix);
+
+		iw<<=1;//it's a planar Bayer stack
+		ih>>=1;
+
+		//char rggb[4]={-1, -1, -1, -1};
+		for(int kc=0, kg=0;kc<4;++kc)
+		{
+			bayermatrix[kc]&=0xDF;
+		//	switch(bayermatrix[kc])
+		//	{
+		//	case 'R':case 'r':rggb[0]=kc;break;
+		//	case 'G':case 'g':rggb[kg++ + 1]=kc;break;
+		//	case 'B':case 'b':rggb[3]=kc;break;
+		//	}
+		}
+		int iw2=iw>>1, ih2=ih>>1;
+		ptrdiff_t res4=(ptrdiff_t)iw2*ih2;
+		short *comp[]=
+		{
+			(short*)buf+res4*0,
+			(short*)buf+res4*1,
+			(short*)buf+res4*2,
+			(short*)buf+res4*3,
+		};
 		has_alpha=0;
-		imagetype=IM_GRAYSCALE;
+		imagetype=IM_BAYER;
 		imagedepth=FLOOR_LOG2(nlevels);
 		*image=image_construct(iw, ih, 16, 0, iw, ih, 0, imagedepth<=8?8:16);
-		char sh=16-imagedepth;
-		for(ptrdiff_t k=0, res=(ptrdiff_t)iw*ih;k<res;++k)
+		bayer[0]=(bayermatrix[0]=='R'?0:(bayermatrix[0]=='G'?1:2));
+		bayer[1]=(bayermatrix[1]=='R'?0:(bayermatrix[1]=='G'?1:2));
+		bayer[2]=(bayermatrix[2]=='R'?0:(bayermatrix[2]=='G'?1:2));
+		bayer[3]=(bayermatrix[3]=='R'?0:(bayermatrix[3]=='G'?1:2));
+		char sh[]=
 		{
-			((unsigned short*)image[0]->data)[k<<2|0]=buf[k]<<sh;
-			((unsigned short*)image[0]->data)[k<<2|1]=buf[k]<<sh;
-			((unsigned short*)image[0]->data)[k<<2|2]=buf[k]<<sh;
-			((unsigned short*)image[0]->data)[k<<2|3]=0xFFFF;
+			(bayer[0]<<4)+16-imagedepth,
+			(bayer[1]<<4)+16-imagedepth,
+			(bayer[2]<<4)+16-imagedepth,
+			(bayer[3]<<4)+16-imagedepth,
+		};
+		unsigned long long *dstptr=(unsigned long long*)image[0]->data;
+		for(int ky=0, idx=0;ky<ih;++ky)
+		{
+			for(int kx=0;kx<iw;++kx, ++idx)
+			{
+				//if(ky==2016&&kx==1588)//
+				//	printf("");
+
+				int kc=(ky&1)<<1|(kx&1);
+				dstptr[idx]=0xFFFF000000000000|(unsigned long long)comp[kc][iw2*(ky>>1)+(kx>>1)]<<sh[kc];
+			}
 		}
+		//for(ptrdiff_t k=0, res=(ptrdiff_t)iw*ih;k<res;++k)
+		//{
+		//	((unsigned short*)image[0]->data)[k<<2|0]=buf[k]<<sh;
+		//	((unsigned short*)image[0]->data)[k<<2|1]=buf[k]<<sh;
+		//	((unsigned short*)image[0]->data)[k<<2|2]=buf[k]<<sh;
+		//	((unsigned short*)image[0]->data)[k<<2|3]=0xFFFF;
+		//}
 		free(buf);
 		update_globals(filename, *image);
 		return 0;
