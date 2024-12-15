@@ -246,7 +246,8 @@ int io_init(int argc, char **argv)//return false to abort
 {
 #ifdef _DEBUG
 	fn=filter_path(
-		"D:/ML/mystery.gr"
+	//	"D:/ML/mystery.gr"
+		"E:/C/ASCII-Table-wide.svg.png"
 	//	"C:/dataset-20241107-gr/20241107_164228_958.gr"
 	//	"E:/C/huf2gr/huf2gr/plane.gr"
 	//	"E:/Share Box/Scope/20241107/20241107_164651_573.huf"

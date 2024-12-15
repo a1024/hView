@@ -1238,6 +1238,21 @@ int load_media(const char *filename, ImageHandle *image, int erroronfail)//TODO 
 	)
 		return huf_load(filename, image, erroronfail);
 
+	if(
+		!_stricmp(filename+len-4, ".DOC")||
+		!_stricmp(filename+len-5, ".DOCX")||
+		!_stricmp(filename+len-4, ".ODF")||
+		!_stricmp(filename+len-4, ".ODS")||
+		!_stricmp(filename+len-4, ".PPT")||
+		!_stricmp(filename+len-5, ".PPTX")||
+		!_stricmp(filename+len-4, ".XLS")||
+		!_stricmp(filename+len-5, ".XLSX")||
+		!_stricmp(filename+len-4, ".PDF")||
+		!_stricmp(filename+len-4, ".TXT")||
+		!_stricmp(filename+len-4, ".SVG")
+	)
+		return 1;
+
 	int error;
 	AVFormatContext *formatContext=avformat_alloc_context();
 	if(!formatContext)
