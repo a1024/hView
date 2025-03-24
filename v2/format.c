@@ -131,7 +131,7 @@ static void update_globals(const char *fn, Image16 *image)//accesses globals
 			nch=1;
 			break;
 		}
-		format_CR=(double)image->iw*image->ih*imagedepth*(nch+has_alpha)/(filesize*8);
+		//format_CR=(double)image->iw*image->ih*imagedepth*(nch+has_alpha)/(filesize*8);
 
 		if(imagetype==IM_BAYERv2||imagetype==IM_GRAYSCALEv2)
 			memset(background, 128, sizeof(background));

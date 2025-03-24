@@ -700,7 +700,6 @@ extern char bayer[4];
 extern int debayer_on;
 extern int has_alpha;
 extern ptrdiff_t filesize;
-extern double format_CR;
 extern unsigned char background[4];
 extern int brightness;
 

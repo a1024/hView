@@ -36,7 +36,6 @@ int imagedepth=0;
 char bayer[4]={0};//shift ammounts for the 4 Bayer mosaic components, -1 for grayscale, example: RGGB is {0, 8, 8, 16}
 int has_alpha=0;
 ptrdiff_t filesize=0;
-double format_CR=0;
 unsigned char background[]={0, 0, 0, 255};
 
 static ArrayHandle vertices_text=0;
@@ -1156,13 +1155,14 @@ void io_render()
 		case IM_BAYERv2:	imtypestr="IM_BAYERv2";		break;
 		}
 		//g_printed=0;
-		GUIPrint_append(0, 0, h-tdy, 1, 0, "XY(%5d, %5d) / WH %dx%d  x%lf bright%d  %s  depth %d  CR %10.6lf",
+		GUIPrint_append(0, 0, h-tdy, 1, 0, "XY(%5d, %5d) / WH%5d x%5d  x%lf bright%d  %s  depth %d  %10td bytes %10.6lf:1",
 			imx, imy, impreview->iw, impreview->ih,
 			zoom,
 			brightness,
 			imtypestr,
 			imagedepth,
-			format_CR
+			filesize,
+			(double)image->nch*image->iw*image->ih*image->depth/(8*filesize)
 		);
 		if(bitmode==1)
 			GUIPrint_append(0, 0, h-tdy, 1, 0, "  Bitplane %d", bitplane);
