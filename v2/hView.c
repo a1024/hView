@@ -34,7 +34,6 @@ Image8 *impreview=0;
 ImageType imagetype=IM_UNINITIALIZED;
 int imagedepth=0;
 char bayer[4]={0};//shift ammounts for the 4 Bayer mosaic components, -1 for grayscale, example: RGGB is {0, 8, 8, 16}
-int debayer_on=1;
 int has_alpha=0;
 ptrdiff_t filesize=0;
 double format_CR=0;
@@ -357,7 +356,7 @@ int io_keydn(IOKey key, char c)
 				return 1;
 			}
 			return 0;
-		case 'S':
+		case 'S'://save as
 			{
 				int kslash=0, kdot=0;
 				for(kdot=(int)fn->count-1;kdot>=0&&fn->data[kdot]!='.';--kdot);
@@ -377,12 +376,16 @@ int io_keydn(IOKey key, char c)
 			messagebox(MBOX_OK, "Controls",
 				"Esc/LBUTTON/WASD: Drag image\n"
 				"Enter/Bksp/Wheel: Zoom image\n"
-				"Left/Right: prev/next image\n"
-				"Ctrl O: Open image\n"
 				"E: Reset view to topleft corner at 1:1\n"
 				"C: Fit image to window\n"
+				"+/-: Change brightness\n"
 				"Q: Equalize histogram\n"
+				"Left/Right: prev/next image\n"
+				"Ctrl O: Open image\n"
+				"Ctrl S: Save as\n"
+				"Ctrl A: Set alpha to 1\n"
 				"Ctrl C: Copy pixel values from screen (when zoomed in)\n"
+				"Ctrl V: Paste bitmap from clipboard\n"
 				"H: Toggle histogram\n"
 				"Ctrl H: Toggle hexadecimal pixel labels\n"
 				"P: Toggle pixel label source\n"
@@ -507,11 +510,6 @@ int io_keydn(IOKey key, char c)
 			}
 		}
 		break;
-		
-	case 'B':
-		debayer_on=!debayer_on;
-		update_image(0, 0);
-		return 1;
 	case 'Q'://equalization
 		if(GET_KEY_STATE(KEY_CTRL))
 			update_image(0, 0);
@@ -531,7 +529,8 @@ int io_keydn(IOKey key, char c)
 				break;
 			if(zoom<ZOOM_LIMIT_LABEL)
 			{
-				int x1=screen2image_x_int_rounded(0), y1=screen2image_y_int_rounded(0),
+				int
+					x1=screen2image_x_int_rounded(0), y1=screen2image_y_int_rounded(0),
 					x2=screen2image_x_int_rounded(w), y2=screen2image_y_int_rounded(h);
 				if(x1<0)x1=0;
 				if(y1<0)y1=0;
