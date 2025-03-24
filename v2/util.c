@@ -421,7 +421,7 @@ int log_error(const char *file, int line, int quit, const char *format, ...)
 	int printed=sprintf_s(latest_error_msg, G_BUF_SIZE, "%s(%d): ", file+start, line);
 	va_list args;
 	va_start(args, format);
-	printed+=vsprintf_s(latest_error_msg+printed, G_BUF_SIZE-printed, format, args);
+	printed+=vsprintf_s(latest_error_msg+printed, G_BUF_SIZE-1-printed, format, args);
 	va_end(args);
 
 	if(firsttime)

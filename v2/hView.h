@@ -112,26 +112,26 @@ IOKEY(0x13, 0x13, PAUSE)
 IOKEY(0x14, 0x91, SCROLLLOCK)
 IOKEY(0x15, 0x2C, PRINTSCR)
 
-IOKEY(0x27, 0xDE, QUOTE)		//inserted '\'' with '\"' 0x22
-IOKEY(0x2B, 0xBB, PLUS)			//inserted '+' with '=' 0x3D
-IOKEY(0x2C, 0xBC, COMMA)		//inserted ',' with '<' 0x3C
-IOKEY(0x2D, 0xBD, MINUS)		//inserted '-' with '_' 0x5F
-IOKEY(0x2E, 0xBE, PERIOD)		//inserted '.' with '>' 0x3E
-IOKEY(0x2F, 0xBF, SLASH)		//inserted '/' with '?' 0x3F
+IOKEY(0x27, 0xDE, QUOTE)	//inserted '\'' with '\"' 0x22
+IOKEY(0x2B, 0xBB, PLUS)		//inserted '+' with '=' 0x3D
+IOKEY(0x2C, 0xBC, COMMA)	//inserted ',' with '<' 0x3C
+IOKEY(0x2D, 0xBD, MINUS)	//inserted '-' with '_' 0x5F
+IOKEY(0x2E, 0xBE, PERIOD)	//inserted '.' with '>' 0x3E
+IOKEY(0x2F, 0xBF, SLASH)	//inserted '/' with '?' 0x3F
 
 IOKEY(0x3B, 0xBA, SEMICOLON)	//inserted ';' with ':' 0x3A
 
-IOKEY(0x5B, 0xDB, LBRACKET)		//inserted '[' with '{' 0x7B
+IOKEY(0x5B, 0xDB, LBRACKET)	//inserted '[' with '{' 0x7B
 IOKEY(0x5C, 0xDC, BACKSLASH)	//inserted '\\' with '|' 0x7C
-IOKEY(0x5D, 0xDD, RBRACKET)		//inserted ']' with '}' 0x7D
+IOKEY(0x5D, 0xDD, RBRACKET)	//inserted ']' with '}' 0x7D
 IOKEY(0x60, 0xC0, GRAVEACCENT)	//inserted '`' with '~' 0x7E
 
 IOKEY(0x7F, 0x2E, DEL)
 
-IOKEY(0x84, 0x10, SHIFT)		//inserted
-IOKEY(0x85, 0x11, CTRL)			//inserted
-IOKEY(0x86, 0x12, ALT)			//inserted
-IOKEY(0x87, 0x00, START)		//inserted
+IOKEY(0x84, 0x10, SHIFT)	//inserted
+IOKEY(0x85, 0x11, CTRL)		//inserted
+IOKEY(0x86, 0x12, ALT)		//inserted
+IOKEY(0x87, 0x00, START)	//inserted
 
 IOKEY(0xA0, 0x60, NP_0)
 IOKEY(0xA1, 0x61, NP_1)
@@ -629,23 +629,43 @@ void depth_test(int enable);
 
 
 //hView
-typedef struct ImageHeaderStruct//greyscale image object
+typedef struct _Image8
 {
-	int xcap, ycap, iw, ih, depth, srcdepth;//cap >= dim, depth 8 or 16
+	int iw, ih, nch, depth, srcdepth;
 	unsigned char data[];
-} ImageHeader, *ImageHandle;
-void image_export_rgb8(ImageHandle dst, ImageHandle src, int imagetype);
-void image_blit(ImageHandle dst, int x, int y, const unsigned char *src, int iw, int ih, int rowpad, int srcdepth);
-ImageHandle image_construct(int xcap, int ycap, int dstdepth, const unsigned char *src, int iw, int ih, int rowpad, int srcdepth);
-void image_free(ImageHandle *image);
-void image_resize(ImageHandle *image, int w, int h);
+} Image8;
+typedef struct _Image16
+{
+	int iw, ih, nch, depth, srcdepth;
+	unsigned short data[];
+} Image16;
+Image8* image_alloc8(const unsigned char *src, int iw, int ih, int nch, int srcdepth);
+Image16* image_alloc16(const unsigned short *src, int iw, int ih, int nch, int srcdepth);
+void image_free(void *pimage);
+void image_export(Image8 *dst, const Image16* src, int imagetype);
+void image_inplacexflip(Image16 *src);
+void image_inplaceyflip(Image16 *src);
+void image_transpose(Image16 **src);
+
+//typedef struct ImageHeaderStruct//greyscale image object
+//{
+//	int xcap, ycap, iw, ih, depth, srcdepth;//cap >= dim, depth 8 or 16
+//	unsigned char data[];
+//} ImageHeader, *ImageHandle;
+//void image_export_rgb8(ImageHandle dst, ImageHandle src, int imagetype);
+//void image_blit(ImageHandle dst, int x, int y, const unsigned char *src, int iw, int ih, int rowpad, int srcdepth);
+//ImageHandle image_construct(int xcap, int ycap, int dstdepth, const unsigned char *src, int iw, int ih, int rowpad, int srcdepth);
+//void image_free(ImageHandle *image);
+//void image_resize(ImageHandle *image, int w, int h);
 
 //the following 3 functions return: a negative value on failure; 0 on success
-int load_media(const char *filename, ImageHandle *image, int erroronfail);
-int save_media(const char *fn, ImageHandle image, int erroronfail);
-int save_media_as(ImageHandle image, const char *initialname, int namelen, int erroronfail);
+int load_media(const char *filename, Image16 **image, int erroronfail);
+int save_media(const char *fn, Image8 *image, int erroronfail);
+int save_media_as(Image8 *image, const char *initialname, int namelen, int erroronfail);
 
-ImageHandle paste_bmp_from_clipboard();
+char* get_codecinfo(void);//don't forget to free(mem)
+
+Image8 *paste_bmp_from_clipboard();
 
 
 extern int imagecentered;
@@ -665,11 +685,14 @@ extern double
 
 typedef enum ImageTypeEnum
 {
-	IM_UNINITIALIZED,
-	IM_GRAYSCALE,		//RGBA where R, G, and B have same value
-	IM_RGBA,
-	IM_BAYER,		//if bayer matrix is RGGB then in quads of {0xAA0000RR, 0xAA00GG00;  0xAA00GG00, 0xAABB0000}
-	IM_BAYER_SEPARATE,	//stored same as bayer, channels are shown separately
+	IM_UNINITIALIZED,	//unsigned native depth					0xAABBGGRR unsigned 8-bit
+	IM_GRAYSCALEv2,		//unsigned short image[ih][iw];				unsigned char impreview[ih][iw];		GREY+ALPHA?
+	IM_RGBA,		//unsigned short image[ih][iw][4];			int impreview[ih][iw];
+	IM_BAYERv2,		//unsigned short image[ih/2][2][iw/2][2]; RGGB		int impreview[ih/2][iw/2];
+
+//	IM_GRAYSCALE,		//RGBA where R, G, and B have same value
+//	IM_BAYER,		//if bayer matrix is RGGB then in quads of {0xAA0000RR, 0xAA00GG00;  0xAA00GG00, 0xAABB0000}
+//	IM_BAYER_SEPARATE,	//stored same as bayer, channels are shown separately
 } ImageType;
 extern ImageType imagetype;
 extern int imagedepth;
@@ -679,6 +702,7 @@ extern int has_alpha;
 extern ptrdiff_t filesize;
 extern double format_CR;
 extern unsigned char background[4];
+extern int brightness;
 
 typedef enum ProfilePlotModeEnum
 {
@@ -692,14 +716,14 @@ extern ProfilePlotMode profileplotmode;
 //tests
 
 //T48: lossless raw image codec
-int t48_encode(const unsigned short *src, int iw, int ih, int idepth, char *bayer, ArrayHandle *data, int loud);
-int t48_decode(const unsigned char *data, size_t srclen, int iw, int ih, int idepth, char *bayer, unsigned short *dst, int loud);
-void test48(ImageHandle image, int idepth, char *bayer);
+//int t48_encode(const unsigned short *src, int iw, int ih, int idepth, char *bayer, ArrayHandle *data, int loud);
+//int t48_decode(const unsigned char *data, size_t srclen, int iw, int ih, int idepth, char *bayer, unsigned short *dst, int loud);
+//void test48(ImageHandle image, int idepth, char *bayer);
 
 //T49: lossless 16-bit image codec
-int t49_encode(const unsigned short *src, int iw, int ih, int idepth, ArrayHandle *data, int loud);
-int t49_decode(const unsigned char *data, size_t srclen, int iw, int ih, int idepth, unsigned short *dst, int loud);
-void test49(ImageHandle image, int idepth);
+//int t49_encode(const unsigned short *src, int iw, int ih, int idepth, ArrayHandle *data, int loud);
+//int t49_decode(const unsigned char *data, size_t srclen, int iw, int ih, int idepth, unsigned short *dst, int loud);
+//void test49(ImageHandle image, int idepth);
 
 
 #ifdef __cplusplus

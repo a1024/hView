@@ -67,13 +67,13 @@ int   slic2_save(const char *filename, int iw, int ih, int nch, int depth, const
 void* slic2_load(const char *filename, int *ret_iw, int *ret_ih, int *ret_nch, int *ret_depth, int *ret_dummy_alpha, int force_alpha);
 
 
-static void update_globals(const char *fn, ImageHandle image)//accesses globals
+static void update_globals(const char *fn, Image16 *image)//accesses globals
 {
 	filesize=get_filesize(fn);
 	if(filesize>0)
 	{
 		int nch=0;
-		unsigned short *data=(unsigned short*)image->data;
+		const unsigned short *data=image->data;
 
 		//if(imagedepth<16)
 		//{
@@ -91,97 +91,110 @@ static void update_globals(const char *fn, ImageHandle image)//accesses globals
 		//	}
 		//}
 		
-		if(has_alpha)
-		{
-			has_alpha=0;
-			for(int k=0, res=image->iw*image->ih;k<res;++k)//check if alpha has information
-			{
-				if(data[k<<2|3]!=0xFFFF)
-				{
-					has_alpha=1;
-					break;
-				}
-			}
-		}
 		switch(imagetype)
 		{
-		case IM_GRAYSCALE:
+		case IM_GRAYSCALEv2:
+			has_alpha=0;//FIXME G+A
 			nch=1;
 			break;
 		case IM_RGBA:
 			{
-				imagetype=IM_GRAYSCALE;
-				for(int k=0, res=image->iw*image->ih;k<res;++k)//check for grayscale
+#if 0
+				if(has_alpha)
 				{
-					if(data[k<<2]!=data[k<<2|1]||data[k<<2]!=data[k<<2|2])
+					has_alpha=0;
+					for(ptrdiff_t k=0, res=(ptrdiff_t)image->iw*image->ih;k<res;++k)//check if alpha has information
+					{
+					//	if(data[k<<2|3]!=0xFFFF)
+						if(data[k<<2|3]!=data[3])
+						{
+							has_alpha=1;
+							break;
+						}
+					}
+				}
+				imagetype=IM_GRAYSCALEv2;
+				for(ptrdiff_t k=0, res=(ptrdiff_t)image->iw*image->ih;k<res;++k)//check for grayscale
+				{
+					if(data[k<<2|0]!=data[k<<2|1]||data[k<<2|0]!=data[k<<2|2])
 					{
 						imagetype=IM_RGBA;
 						break;
 					}
 				}
-				nch=imagetype==IM_GRAYSCALE?1:3;
+				nch=imagetype==IM_GRAYSCALEv2?1:3;
+#endif
 			}
 			break;
-		case IM_BAYER:
+		case IM_BAYERv2:
+			has_alpha=0;
 			nch=1;
 			break;
 		}
 		format_CR=(double)image->iw*image->ih*imagedepth*(nch+has_alpha)/(filesize*8);
 
-		long long sum[3]={0}, count=0;//set background as far as possible from averate border color in RGB space
-		for(int kx=0;kx<image->iw;++kx)//accumulate top edge
+		if(imagetype==IM_BAYERv2||imagetype==IM_GRAYSCALEv2)
+			memset(background, 128, sizeof(background));
+		else
 		{
-			sum[0]+=data[kx<<2|0];
-			sum[1]+=data[kx<<2|1];
-			sum[2]+=data[kx<<2|2];
-			++count;
+			long long sum[3]={0}, count=0;//set background as far as possible from averate border color in RGB space
+			for(int kx=0;kx<image->iw;++kx)//accumulate top edge
+			{
+				sum[0]+=data[kx<<2|0];
+				sum[1]+=data[kx<<2|1];
+				sum[2]+=data[kx<<2|2];
+				++count;
+			}
+			for(int kx=0;kx<image->iw;++kx)//accumulate bottom edge
+			{
+				sum[0]+=data[(image->iw*(image->ih-1)+kx)<<2|0];
+				sum[1]+=data[(image->iw*(image->ih-1)+kx)<<2|1];
+				sum[2]+=data[(image->iw*(image->ih-1)+kx)<<2|2];
+				++count;
+			}
+			for(int ky=0;ky<image->ih;++ky)//accumulate left edge
+			{
+				sum[0]+=data[image->iw*ky<<2|0];
+				sum[1]+=data[image->iw*ky<<2|1];
+				sum[2]+=data[image->iw*ky<<2|2];
+				++count;
+			}
+			for(int ky=0;ky<image->ih;++ky)//accumulate right edge
+			{
+				sum[0]+=data[(image->iw*ky+image->iw-1)<<2|0];
+				sum[1]+=data[(image->iw*ky+image->iw-1)<<2|1];
+				sum[2]+=data[(image->iw*ky+image->iw-1)<<2|2];
+				++count;
+			}
+			background[0]=(unsigned char)((sum[0]/count<<8>>image->depth)+128);
+			background[1]=(unsigned char)((sum[1]/count<<8>>image->depth)+128);
+			background[2]=(unsigned char)((sum[2]/count<<8>>image->depth)+128);
+			background[3]=0;
+			//background[3]=255;
 		}
-		for(int kx=0;kx<image->iw;++kx)//accumulate bottom edge
-		{
-			sum[0]+=data[(image->iw*(image->ih-1)+kx)<<2|0];
-			sum[1]+=data[(image->iw*(image->ih-1)+kx)<<2|1];
-			sum[2]+=data[(image->iw*(image->ih-1)+kx)<<2|2];
-			++count;
-		}
-		for(int ky=0;ky<image->ih;++ky)//accumulate left edge
-		{
-			sum[0]+=data[image->iw*ky<<2|0];
-			sum[1]+=data[image->iw*ky<<2|1];
-			sum[2]+=data[image->iw*ky<<2|2];
-			++count;
-		}
-		for(int ky=0;ky<image->ih;++ky)//accumulate right edge
-		{
-			sum[0]+=data[(image->iw*ky+image->iw-1)<<2|0];
-			sum[1]+=data[(image->iw*ky+image->iw-1)<<2|1];
-			sum[2]+=data[(image->iw*ky+image->iw-1)<<2|2];
-			++count;
-		}
-		memset(background, 0, sizeof(background));
-		int comp;
-		comp=(int)(sum[0]/count>>8)+128; CLAMP2(comp, -128, 127); background[0]=(unsigned char)comp;
-		comp=(int)(sum[1]/count>>8)+128; CLAMP2(comp, -128, 127); background[1]=(unsigned char)comp;
-		comp=(int)(sum[2]/count>>8)+128; CLAMP2(comp, -128, 127); background[2]=(unsigned char)comp;
 	}
 }
 
+
+
 #ifdef HVIEW_INCLUDE_LIBHEIF
-static int load_heic(const char *filename, ImageHandle *image, int erroronfail)
+static int load_heic(const char *filename, Image16 **image, int erroronfail)
 {
 	struct heif_context *ctx=heif_context_alloc();
 #ifdef BENCHMARK
 	long long t1=__rdtsc();
 #endif
 	struct heif_error error=heif_context_read_from_file(ctx, g_buf, 0);	CHECK_LIBHEIF(error);//TODO: file may not exist
-	//if(error.code)
-	//{
-	//	if(erroronfail)
-	//		LOG_WARNING("%s", error.message);
-	//	return -1;
-	//}
+	if(error.code)
+	{
+		if(erroronfail)
+			LOG_WARNING("%s", error.message);
+		heif_context_free(ctx);
+		return -1;
+	}
 
 	struct heif_image_handle *handle=0;
-	error=heif_context_get_primary_image_handle(ctx, &handle);			CHECK_LIBHEIF(error);//get a handle to the primary image
+	error=heif_context_get_primary_image_handle(ctx, &handle);	CHECK_LIBHEIF(error);//get a handle to the primary image
 
 	heif_context_free(ctx);
 
@@ -198,16 +211,20 @@ static int load_heic(const char *filename, ImageHandle *image, int erroronfail)
 
 	int stride=4;
 	const uint8_t *data=heif_image_get_plane_readonly(img, heif_channel_interleaved, &stride);	CHECK_LIBHEIF(error);
+	has_alpha=heif_image_handle_has_alpha_channel(handle);
+	imagedepth=heif_image_handle_get_luma_bits_per_pixel(handle);
+	imagetype=IM_RGBA;
 #ifdef BENCHMARK
 	long long t2=__rdtsc();
 	LOG_WARNING("HEIC: %lld cycles", t2-t1);
 #endif
-	*image=image_construct(0, 0, 16, data, iw2, ih2, 0, 8);
+	*image=image_alloc16(0, iw2, ih2, 4, imagedepth);
+	unsigned short *dstptr=image[0]->data;
+	for(ptrdiff_t k=0, res=(ptrdiff_t)iw2*ih2;k<res;++k)
+		dstptr[k]=data[k];
+	//*image=image_construct(0, 0, 16, data, iw2, ih2, 0, 8);
 	//assign_from_RGBA8((int*)data, iw2, ih2);
 
-	has_alpha=heif_image_handle_has_alpha_channel(handle);
-	imagedepth=heif_image_handle_get_luma_bits_per_pixel(handle);
-	imagetype=IM_RGBA;
 
 	heif_image_release(img);
 	heif_image_handle_release(handle);
@@ -217,7 +234,7 @@ static int load_heic(const char *filename, ImageHandle *image, int erroronfail)
 }
 #endif
 #ifdef HVIEW_INCLUDE_LIBRAW
-static int load_raw(const char *filename, ImageHandle *image, int erroronfail)
+static int load_raw(const char *filename, Image16 **image, int erroronfail)
 {
 	libraw_data_t *decoder=libraw_init(0);
 	if(!decoder)
@@ -234,126 +251,125 @@ static int load_raw(const char *filename, ImageHandle *image, int erroronfail)
 		return -1;
 	}
 	
+	//int iw2=decoder->sizes.raw_width;
+	//int ih2=decoder->sizes.raw_height;
+	error=libraw_unpack(decoder);		CHECK_LIBRAW(error);
+	error=libraw_raw2image(decoder);	CHECK_LIBRAW(error);
+	const int rgbidx[]={0, 1, 2, 1};//assuming  decoder->rawdata.iparams.cdesc == "RGBG"
+	bayer[0]=rgbidx[decoder->rawdata.iparams.filters>>0*2&3];
+	bayer[1]=rgbidx[decoder->rawdata.iparams.filters>>1*2&3];
+	bayer[2]=rgbidx[decoder->rawdata.iparams.filters>>2*2&3];
+	bayer[3]=rgbidx[decoder->rawdata.iparams.filters>>3*2&3];
 	int iw2=decoder->sizes.raw_width;
 	int ih2=decoder->sizes.raw_height;
-	error=libraw_unpack(decoder);	CHECK_LIBRAW(error);
-
+	//switch(decoder->sizes.flip)
+	//{
+	//case 0:break;//upright
+	//case 3:break;//upside-down
+	//case 5://90 degrees CCW
+	//case 6://90 degrees CW
+	//	{
+	//		int temp;
+	//		SWAPVAR(iw2, ih2, temp);
+	//	}
+	//	break;
+	//}
+	//unsigned short (*src)[4]=decoder->image;
 	imagedepth=ceil_log2(decoder->color.maximum);
-	imagetype=IM_BAYER;
-	char color_sh[]={2, 1, 0, 1};//RGBG
-	bayer[0]=color_sh[libraw_COLOR(decoder, 0, 0)];
-	bayer[1]=color_sh[libraw_COLOR(decoder, 0, 1)];
-	bayer[2]=color_sh[libraw_COLOR(decoder, 1, 0)];
-	bayer[3]=color_sh[libraw_COLOR(decoder, 1, 1)];
-	unsigned short *src=decoder->rawdata.raw_image;
-	if(!src)
+	if(*(int*)bayer)
 	{
-		LOG_WARNING("LibRAW silently returned a nullptr");
-		return 0;
+#if 0
+		int iw3=(iw2+1)&~1, ih3=(ih2+1)&~1;
+		imagetype=IM_GRAYSCALEv2;
+		*image=image_alloc16(0, iw3, ih3, 1, imagedepth);
+		if(!*image)
+		{
+			LOG_WARNING("Alloc error");
+			return 0;
+		}
+		memset(image[0]->data, 0, sizeof(short)*iw3*ih3);
+		for(int ky=0;ky<ih2;++ky)//can't use memcpy because of odd->even dimension padding
+		{
+			const unsigned short *srcptr=(const unsigned short*)decoder->rawdata.raw_alloc+iw2*ky;
+			unsigned short *dstptr=image[0]->data+iw3*ky;
+			for(int kx=0;kx<iw2;++kx)
+				*dstptr++=*srcptr++;
+		}
+#endif
+#if 1
+		int iw3=(iw2+1)&~1, ih3=(ih2+1)&~1;
+		imagetype=IM_BAYERv2;
+		*image=image_alloc16(0, iw3, ih3, 1, imagedepth);
+		if(!*image)
+		{
+			LOG_WARNING("Alloc error");
+			return 0;
+		}
+		memset(image[0]->data, 0, sizeof(short)*iw3*ih3);
+		for(int ky=0;ky<ih2;++ky)//can't use memcpy because of odd->even dimension padding
+		{
+			const unsigned short *srcptr=(const unsigned short*)decoder->rawdata.raw_alloc+iw2*ky;
+			//const unsigned short *srcptr=
+			//	(const unsigned short*)decoder->rawdata.raw_alloc
+			//	+decoder->sizes.raw_width*(decoder->sizes.raw_inset_crops->ctop+ky)
+			//	+decoder->sizes.raw_inset_crops->cleft;
+			unsigned short *dstptr=image[0]->data+iw3*ky;
+			for(int kx=0;kx<iw2;++kx)
+				*dstptr++=*srcptr++;
+		}
+		//memcpy(image[0]->data, decoder->rawdata.raw_alloc, sizeof(short)*iw2*ih2);
+#endif
 	}
-	int res=iw2*ih2;
+	else
+	{
+		imagetype=IM_RGBA;
+		*image=image_alloc16(0, iw2, ih2, 4, imagedepth);
+		if(!*image)
+		{
+			LOG_WARNING("Alloc error");
+			return 0;
+		}
+		memcpy(image[0]->data, decoder->rawdata.raw_alloc, sizeof(short)*iw2*ih2);
+		for(ptrdiff_t k=0, res=(ptrdiff_t)4*iw2*ih2;k<res;k+=4)//set alpha to 1
+			image[0]->data[k+3]=(1<<imagedepth)-1;
+	}
+#if 1
 	switch(decoder->sizes.flip)
 	{
-	case 0:
+	case 0:break;//upright
+	case 3://requires 180
+		image_inplacexflip(*image);
+		image_inplaceyflip(*image);
 		{
-			*image=image_construct(0, 0, 16, 0, iw2, ih2, 0, 16);
-			if(!*image)
-			{
-				LOG_WARNING("Alloc error");
-				return 0;
-			}
-			unsigned long long *dst=(unsigned long long*)image[0]->data;
-			for(int ky=0;ky<ih2;++ky)
-			{
-				for(int kx=0;kx<iw2;++kx)
-				{
-					int sh=(bayer[(ky&1)<<1|kx&1]<<4)+16-imagedepth;
-					*dst=0xFFFF000000000000|(unsigned long long)*src<<sh;
-					++dst;
-					++src;
-				}
-			}
+			int temp;
+			SWAPVAR(bayer[0], bayer[3], temp);
+			SWAPVAR(bayer[1], bayer[2], temp);
 		}
 		break;
-	case 3://upside-down
-		{
-			*image=image_construct(0, 0, 16, 0, iw2, ih2, 0, 16);
-			if(!*image)
-			{
-				LOG_WARNING("Alloc error");
-				return 0;
-			}
-			unsigned long long *dst=(unsigned long long*)image[0]->data;
-			char temp;
-			SWAPVAR(bayer[0], bayer[2], temp);
-			SWAPVAR(bayer[1], bayer[3], temp);
-			for(int ky=0;ky<ih2;++ky)
-			{
-				for(int kx=0;kx<iw2;++kx)
-				{
-					int sh=(bayer[(ky&1)<<1|kx&1]<<4)+16-imagedepth;
-					*dst=0xFFFF000000000000|(unsigned long long)src[iw2*(ih2-1-ky)+kx]<<sh;
-					++dst;
-				}
-			}
-		}
-		break;
-	case 5://90 degrees CCW
+	case 5://requires 90 CCW	actually CW
+		image_inplacexflip(*image);
+		image_transpose(image);
 		{
 			int temp=bayer[0];
 			bayer[0]=bayer[1];
 			bayer[1]=bayer[3];
 			bayer[3]=bayer[2];
 			bayer[2]=temp;
-			SWAPVAR(iw2, ih2, temp);
-			*image=image_construct(0, 0, 16, 0, iw2, ih2, 0, 16);
-			if(!*image)
-			{
-				LOG_WARNING("Alloc error");
-				return 0;
-			}
-			unsigned long long *dst=(unsigned long long*)image[0]->data;
-			for(int ky=0;ky<ih2;++ky)
-			{
-				for(int kx=0;kx<iw2;++kx)
-				{
-					int sh=(bayer[(ky&1)<<1|kx&1]<<4)+16-imagedepth;
-					*dst=0xFFFF000000000000|(unsigned long long)src[ih2*kx+ih2-1-ky]<<sh;
-					++dst;
-				}
-			}
 		}
 		break;
-	case 6://90 degrees CW
+	case 6://requires 90 CW		actually CCW
+		image_transpose(image);
+		image_inplacexflip(*image);
 		{
 			int temp=bayer[0];
 			bayer[0]=bayer[2];
 			bayer[2]=bayer[3];
 			bayer[3]=bayer[1];
 			bayer[1]=temp;
-			SWAPVAR(iw2, ih2, temp);
-			*image=image_construct(0, 0, 16, 0, iw2, ih2, 0, 16);
-			if(!*image)
-			{
-				LOG_WARNING("Alloc error");
-				return 0;
-			}
-			unsigned long long *dst=(unsigned long long*)image[0]->data;
-			for(int ky=0;ky<ih2;++ky)
-			{
-				for(int kx=0;kx<iw2;++kx)
-				{
-					int sh=(bayer[(ky&1)<<1|kx&1]<<4)+16-imagedepth;
-					*dst=0xFFFF000000000000|(unsigned long long)src[ih2*(iw2-1-kx)+ky]<<sh;
-					++dst;
-				}
-			}
 		}
 		break;
-	default:
-		LOG_WARNING("Invalid RAW image orientation");
-		break;
 	}
+#endif
 	libraw_free_image(decoder);
 	libraw_close(decoder);
 	
@@ -531,7 +547,7 @@ static void huf_freetable(HuffDecodeCell *table)
 			free(table);
 	}
 }
-static int huf_load(const char *filename, ImageHandle *image, int erroronfail)
+static int huf_load(const char *filename, Image16 **image, int erroronfail)
 {
 	unsigned char *srcbuf=0;
 	ptrdiff_t srcsize=0;
@@ -606,7 +622,7 @@ static int huf_load(const char *filename, ImageHandle *image, int erroronfail)
 			free(srcbuf);
 			return -1;
 		}
-		imagetype=IM_BAYER;
+		imagetype=IM_BAYERv2;
 		imagedepth=ceil_log2(header->nLevels);
 		bayer[0]=bayer_sh2[0]>>4;
 		bayer[1]=bayer_sh2[1]>>4;
@@ -662,11 +678,12 @@ static int huf_load(const char *filename, ImageHandle *image, int erroronfail)
 			int rootidx=*pqueue;
 			free(pqueue);
 
-			*image=image_construct(0, 0, 16, 0, header->width, header->height, 0, 16);
+			*image=image_alloc16(0, header->width, header->height, 1, imagedepth);
+		//	*image=image_construct(0, 0, 16, 0, header->width, header->height, 0, 16);
 
 			//debug decode
 #if 1
-			unsigned long long *dstptr=(unsigned long long*)image[0]->data;
+			unsigned short *dstptr=(unsigned short*)image[0]->data;
 			int bitidx=0, kd=0, kx=0, ky=0;
 			unsigned state=*bitstream;
 			while(kd<res&&bitidx<hData->cBitSize)
@@ -680,7 +697,8 @@ static int huf_load(const char *filename, ImageHandle *image, int erroronfail)
 					node=tree[node].branch[bit];
 					++bitidx;
 				}
-				dstptr[kd++]=0xFFFF000000000000|(unsigned long long)tree[node].value<<bayer_sh2[(ky&1)<<1|kx&1];
+				dstptr[kd++]=tree[node].value;
+			//	dstptr[kd++]=0xFFFF000000000000|(unsigned long long)tree[node].value<<bayer_sh2[(ky&1)<<1|kx&1];
 				++kx;
 				if((unsigned)kx>=header->width)
 					++ky, kx=0;
@@ -763,7 +781,7 @@ static int huf_load(const char *filename, ImageHandle *image, int erroronfail)
 	}
 	else if(header->version==5)//RVL
 	{
-		imagetype=IM_BAYER;
+		imagetype=IM_BAYERv2;
 		imagedepth=ceil_log2(header->nLevels);
 		bayer[0]=bayer_sh2[0]>>4;
 		bayer[1]=bayer_sh2[1]>>4;
@@ -777,17 +795,36 @@ static int huf_load(const char *filename, ImageHandle *image, int erroronfail)
 		int bitidx=0;
 		int interleave=*(int*)header->bayerInfo!=0&&*(int*)header->bayerInfo!=1;
 		int w2=header->width>>1, h2=header->height>>1;
-		*image=image_construct(0, 0, 16, 0, header->width, header->height, 0, 16);
+		*image=image_alloc16(0, header->width, header->height, 1, imagedepth);
+	//	*image=image_construct(0, 0, 16, 0, header->width, header->height, 0, 16);
+		unsigned short *dstptr=(unsigned short*)image[0]->data;
 		for(int ky=0;ky<(int)header->height;++ky)
 		{
 			int prev=0;
+			
+			for(int kx=0;kx<(int)header->width;++kx)
+			{
+				int symbol=0;
+				int code, bitlen=0;
+				do
+				{
+					code=bitstream[bitidx>>5]>>(bitidx&31)&15;
+					symbol|=(code&7)<<bitlen;
+					bitlen+=3, bitidx+=4;
+				}while(code&8);
 
+				symbol=symbol>>1^-(symbol&1);
+				prev+=symbol;
+
+				*dstptr++=prev;
+			}
+#if 0
 			int iy2=ky>=h2;
 			int ky0=ky-(h2&-iy2);	//ky0 = ky>=h/2 ? (ky-h/2)*2+1 : ky*2	= {0, 2, 4, ...h&~1, 1, 3, 5, ...h}
 			ky0=ky0<<1|iy2;
 			if(!interleave)ky0=ky;
 
-			unsigned long long *drow=(unsigned long long*)image[0]->data+header->width*ky0;
+			unsigned short *drow=(unsigned short*)image[0]->data+header->width*ky0;
 			for(int kx=0;kx<(int)header->width;++kx)
 			{
 				int ix2=kx>=w2;
@@ -809,6 +846,7 @@ static int huf_load(const char *filename, ImageHandle *image, int erroronfail)
 
 				drow[kx0]=0xFFFF000000000000|(unsigned long long)prev<<bayer_sh2[(ky0&1)<<1|kx0&1];
 			}
+#endif
 		}
 	}
 	else
@@ -1122,7 +1160,7 @@ static short* gr_load(const char *srcfn, int *ret_iw, int *ret_ih, int *ret_nlev
 
 //https://github.com/ShootingKing-AM/ffmpeg-pseudocode-tutorial
 //https://github.com/leandromoreira/ffmpeg-libav-tutorial/blob/master/README.md
-int load_media(const char *filename, ImageHandle *image, int erroronfail)//TODO special loader for HEIC, AVIF, RAW
+int load_media(const char *filename, Image16 **image, int erroronfail)//TODO special loader for HEIC, AVIF, RAW
 {
 	int len=(int)strlen(filename);
 #ifdef HVIEW_INCLUDE_LIBHEIF
@@ -1137,12 +1175,12 @@ int load_media(const char *filename, ImageHandle *image, int erroronfail)//TODO 
 		!_stricmp(filename+len-4, ".CR2")||
 		!_stricmp(filename+len-4, ".CR3")||
 		!_stricmp(filename+len-4, ".CRW")||
-		!_stricmp(filename+len-4, ".NEF")||
-		!_stricmp(filename+len-4, ".REF")||
+		!_stricmp(filename+len-4, ".DCR")||
 		!_stricmp(filename+len-4, ".DNG")||
-		!_stricmp(filename+len-4, ".MOS")||
 		!_stricmp(filename+len-4, ".KDC")||
-		!_stricmp(filename+len-4, ".DCR")
+		!_stricmp(filename+len-4, ".MOS")||
+		!_stricmp(filename+len-4, ".NEF")||
+		!_stricmp(filename+len-4, ".REF")
 	)
 		return load_raw(filename, image, erroronfail);
 #endif
@@ -1158,17 +1196,8 @@ int load_media(const char *filename, ImageHandle *image, int erroronfail)//TODO 
 		iw<<=1;//it's a planar Bayer stack
 		ih>>=1;
 
-		//char rggb[4]={-1, -1, -1, -1};
-		for(int kc=0, kg=0;kc<4;++kc)
-		{
+		for(int kc=0;kc<4;++kc)
 			bayermatrix[kc]&=0xDF;
-		//	switch(bayermatrix[kc])
-		//	{
-		//	case 'R':case 'r':rggb[0]=kc;break;
-		//	case 'G':case 'g':rggb[kg++ + 1]=kc;break;
-		//	case 'B':case 'b':rggb[3]=kc;break;
-		//	}
-		}
 		int iw2=iw>>1, ih2=ih>>1;
 		ptrdiff_t res4=(ptrdiff_t)iw2*ih2;
 		short *comp[]=
@@ -1179,13 +1208,25 @@ int load_media(const char *filename, ImageHandle *image, int erroronfail)//TODO 
 			(short*)buf+res4*3,
 		};
 		has_alpha=0;
-		imagetype=IM_BAYER;
+		imagetype=IM_BAYERv2;
 		imagedepth=FLOOR_LOG2(nlevels);
-		*image=image_construct(iw, ih, 16, 0, iw, ih, 0, imagedepth<=8?8:16);
+		imagedepth+=(1<<imagedepth)<nlevels;//CEIL_LOG2
+		*image=image_alloc16(0, iw, ih, 1, imagedepth);
+	//	*image=image_construct(iw, ih, 16, 0, iw, ih, 0, imagedepth<=8?8:16);
 		bayer[0]=(bayermatrix[0]=='R'?0:(bayermatrix[0]=='G'?1:2));
 		bayer[1]=(bayermatrix[1]=='R'?0:(bayermatrix[1]=='G'?1:2));
 		bayer[2]=(bayermatrix[2]=='R'?0:(bayermatrix[2]=='G'?1:2));
 		bayer[3]=(bayermatrix[3]=='R'?0:(bayermatrix[3]=='G'?1:2));
+		unsigned short *dstptr=(unsigned short*)image[0]->data;
+		for(int ky=0, idx=0;ky<ih;++ky)
+		{
+			for(int kx=0;kx<iw;++kx, ++idx)
+			{
+				int kc=(ky&1)<<1|(kx&1);
+				dstptr[idx]=comp[kc][iw2*(ky>>1)+(kx>>1)];
+			}
+		}
+#if 0
 		char sh[]=
 		{
 			(bayer[0]<<4)+16-imagedepth,
@@ -1205,13 +1246,7 @@ int load_media(const char *filename, ImageHandle *image, int erroronfail)//TODO 
 				dstptr[idx]=0xFFFF000000000000|(unsigned long long)comp[kc][iw2*(ky>>1)+(kx>>1)]<<sh[kc];
 			}
 		}
-		//for(ptrdiff_t k=0, res=(ptrdiff_t)iw*ih;k<res;++k)
-		//{
-		//	((unsigned short*)image[0]->data)[k<<2|0]=buf[k]<<sh;
-		//	((unsigned short*)image[0]->data)[k<<2|1]=buf[k]<<sh;
-		//	((unsigned short*)image[0]->data)[k<<2|2]=buf[k]<<sh;
-		//	((unsigned short*)image[0]->data)[k<<2|3]=0xFFFF;
-		//}
+#endif
 		free(buf);
 		update_globals(filename, *image);
 		return 0;
@@ -1227,7 +1262,57 @@ int load_media(const char *filename, ImageHandle *image, int erroronfail)//TODO 
 			return -1;
 		has_alpha=(nch==4||nch==2)&&!dummy_alpha;
 		imagetype=IM_RGBA;
-		*image=image_construct(iw, ih, 16, ret, iw, ih, 0, imagedepth<=8?8:16);
+		*image=image_alloc16(0, iw, ih, nch>1?4:1, imagedepth);
+		unsigned short *dstptr=image[0]->data;
+		switch(nch)
+		{
+		case 1:
+			if(imagedepth>8)
+			{
+				const unsigned short *srcptr=(const unsigned short*)ret;
+				for(ptrdiff_t k=0, res=(ptrdiff_t)iw*ih;k<res;++k)
+					dstptr[k]=srcptr[k];
+			}
+			else
+			{
+				const unsigned char *srcptr=(const unsigned char*)ret;
+				for(ptrdiff_t k=0, res=(ptrdiff_t)iw*ih;k<res;++k)
+					dstptr[k]=srcptr[k];
+			}
+			break;
+		case 2:
+			if(imagedepth>8)
+			{
+				const unsigned short *srcptr=(const unsigned short*)ret;
+				for(ptrdiff_t k=0, res=(ptrdiff_t)iw*ih;k<res;++k)
+					dstptr[k]=srcptr[k*2];
+			}
+			else
+			{
+				const unsigned char *srcptr=(const unsigned char*)ret;
+				for(ptrdiff_t k=0, res=(ptrdiff_t)iw*ih;k<res;++k)
+					dstptr[k]=srcptr[k*2];
+			}
+			break;
+		case 3:
+			LOG_WARNING("Unreachable");
+			break;
+		case 4:
+			if(imagedepth>8)
+			{
+				const unsigned short *srcptr=(const unsigned short*)ret;
+				for(ptrdiff_t k=0, res=(ptrdiff_t)4*iw*ih;k<res;++k)
+					dstptr[k]=srcptr[k];
+			}
+			else
+			{
+				const unsigned char *srcptr=(const unsigned char*)ret;
+				for(ptrdiff_t k=0, res=(ptrdiff_t)4*iw*ih;k<res;++k)
+					dstptr[k]=srcptr[k];
+			}
+			break;
+		}
+	//	*image=image_construct(iw, ih, 16, ret, iw, ih, 0, imagedepth<=8?8:16);
 		free(ret);
 		update_globals(filename, *image);
 		return 0;
@@ -1352,21 +1437,42 @@ int load_media(const char *filename, ImageHandle *image, int erroronfail)//TODO 
 				int padding=abs(frame2->linesize[0])/8-frame2->width;//division by 8 is because a single pixel is 64-bit (8 bytes)
 				if(padding<0)
 					padding=0;
-				*image=image_construct(0, 0, 16, frame2->data[0], frame2->width, frame2->height, padding, 16);
-				if(!*image)
-				{
-					LOG_WARNING("Allocation error");
-					return -1;
-				}
 				
 				AVPixFmtDescriptor const *desc=av_pix_fmt_desc_get(frame->format);
 				//int bpp0=av_get_bits_per_pixel(desc);
 				//int bpp=av_get_bits_per_sample(codec->id);//returns 0
 
+				*image=image_alloc16(0, frame2->width, frame2->height, 4, desc->comp->depth);
+			//	*image=image_alloc16((unsigned short*)frame2->data[0], frame2->width, frame2->height, 4, desc->comp->depth);
+			//	*image=image_construct(0, 0, 16, frame2->data[0], frame2->width, frame2->height, padding, 16);
+				if(!*image)
+				{
+					LOG_ERROR("Alloc error");
+					return -1;
+				}
 				has_alpha=desc->nb_components==4||desc->nb_components==2;
 				imagedepth=desc->comp->depth;
 				//imagedepth=bpp0/desc->nb_components;//X
 				imagetype=IM_RGBA;
+				const unsigned short *srcptr=(const unsigned short*)frame2->data[0];
+				unsigned short *dstptr=image[0]->data;
+				int rowstride=image[0]->nch*(image[0]->iw+padding);
+				for(int ky=0;ky<image[0]->ih;++ky)
+				{
+					const unsigned short *srcptr2=srcptr;
+					for(int kx=0;kx<image[0]->iw;++kx)
+					{
+						for(int kc=0;kc<image[0]->nch;++kc)
+							*dstptr++=*srcptr2++>>(16-imagedepth);
+					}
+					srcptr+=rowstride;
+				}
+				//for(ptrdiff_t k=0, res=(ptrdiff_t)image[0]->nch*image[0]->iw*image[0]->ih;k<res;++k)
+				//{
+				//	image[0]->data[k]=*srcptr++>>(16-imagedepth);
+				//	//if((k&3)==3)
+				//	//	image[0]->data[k]=255;
+				//}
 
 				//int res=image[0]->iw*image[0]->ih;
 				//for(int k=0;k<res;++k)//swap red & blue			0xAARRGGBB -> 0xAABBGGRR
@@ -1394,7 +1500,7 @@ int load_media(const char *filename, ImageHandle *image, int erroronfail)//TODO 
 }
 
 
-int save_media(const char *fn, ImageHandle image, int erroronfail)
+int save_media(const char *fn, Image8 *image, int erroronfail)
 {
 	enum AVPixelFormat srcfmt=image->depth==16?AV_PIX_FMT_RGBA64LE:AV_PIX_FMT_RGBA;
 	int error=0;
@@ -1541,7 +1647,7 @@ int save_media(const char *fn, ImageHandle image, int erroronfail)
 	avformat_free_context(oc);
 	return 0;
 }
-int save_media_as(ImageHandle image, const char *initialname, int namelen, int erroronfail)
+int save_media_as(Image8 *image, const char *initialname, int namelen, int erroronfail)
 {
 	Filter filters[]=
 	{
@@ -1642,4 +1748,97 @@ int save_media_as(ImageHandle image, const char *initialname, int namelen, int e
 		free(fn);
 	}
 	return ret;
+}
+
+static void print_version(char **dst, const char *end, const char *libname, int major, int minor, int patch, int isdll)
+{
+	if(*dst>=end)
+		LOG_WARNING("Buffer overflow");
+	*dst+=snprintf(*dst, end-*dst,
+		"%-10s %u.%u.%u .%s\n",
+		libname,
+		major, minor, patch,
+		isdll?"dll":"h"
+	);
+}
+char* get_codecinfo(void)//don't forget to free(mem)
+{
+#define BUFLEN 8192
+	char *str=(char*)malloc(BUFLEN);
+	if(!str)
+	{
+		LOG_ERROR("Alloc error");
+		return 0;
+	}
+	memset(str, 0, BUFLEN);
+	char *ptr=str, *end=str+BUFLEN-1;
+	int ver;
+	
+//	ptr+=snprintf(ptr, end-ptr, "FFmpeg:\n");
+	ver=LIBAVCODEC_VERSION_INT;
+	print_version(&ptr, end, "avcodec", ver>>16&255, ver>>8&255, ver&255, 0);
+	ver=avcodec_version();
+	print_version(&ptr, end, "avcodec", ver>>16&255, ver>>8&255, ver&255, 1);
+	
+	ver=LIBAVFORMAT_VERSION_INT;
+	print_version(&ptr, end, "avformat", ver>>16&255, ver>>8&255, ver&255, 0);
+	ver=avformat_version();
+	print_version(&ptr, end, "avformat", ver>>16&255, ver>>8&255, ver&255, 1);
+	
+	ver=avutil_version();
+	print_version(&ptr, end, "avutil", ver>>16&255, ver>>8&255, ver&255, 1);
+
+	ver=LIBSWSCALE_VERSION_INT;
+	print_version(&ptr, end, "swscale", ver>>16&255, ver>>8&255, ver&255, 0);
+	ver=swscale_version();
+	print_version(&ptr, end, "swscale", ver>>16&255, ver>>8&255, ver&255, 1);
+	
+	ptr+=snprintf(ptr, end-ptr, "\n");
+	ver=LIBHEIF_NUMERIC_VERSION;//0xHHMMLL00
+	print_version(&ptr, end, "libheif", ver>>24&255, ver>>16&255, ver>>8&255, 0);
+	ver=heif_get_version_number();//0xHHMMLL00
+	print_version(&ptr, end, "libheif", ver>>24&255, ver>>16&255, ver>>8&255, 1);
+	
+	ptr+=snprintf(ptr, end-ptr, "\n");
+	ver=libraw_versionNumber();
+	print_version(&ptr, end, "libraw", ver>>16&255, ver>>8&255, ver&255, 1);
+
+	return str;
+#undef BUFLEN
+#if 0
+	int printed=0;
+//	printed+=snprintf(g_buf+printed, sizeof(g_buf)-1-printed, "FFmpeg:\n");
+	//LIBAVCODEC_VERSION_INT
+	unsigned ver=avcodec_version();
+	printed+=snprintf(g_buf+printed, sizeof(g_buf)-1-printed,
+		"%-10s %u.%u.%u\n",
+		"avcodec", ver>>16&255, ver>>8&255, ver&255
+	);
+	ver=avformat_version();
+	printed+=snprintf(g_buf+printed, sizeof(g_buf)-1-printed,
+		"%-10s %u.%u.%u\n",
+		"avformat", ver>>16&255, ver>>8&255, ver&255
+	);
+	ver=avutil_version();
+	printed+=snprintf(g_buf+printed, sizeof(g_buf)-1-printed,
+		"%-10s %u.%u.%u\n",
+		"avutil", ver>>16&255, ver>>8&255, ver&255
+	);
+	ver=swscale_version();
+	printed+=snprintf(g_buf+printed, sizeof(g_buf)-1-printed,
+		"%-10s %u.%u.%u\n",
+		"swscale", ver>>16&255, ver>>8&255, ver&255
+	);
+
+	ver=LIBHEIF_NUMERIC_VERSION;
+	printed+=snprintf(g_buf+printed, sizeof(g_buf)-1-printed,
+		"%-10s %u.%u.%u .h\n",
+		"libheif", ver>>24&255, ver>>16&255, ver>>8&255
+	);
+	ver=heif_get_version_number();//0xHHMMLL00
+	printed+=snprintf(g_buf+printed, sizeof(g_buf)-1-printed,
+		"%-10s %u.%u.%u .dll\n",
+		"libheif", ver>>24&255, ver>>16&255, ver>>8&255
+	);
+#endif
 }

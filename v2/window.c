@@ -659,7 +659,7 @@ int copy_bmp_to_clipboard(const unsigned char *rgba, int iw, int ih)
 	CloseClipboard();
 	return 1;
 }
-ImageHandle paste_bmp_from_clipboard()
+Image8 *paste_bmp_from_clipboard()
 {
 	unsigned clipboardformats[]={CF_DIB, CF_DIBV5, CF_BITMAP, CF_TIFF, CF_METAFILEPICT};
 	int format=GetPriorityClipboardFormat(clipboardformats, sizeof clipboardformats>>2);
@@ -671,7 +671,7 @@ ImageHandle paste_bmp_from_clipboard()
 		LOG_ERROR("OpenClipboard");
 		return 0;
 	}
-	ImageHandle image=0;
+	Image8 *image=0;
 	void *hData=0;
 	ptrdiff_t size=0;
 	switch(format)
@@ -680,18 +680,24 @@ ImageHandle paste_bmp_from_clipboard()
 		{
 			HBITMAP hBm2=(HBITMAP)GetClipboardData(CF_BITMAP);		SYS_ASSERT(hBm2);
 			SIZE s;
-			//if(!hBm2)
-			//{
-			//	LOG_WARNING("Allocation error");
-			//	return 0;
-			//}
+			if(!hBm2)
+			{
+				LOG_WARNING("Allocation error");
+				return 0;
+			}
 			GetBitmapDimensionEx(hBm2, &s);
 			if(!s.cx||!s.cy)
 				break;
 
-			image=image_construct(s.cx, s.cy, 8, 0, s.cx, s.cy, 0, 0);
+			image=image_alloc8(0, s.cx, s.cy, 4, 8);
+		//	image=image_construct(s.cx, s.cy, 8, 0, s.cx, s.cy, 0, 0);
 			BITMAPINFO bmh={{sizeof(BITMAPINFOHEADER), s.cx, -s.cy, 1, 32, BI_RGB, 0}};
 			HDC hDC2=CreateCompatibleDC(0);		SYS_ASSERT(hDC2);
+			if(!hDC2)
+			{
+				LOG_WARNING("Allocation error");
+				return 0;
+			}
 			hBm2=(HBITMAP)SelectObject(hDC2, hBm2);
 			int copied=GetDIBits(hDC2, hBm2, 0, s.cy, image->data, &bmh, DIB_RGB_COLORS);
 			hBm2=(HBITMAP)SelectObject(hDC2, hBm2);
@@ -716,7 +722,8 @@ ImageHandle paste_bmp_from_clipboard()
 			if(bmi->bmiHeader.biCompression==BI_RGB||bmi->bmiHeader.biCompression==BI_BITFIELDS)//uncompressed
 			{
 				int iw=bmi->bmiHeader.biWidth, ih=abs(bmi->bmiHeader.biHeight);
-				image=image_construct(iw, ih, 8, 0, iw, ih, 0, 0);
+				image=image_alloc8(0, iw, ih, 4, 8);
+			//	image=image_construct(iw, ih, 8, 0, iw, ih, 0, 0);
 				byte *data=(byte*)bmi->bmiColors;
 				int idx_b=0, idx_r=2;
 				if(bmi->bmiHeader.biCompression==BI_BITFIELDS)//first 3 DWORDs are red, green, blue bitfields

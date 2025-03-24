@@ -29,9 +29,8 @@ double mousewheel_zoom=2;//mouse wheel factor
 double wpx=0, wpy=0;//window position (top-left corner) in image coordinates
 
 ArrayHandle fn=0;
-ImageHandle
-	image=0,//16bit
-	impreview=0;//8bit
+Image16 *image=0;
+Image8 *impreview=0;
 ImageType imagetype=IM_UNINITIALIZED;
 int imagedepth=0;
 char bayer[4]={0};//shift ammounts for the 4 Bayer mosaic components, -1 for grayscale, example: RGGB is {0, 8, 8, 16}
@@ -52,21 +51,23 @@ ProfilePlotMode profileplotmode=PROFILE_OFF;
 
 int bitmode=0,//0: off, 1: colorful bitplanes, 2: monochrome bitplanes
 	bitplane=-1;
+int pixelpreview=1;
+int brightness=0;//impreview = CLAMP(image<<brightness)
 
 static void center_image()
 {
-	if(!image)
+	if(!impreview)
 		return;
 	int wndw=w, wndh=h-17;
-	if((double)wndw/wndh>=(double)image->iw/image->ih)//window AR > image AR: fit height
+	if((double)wndw/wndh>=(double)impreview->iw/impreview->ih)//window AR > image AR: fit height
 	{
 		if(wndh>0)
-			zoom=(double)wndh/image->ih;
+			zoom=(double)wndh/impreview->ih;
 	}
 	else//window AR < image AR: fit width
-		zoom=(double)wndw/image->iw;
-	wpx=(image->iw-wndw/zoom)*0.5;//center image
-	wpy=(image->ih-wndh/zoom)*0.5;
+		zoom=(double)wndw/impreview->iw;
+	wpx=(impreview->iw-wndw/zoom)*0.5;//center image
+	wpy=(impreview->ih-wndh/zoom)*0.5;
 	imagecentered=1;
 }
 static void calc_hist()
@@ -75,104 +76,106 @@ static void calc_hist()
 		return;
 	int res=impreview->iw*impreview->ih;
 	memset(histogram, 0, 768*sizeof(int));
+	for(int k=0;k<res;++k)
+	{
+		unsigned char *p=impreview->data+((size_t)k<<2);
+		++histogram[0<<8|p[0]];
+		++histogram[1<<8|p[1]];
+		++histogram[2<<8|p[2]];
+	}
+}
+static void equalize_ch(const unsigned short *src, unsigned char *dst, int iw, int ih, int srcxstride, int srcystride, int *hist, int nlevels, int disableZS)
+{
+	int mask=nlevels-1;
+	if(!(disableZS&1))
+		memset(hist, 0, nlevels*sizeof(int));
+	int res=iw*ih;
+	for(int ky=0;ky<ih;++ky)
+	{
+		const unsigned short *srcptr=src+srcystride*ky;
+		for(int kx=0;kx<iw;++kx, srcptr+=srcxstride)
+			++hist[*srcptr&mask];
+	}
+	if(!(disableZS&2))
+	{
+		int total=0;
+		for(int ks=0;ks<nlevels;++ks)
+			total+=hist[ks];
+		int sum=0;
+		for(int ks=0;ks<nlevels;++ks)
+		{
+			int freq=hist[ks];
+			hist[ks]=(int)(sum*255LL/total);
+			sum+=freq;
+		}
+		unsigned char *dstptr=dst;
+		for(int ky=0;ky<ih;++ky)
+		{
+			const unsigned short *srcptr=src+srcystride*ky;
+			for(int kx=0;kx<iw;++kx, srcptr+=srcxstride, dstptr+=4)
+				*dstptr=hist[*srcptr&mask];
+		}
+	}
+}
+static void equalize(void)
+{
+	if(!image||!impreview)
+		return;
+	int nlevels=1<<imagedepth;
+	int *hist=(int*)malloc(nlevels*sizeof(int));
+	if(!hist)
+	{
+		LOG_ERROR("Alloc error");
+		return;
+	}
 	switch(imagetype)
 	{
-	case IM_GRAYSCALE:
-		for(int k=0;k<res;++k)
+	case IM_GRAYSCALEv2:
+		equalize_ch((unsigned short*)image->data, impreview->data, image->iw, image->ih, 1, image->iw, hist, nlevels, 0);
+		for(ptrdiff_t k=0, res=(ptrdiff_t)4*impreview->iw*impreview->ih;k<res;k+=4)//broadcast channel
 		{
-			unsigned char sym=impreview->data[k<<2];
-			++histogram[sym];
+			impreview->data[k+1]=impreview->data[k];
+			impreview->data[k+2]=impreview->data[k];
 		}
 		break;
 	case IM_RGBA:
-		for(int k=0;k<res;++k)
-		{
-			unsigned char *p=impreview->data+((size_t)k<<2);
-			++histogram[0<<8|p[0]];
-			++histogram[1<<8|p[1]];
-			++histogram[2<<8|p[2]];
-		}
+		equalize_ch((unsigned short*)image->data+0, impreview->data+0, image->iw, image->ih, 4, image->iw<<2, hist, nlevels, 0);
+		equalize_ch((unsigned short*)image->data+1, impreview->data+1, image->iw, image->ih, 4, image->iw<<2, hist, nlevels, 0);
+		equalize_ch((unsigned short*)image->data+2, impreview->data+2, image->iw, image->ih, 4, image->iw<<2, hist, nlevels, 0);
 		break;
-	case IM_BAYER:
-		for(int ky=0;ky<impreview->ih;++ky)
+	case IM_BAYERv2://FIXME bayer matrix
+		for(int kc=0, assigned=0;kc<4;++kc)//green first
 		{
-			for(int kx=0;kx<impreview->iw;++kx)
+			if(bayer[kc]==1)
 			{
-				int comp=bayer[(ky&1)<<1|kx&1];
-				unsigned char sym=impreview->data[(impreview->iw*ky+kx)<<2|comp];
-				++histogram[comp<<8|sym];
+				equalize_ch(
+					(unsigned short*)image->data+image->iw*(kc>>1)+(kc&1),
+					impreview->data+1, image->iw>>1, image->ih>>1,
+					2, image->iw*2,
+					hist, nlevels, assigned?1:2
+				);
+				assigned=1;
 			}
 		}
-		break;
-	}
-}
-static int integrate_hist(int *hist, int nlevels, int *CDF)
-{
-	int sum=0;
-	for(int sym=0;sym<nlevels;++sym)
-	{
-		CDF[sym]=sum;
-		sum+=hist[sym];
-	}
-	return sum;
-}
-static void equalize()
-{
-	if(!impreview)
-		return;
-	calc_hist();
-	int *CDF=(int*)malloc(256*sizeof(int));
-	if(!CDF)
-	{
-		LOG_ERROR("Allocation error");
-		return;
-	}
-	int res=impreview->iw*impreview->ih, fsum;
-	unsigned char *ptr=(unsigned char*)impreview->data;
-	switch(imagetype)
-	{
-	case IM_GRAYSCALE:
-		fsum=integrate_hist(histogram, 256, CDF);
-		for(int k=0;k<res;++k)
+		for(int kc=0, assigned=0;kc<4;++kc)
 		{
-			int val=ptr[k<<2];
-			val=(int)((long long)CDF[val]*255/fsum);
-			ptr[k<<2  ]=val;
-			ptr[k<<2|1]=val;
-			ptr[k<<2|2]=val;
-		}
-		break;
-	case IM_BAYER:
-	case IM_RGBA:
-		for(int kc=0;kc<3;++kc)
-		{
-			fsum=integrate_hist(histogram+((size_t)kc<<8), 256, CDF);
-			for(int k=0;k<res;++k)
+			if(bayer[kc]!=1)
 			{
-				int val=ptr[k<<2|kc];
-				val=(int)((long long)CDF[val]*255/fsum);
-				ptr[k<<2|kc]=val;
+				equalize_ch(
+					(unsigned short*)image->data+image->iw*(kc>>1)+(kc&1),
+					impreview->data+bayer[kc], image->iw>>1, image->ih>>1,
+					2, image->iw*2,
+					hist, nlevels, 0
+				);
 			}
 		}
+		//equalize_ch((unsigned short*)image->data+image->iw*0+0, impreview->data+0, image->iw>>1, image->ih>>1, 1, image->iw, hist, nlevels, 0);
+		//equalize_ch((unsigned short*)image->data+image->iw*0+1, impreview->data+1, image->iw>>1, image->ih>>1, 1, image->iw, hist, nlevels, 2);
+		//equalize_ch((unsigned short*)image->data+image->iw*1+0, impreview->data+2, image->iw>>1, image->ih>>1, 1, image->iw, hist, nlevels, 1);
+		//equalize_ch((unsigned short*)image->data+image->iw*1+1, impreview->data+3, image->iw>>1, image->ih>>1, 1, image->iw, hist, nlevels, 0);
 		break;
-	//case IM_BAYER:
-	//	for(int kb=0;kb<4;++kb)
-	//	{
-	//		int xoffset=kb&1, yoffset=kb>>1, kc=bayer[kb];
-	//		fsum=integrate_hist(histogram+((size_t)kc<<8), 256, CDF);
-	//		for(int ky=yoffset;ky<impreview->ih;ky+=2)
-	//		{
-	//			for(int kx=xoffset;kx<impreview->iw;kx+=2)
-	//			{
-	//				int idx=impreview->iw*ky+kx;
-	//				int val=ptr[idx<<2|kc];
-	//				val=(int)((long long)CDF[val]*255/fsum);
-	//				ptr[idx<<2|kc]=val;
-	//			}
-	//		}
-	//	}
-	//	break;
 	}
+	free(hist);
 }
 static void update_image(int settitle, int render)
 {
@@ -184,7 +187,19 @@ static void update_image(int settitle, int render)
 	{
 		if(impreview)
 			image_free(&impreview);
-		impreview=image_construct(0, 0, 8, 0, image->iw, image->ih, 0, image->depth);
+		switch(imagetype)
+		{
+		case IM_GRAYSCALEv2:
+			impreview=image_alloc8(0, image->iw, image->ih, 4, 8);
+			break;
+		case IM_RGBA:
+			impreview=image_alloc8(0, image->iw, image->ih, 4, 8);
+			break;
+		case IM_BAYERv2:
+			impreview=image_alloc8(0, image->iw>>1, image->ih>>1, 4, 8);
+			break;
+		}
+	//	impreview=image_construct(0, 0, 8, 0, image->iw, image->ih, 0, image->depth);
 	}
 	if(bitmode==1)
 	{
@@ -222,7 +237,8 @@ static void update_image(int settitle, int render)
 		}
 	}
 	else
-		image_export_rgb8(impreview, image, imagetype);
+		image_export(impreview, image, imagetype);
+	//	image_export_rgb8(impreview, image, imagetype);
 	//	image_blit(impreview, 0, 0, image->data, image->iw, image->ih, image->xcap-image->iw, image->depth);
 	if(hist_on)
 		calc_hist();
@@ -246,8 +262,17 @@ int io_init(int argc, char **argv)//return false to abort
 {
 #ifdef _DEBUG
 	fn=filter_path(
+	//	"E:/Share Box/20230102 dslr/NEF/DSC_0403.NEF"
+	//	"D:/ML/20250320_005230.dng"
+	//	"D:/ML/dataset-RAW/a0001-jmac_DSC1459.dng"
+	//	"D:/ML/dataset-RAW/a0117-kme_006.dng"
+		"D:/ML/dataset-RAW/a0118-20051223_103622__MG_0617.dng"
+	//	"D:/ML/dataset-RAW/a0128-IMG_0793.dng"
+	//	"D:/ML/00-Taschdid.svg.png"
 	//	"D:/ML/mystery.gr"
-		"E:/C/ASCII-Table-wide.svg.png"
+	//	"D:/ML/kodim24.ppm"
+	//	"D:/ML/mystery.gr"
+	//	"E:/C/ASCII-Table-wide.svg.png"
 	//	"C:/dataset-20241107-gr/20241107_164228_958.gr"
 	//	"E:/C/huf2gr/huf2gr/plane.gr"
 	//	"E:/Share Box/Scope/20241107/20241107_164651_573.huf"
@@ -294,10 +319,14 @@ int io_mousemove()//return true to redraw
 }
 int io_mousewheel(int forward)
 {
-	const double tolerance=1e-2;
 	int mw_fwd=forward>0;
-
-	zoom_at(mx, my, mw_fwd?mousewheel_zoom:1/mousewheel_zoom);//fwd zooms in
+	if(GET_KEY_STATE(KEY_CTRL))
+	{
+		brightness+=2*mw_fwd-1;
+		update_image(0, 0);
+	}
+	else
+		zoom_at(mx, my, mw_fwd?mousewheel_zoom:1/mousewheel_zoom);//fwd zooms in
 	return 1;
 }
 static void count_active_keys(IOKey upkey)
@@ -317,6 +346,7 @@ int io_keydn(IOKey key, char c)
 		switch(key)
 		{
 		case 'A'://set alpha to one
+			if(imagetype==IM_RGBA)
 			{
 				unsigned short *data=(unsigned short*)image->data;
 				ptrdiff_t res=image->iw*image->ih;
@@ -324,7 +354,9 @@ int io_keydn(IOKey key, char c)
 					data[k<<2|3]=0xFFFF;
 				for(ptrdiff_t k=0;k<res;++k)
 					impreview->data[k<<2|3]=0xFF;
+				return 1;
 			}
+			return 0;
 		case 'S':
 			{
 				int kslash=0, kdot=0;
@@ -340,22 +372,30 @@ int io_keydn(IOKey key, char c)
 	switch(key)
 	{
 	case KEY_F1:
-		messagebox(MBOX_OK, "Controls",
-			"Esc/LBUTTON/WASD: Drag image\n"
-			"Enter/Bksp/Wheel: Zoom image\n"
-			"Left/Right: prev/next image\n"
-			"Ctrl O: Open image\n"
-			"E: Reset view to topleft corner at 1:1\n"
-			"C: Fit image to window\n"
-			"Q: Equalize histogram\n"
-			"Ctrl C: Copy pixel values from screen (when zoomed in)\n"
-			"H: Toggle histogram\n"
-			"Ctrl H: Toggle hexadecimal pixel labels\n"
-			"X/Y: Toggle horizontal/vertical cross-section profiles\n"
-			"\n"
-			"Quote: Toggle bitplane view\n"
-			"Brackets: Select bitplane\n" 
-		);
+		{
+			char *ver=get_codecinfo();
+			messagebox(MBOX_OK, "Controls",
+				"Esc/LBUTTON/WASD: Drag image\n"
+				"Enter/Bksp/Wheel: Zoom image\n"
+				"Left/Right: prev/next image\n"
+				"Ctrl O: Open image\n"
+				"E: Reset view to topleft corner at 1:1\n"
+				"C: Fit image to window\n"
+				"Q: Equalize histogram\n"
+				"Ctrl C: Copy pixel values from screen (when zoomed in)\n"
+				"H: Toggle histogram\n"
+				"Ctrl H: Toggle hexadecimal pixel labels\n"
+				"P: Toggle pixel label source\n"
+				"X/Y: Toggle horizontal/vertical cross-section profiles\n"
+				"\n"
+				"Quote: Toggle bitplane view\n"
+				"Brackets: Select bitplane\n"
+				"\n"
+				"%s",
+				ver?ver:""
+			);
+			free(ver);
+		}
 		break;
 	case KEY_ESC:
 	case KEY_LBUTTON:
@@ -382,6 +422,13 @@ int io_keydn(IOKey key, char c)
 		timer_start(10, TIMER_ID_KEYBOARD);
 		break;
 		
+	case KEY_PLUS:
+	case KEY_MINUS:
+	case KEY_NP_PLUS:
+	case KEY_NP_MINUS:
+		brightness+=2*(key==KEY_PLUS||key==KEY_NP_PLUS)-1;
+		update_image(0, 0);
+		return 1;
 	case KEY_LEFT:
 	case KEY_RIGHT:
 		if(fn)
@@ -412,7 +459,7 @@ int io_keydn(IOKey key, char c)
 						break;
 					}
 				}
-				ImageHandle im2=0;
+				Image16 *im2=0;
 				int step=key==KEY_RIGHT?1:-1;
 				for(int k=currentidx+step;MODVAR(k, k, (int)filenames->count), k!=currentidx;k+=step)
 				{
@@ -444,7 +491,7 @@ int io_keydn(IOKey key, char c)
 			ArrayHandle fn2=dialog_open_file(0, 0, 0);
 			if(fn2)
 			{
-				ImageHandle im2=0;
+				Image16 *im2=0;
 				int error=load_media(fn2->data, &im2, 1);
 				if(im2&&!error)
 				{
@@ -466,7 +513,10 @@ int io_keydn(IOKey key, char c)
 		update_image(0, 0);
 		return 1;
 	case 'Q'://equalization
-		equalize();
+		if(GET_KEY_STATE(KEY_CTRL))
+			update_image(0, 0);
+		else
+			equalize();
 		if(hist_on)
 			calc_hist();
 		return 1;
@@ -490,7 +540,19 @@ int io_keydn(IOKey key, char c)
 				int iw=x2-x1, ih=y2-y1;
 				if(iw>0&&ih>0)
 				{
-					ImageHandle crop=image_construct(iw, ih, 8, impreview->data+((impreview->iw*(ptrdiff_t)y1+x1)<<2), iw, ih, impreview->xcap-iw, impreview->depth);
+					Image8 *crop=image_alloc8(0, iw, ih, 4, 8);
+					for(int ky=0, idx=0;ky<ih;++ky)
+					{
+						for(int kx=0;kx<iw;++kx, idx+=4)
+						{
+							int idx2=(impreview->iw*(y1+ky)+x1+kx)<<2;
+							crop->data[idx+0]=impreview->data[idx2+0];
+							crop->data[idx+1]=impreview->data[idx2+1];
+							crop->data[idx+2]=impreview->data[idx2+2];
+							crop->data[idx+3]=impreview->data[idx2+3];
+						}
+					}
+				//	ImageHandle crop=image_construct(iw, ih, 8, impreview->data+((impreview->iw*(ptrdiff_t)y1+x1)<<2), iw, ih, impreview->xcap-iw, impreview->depth);
 					for(ptrdiff_t k=0, res=crop->iw*crop->ih;k<res;++k)//swap red & blue (8-bit)
 					{
 						unsigned char temp=crop->data[k<<2|0];
@@ -532,20 +594,19 @@ int io_keydn(IOKey key, char c)
 					format=" %5d";
 				switch(imagetype)
 				{
-				case IM_GRAYSCALE:
+				case IM_GRAYSCALEv2:
 					{
 						str_append(&str, "%d bit GRAY:\n", imagedepth);
-						unsigned short *ptr=(unsigned short*)image->data;
-						int iy=MAXVAR(iy1, 0);
-						for(int yend=MINVAR(iy2+2, image->ih);iy<yend;++iy)
+						const unsigned short *ptr=(const unsigned short*)image->data;
+						int iy=MAXVAR(iy1, 0), yend=MINVAR(iy2+2, image->ih);
+						for(;iy<yend;++iy)
 						{
-							int ky=image2screen_y_int(iy);
-							int ix=MAXVAR(ix1, 0);
-							for(int xend=MINVAR(ix2+2, image->iw);ix<xend;++ix)
+							//int ky=image2screen_y_int(iy);
+							int ix=MAXVAR(ix1, 0), xend=MINVAR(ix2+2, image->iw);
+							for(;ix<xend;++ix)
 							{
-								int kx=image2screen_x_int(ix);
-								int idx=(image->iw*iy+ix)<<2;
-								str_append(&str, format, ptr[idx  ]>>(16-imagedepth));
+								//int kx=image2screen_x_int(ix);
+								str_append(&str, format, ptr[image->iw*iy+ix]);
 							}
 							str_append(&str, "\n");
 						}
@@ -554,27 +615,47 @@ int io_keydn(IOKey key, char c)
 				case IM_RGBA:
 					{
 						str_append(&str, "%d bit RGBA:\n", imagedepth);
-						unsigned short *ptr=(unsigned short*)image->data;
-						int iy=MAXVAR(iy1, 0);
-						for(int yend=MINVAR(iy2+2, image->ih);iy<yend;++iy)
+						const unsigned short *ptr=(const unsigned short*)image->data;
+						int iy=MAXVAR(iy1, 0), yend=MINVAR(iy2+2, image->ih);
+						for(;iy<yend;++iy)
 						{
-							int ky=image2screen_y_int(iy);
-							int ix=MAXVAR(ix1, 0);
-							for(int xend=MINVAR(ix2+2, image->iw);ix<xend;++ix)
+							//int ky=image2screen_y_int(iy);
+							int ix=MAXVAR(ix1, 0), xend=MINVAR(ix2+2, image->iw);
+							for(;ix<xend;++ix)
 							{
-								int kx=image2screen_x_int(ix);
+								//int kx=image2screen_x_int(ix);
 								int idx=(image->iw*iy+ix)<<2;
 								str_append(&str, "    ");
-								str_append(&str, format, ptr[idx  ]>>(16-imagedepth));
-								str_append(&str, format, ptr[idx+1]>>(16-imagedepth));
-								str_append(&str, format, ptr[idx+2]>>(16-imagedepth));
-								str_append(&str, format, ptr[idx+3]>>(16-imagedepth));
+								str_append(&str, format, ptr[idx+0]);
+								str_append(&str, format, ptr[idx+1]);
+								str_append(&str, format, ptr[idx+2]);
+								str_append(&str, format, ptr[idx+3]);
 							}
 							str_append(&str, "\n");
 						}
 					}
 					break;
-				case IM_BAYER:
+				case IM_BAYERv2:
+					{
+						const char labels[]="RGB";
+						const unsigned short *ptr=(const unsigned short*)image->data;
+						str_append(&str, "%d bit %c%c%c%c:\n", imagedepth, labels[bayer[0]], labels[bayer[1]], labels[bayer[2]], labels[bayer[3]]);
+						int iy=MAXVAR(iy1, 0)&~1, yend=MINVAR(iy2+2, image->ih);
+						for(;iy<yend;++iy)
+						{
+							//int ky=image2screen_y_int(iy);
+							int ix=MAXVAR(ix1, 0)&~1, xend=MINVAR(ix2+2, image->iw);
+							for(;ix<xend;++ix)
+							{
+								//int kx=image2screen_x_int(ix);
+								str_append(&str, format, ptr[image->iw*iy+ix]);
+							//	int idx=(image->iw*iy+ix)<<2;
+							//	str_append(&str, format, ptr[idx+bayer[(iy&1)<<1|ix&1]]>>(16-imagedepth));
+							}
+							str_append(&str, "\n");
+						}
+					}
+#if 0
 					{
 						const char labels[]="RGB";
 						str_append(&str, "%d bit %c%c%c%c:\n", imagedepth, labels[bayer[0]], labels[bayer[1]], labels[bayer[2]], labels[bayer[3]]);
@@ -597,6 +678,7 @@ int io_keydn(IOKey key, char c)
 							str_append(&str, "\n");
 						}
 					}
+#endif
 					break;
 				}
 				copy_to_clipboard((char*)str->data, (int)str->count);
@@ -609,12 +691,15 @@ int io_keydn(IOKey key, char c)
 	case 'V':
 		if(GET_KEY_STATE(KEY_CTRL))
 		{
-			ImageHandle im2=paste_bmp_from_clipboard();
+			Image8 *im2=paste_bmp_from_clipboard();
 			if(im2)
 			{
 				image_free(&image);
 				image_free(&impreview);
-				image=image_construct(im2->iw, im2->ih, 16, im2->data, im2->iw, im2->ih, im2->xcap-im2->iw, im2->depth);
+				image=image_alloc16(0, im2->iw, im2->ih, 4, 8);
+				for(ptrdiff_t k=0, res=(ptrdiff_t)im2->iw*im2->ih;k<res;++k)
+					image->data[k]=im2->data[k];
+			//	image=image_construct(im2->iw, im2->ih, 16, im2->data, im2->iw, im2->ih, im2->xcap-im2->iw, im2->depth);
 				impreview=im2;
 				imagetype=IM_RGBA;
 				if(imagecentered)
@@ -623,6 +708,9 @@ int io_keydn(IOKey key, char c)
 			}
 		}
 		break;
+	case 'P':
+		pixelpreview=!pixelpreview;
+		return 1;
 	case 'H':
 		if(GET_KEY_STATE(KEY_CTRL))//toggle pixel label base
 			pxlabels_hex=!pxlabels_hex;
@@ -672,15 +760,15 @@ int io_keydn(IOKey key, char c)
 			update_image(0, 1);
 		}
 		break;
-	case KEY_SPACE:
-		if(image)
-		{
-			if(imagetype==IM_BAYER)
-				test48(image, imagedepth, bayer);
-			else
-				test49(image, imagedepth);
-		}
-		break;
+	//case KEY_SPACE://what is this?
+	//	if(image)
+	//	{
+	//		if(imagetype==IM_BAYER)
+	//			test48(image, imagedepth, bayer);
+	//		else
+	//			test49(image, imagedepth);
+	//	}
+	//	break;
 	}
 	return 0;
 }
@@ -724,7 +812,7 @@ void io_timer()
 }
 static void print_pixellabels(int ix1, int ix2, int iy1, int iy2, int xoffset, int yoffset, int component, char label, long long txtcolors, int is_bayer)
 {
-	unsigned short *ptr=(unsigned short*)image->data+((image->iw*yoffset+xoffset)<<2);
+	unsigned short *ptr=image->data+(((ptrdiff_t)image->iw*yoffset+xoffset)<<(imagetype==IM_RGBA?2:0));
 	const char *format;
 	if(pxlabels_hex)
 	{
@@ -740,21 +828,54 @@ static void print_pixellabels(int ix1, int ix2, int iy1, int iy2, int xoffset, i
 	else
 		format="%c%5d";
 	txtcolors=set_text_colors(txtcolors);
-	int iy=MAXVAR(iy1, 0);
+	int iy=MAXVAR(iy1, 0), yend=MINVAR(iy2+2, image->ih);
 	iy>>=is_bayer;
 	iy<<=is_bayer;
 	float fontsize=1, labeloffset=is_bayer?0:tdy*fontsize*component;
-	for(int yend=MINVAR(iy2+2, image->ih);iy<yend;iy+=1<<is_bayer)
+	for(;iy<yend;iy+=1<<is_bayer)
 	{
 		int ky=image2screen_y_int(iy+yoffset);
-		int ix=MAXVAR(ix1, 0);
+		int ix=MAXVAR(ix1, 0), xend=MINVAR(ix2+2, image->iw);
 		ix>>=is_bayer;
 		ix<<=is_bayer;
-		for(int xend=MINVAR(ix2+2, image->iw);ix<xend;ix+=1<<is_bayer)
+		for(;ix<xend;ix+=1<<is_bayer)
 		{
 			int kx=image2screen_x_int(ix+xoffset);
-			int idx=(image->iw*iy+ix)<<2;
-			GUIPrint_enqueue(&vertices_text, 0, (float)kx, (float)ky+labeloffset, fontsize, format, label, ptr[idx+component]>>(16-imagedepth));
+			int idx=image->iw*iy+ix;
+			if(imagetype==IM_RGBA)
+				idx<<=2;
+			GUIPrint_enqueue(&vertices_text, 0, (float)kx, (float)ky+labeloffset, fontsize, format, label, ptr[idx+component]);
+		}
+	}
+	print_line_flush(vertices_text, fontsize);
+	txtcolors=set_text_colors(txtcolors);
+}
+static void print_pixellabels_preview(int ix1, int ix2, int iy1, int iy2, int xoffset, int yoffset, int component, char label, long long txtcolors, int is_bayer)
+{
+	unsigned char *ptr=impreview->data+(((ptrdiff_t)impreview->iw*yoffset+xoffset)<<2);
+	const char *format;
+	if(pxlabels_hex)
+		format="%c %02X";
+	else
+		format="%c%5d";
+	txtcolors=set_text_colors(txtcolors);
+	int iy=MAXVAR(iy1, 0), yend=MINVAR(iy2+2, impreview->ih);
+	iy>>=is_bayer;
+	iy<<=is_bayer;
+	float fontsize=1, labeloffset=is_bayer?0:tdy*fontsize*component;
+	for(;iy<yend;iy+=1<<is_bayer)
+	{
+		int ky=image2screen_y_int(iy+yoffset);
+		int ix=MAXVAR(ix1, 0), xend=MINVAR(ix2+2, impreview->iw);
+		ix>>=is_bayer;
+		ix<<=is_bayer;
+		for(;ix<xend;ix+=1<<is_bayer)
+		{
+			int kx=image2screen_x_int(ix+xoffset);
+			int idx=impreview->iw*iy+ix;
+			//if(imagetype==IM_RGBA)
+				idx<<=2;
+			GUIPrint_enqueue(&vertices_text, 0, (float)kx, (float)ky+labeloffset, fontsize, format, label, ptr[idx+component]);
 		}
 	}
 	print_line_flush(vertices_text, fontsize);
@@ -775,20 +896,24 @@ static void draw_histogram(int *hist, int nlevels, int color, int y1, int y2)
 static void draw_profile_x(int comp, int color)//horizontal cross-section profile		to see the color/spatial correlation
 {
 	int iy=screen2image_y_int(my);
-	if((unsigned)iy<(unsigned)impreview->ih)
+	if((unsigned)iy<(unsigned)image->ih)
 	{
-		unsigned char *row=0;
+		unsigned short *row=0;
 		int lgstride=0;
 		switch(imagetype)
 		{
-		case IM_GRAYSCALE:	row=impreview->data+((size_t)impreview->iw*iy<<2|0	), lgstride=2;break;
-		case IM_RGBA:		row=impreview->data+((size_t)impreview->iw*iy<<2|comp	), lgstride=2;break;
-		case IM_BAYER:
-		case IM_BAYER_SEPARATE:
-			iy>>=1;
-			iy<<=1;
-			iy|=comp>>1;
-			row=impreview->data+((impreview->iw*iy+(comp&1))<<2|bayer[comp]);
+		case IM_GRAYSCALEv2:
+			row=image->data+((size_t)image->iw*iy);
+			lgstride=0;
+			break;
+		case IM_RGBA:
+			row=image->data+((size_t)image->iw*iy<<2|comp);
+			lgstride=2;
+			break;
+		case IM_BAYERv2://FIXME Bayer matrix
+			iy=(iy&~1)|comp>>1;
+			row=image->data+image->iw*iy+(comp&1);
+		//	row=image->data+((image->iw*iy+(comp&1))<<2|bayer[comp]);
 			lgstride=2;
 			break;
 		default:
@@ -796,16 +921,13 @@ static void draw_profile_x(int comp, int color)//horizontal cross-section profil
 		}
 		int ix;
 		float y2;
-		float gain=(h>>1)/255.f;
+		int nlevels=(1<<imagedepth)-1;
+		float gain=(h>>1)/(float)nlevels;
 		for(int kx=0;kx<w;++kx)
 		{
 			ix=screen2image_x_int(kx);
-			if(imagetype==IM_BAYER||imagetype==IM_BAYER_SEPARATE)
-			{
-				ix>>=1;
-				ix<<=1;
-			}
-			if((unsigned)ix<(unsigned)impreview->iw)
+			ix&=~(imagetype==IM_BAYERv2);
+			if((unsigned)ix<(unsigned)image->iw)
 				y2=h-tdy-row[ix<<lgstride]*gain;
 			else
 				y2=h-tdy;
@@ -817,21 +939,25 @@ static void draw_profile_x(int comp, int color)//horizontal cross-section profil
 static void draw_profile_y(int comp, int color)//vertical cross-section profile
 {
 	int ix=screen2image_x_int(mx);
-	if((unsigned)ix<(unsigned)impreview->iw)
+	if((unsigned)ix<(unsigned)image->iw)
 	{
-		unsigned char *col=0;
+		unsigned short *col=0;
 		int stride=0;
 		switch(imagetype)
 		{
-		case IM_GRAYSCALE:	col=impreview->data+((size_t)ix<<2|0	), stride=impreview->iw<<2;break;
-		case IM_RGBA:		col=impreview->data+((size_t)ix<<2|comp	), stride=impreview->iw<<2;break;
-		case IM_BAYER:
-		case IM_BAYER_SEPARATE:
-			ix>>=1;
-			ix<<=1;
-			ix|=comp&1;
-			col=impreview->data+((ix+(impreview->iw&-(comp>>1)))<<2|bayer[comp]);
-			stride=impreview->iw<<2;
+		case IM_GRAYSCALEv2:
+			col=image->data+ix;
+			stride=image->iw;
+			break;
+		case IM_RGBA:
+			col=image->data+((size_t)ix<<2|comp);
+			stride=image->iw<<2;
+			break;
+		case IM_BAYERv2://FIXME Bayer matrix
+			ix=(ix&~1)|(comp&1);
+			col=image->data+(image->iw&-(comp>>1))+ix;
+		//	col=image->data+((ix+(image->iw&-(comp>>1)))<<2|bayer[comp]);
+			stride=image->iw<<1;
 			break;
 		default:
 			return;
@@ -839,15 +965,59 @@ static void draw_profile_y(int comp, int color)//vertical cross-section profile
 		
 		float x2;
 		int iy;
+		int nlevels=(1<<imagedepth)-1;
+		float gain=(w>>1)/(float)nlevels;
+		for(int ky=0;ky<h;++ky)
+		{
+			iy=screen2image_y_int(ky);
+			iy&=~(imagetype==IM_BAYERv2);
+			if((unsigned)iy<(unsigned)image->ih)
+				x2=col[iy*stride]*gain;
+			else
+				x2=0;
+			draw_curve_enqueue(&vertices_2d, x2, (float)ky);
+		}
+		draw_2d_flush(vertices_2d, color, GL_LINE_STRIP);
+	}
+}
+static void draw_profile_x_preview(int comp, int color)//horizontal cross-section profile		to see the color/spatial correlation
+{
+	int iy=screen2image_y_int(my);
+	if((unsigned)iy<(unsigned)impreview->ih)
+	{
+		unsigned char *row=impreview->data+((size_t)impreview->iw*iy<<2|comp);
+		int lgstride=2;
+		int ix;
+		float y2;
+		float gain=(h>>1)/255.f;
+		for(int kx=0;kx<w;++kx)
+		{
+			ix=screen2image_x_int(kx);
+			ix&=~(imagetype==IM_BAYERv2);
+			if((unsigned)ix<(unsigned)impreview->iw)
+				y2=h-tdy-row[ix<<lgstride]*gain;
+			else
+				y2=h-tdy;
+			draw_curve_enqueue(&vertices_2d, (float)kx, y2);
+		}
+		draw_2d_flush(vertices_2d, color, GL_LINE_STRIP);
+	}
+}
+static void draw_profile_y_preview(int comp, int color)//vertical cross-section profile
+{
+	int ix=screen2image_x_int(mx);
+	if((unsigned)ix<(unsigned)impreview->iw)
+	{
+		unsigned char *col=impreview->data+((size_t)ix<<2|comp);
+		int stride=impreview->iw<<2;
+		
+		float x2;
+		int iy;
 		float gain=(w>>1)/255.f;
 		for(int ky=0;ky<h;++ky)
 		{
 			iy=screen2image_y_int(ky);
-			if(imagetype==IM_BAYER||imagetype==IM_BAYER_SEPARATE)
-			{
-				iy>>=1;
-				iy<<=1;
-			}
+			iy&=~(imagetype==IM_BAYERv2);
 			if((unsigned)iy<(unsigned)impreview->ih)
 				x2=col[iy*stride]*gain;
 			else
@@ -895,7 +1065,15 @@ void io_render()
 				0xC0FF000080FFFFFF,
 				0xC0FFFFFF80000000,
 			};
-			if(imagetype==IM_GRAYSCALE)
+			if(pixelpreview)
+			{
+				print_pixellabels_preview(ix1, ix2, iy1, iy2, 0, 0, 0, 'r', theme[0], 0);
+				print_pixellabels_preview(ix1, ix2, iy1, iy2, 0, 0, 1, 'g', theme[1], 0);
+				print_pixellabels_preview(ix1, ix2, iy1, iy2, 0, 0, 2, 'b', theme[2], 0);
+				if(zoom>=ZOOM_LIMIT_ALPHA)
+					print_pixellabels_preview(ix1, ix2, iy1, iy2, 0, 0, 3, 'a', theme[3], 0);
+			}
+			else if(imagetype==IM_GRAYSCALEv2)
 				print_pixellabels(ix1, ix2, iy1, iy2, 0, 0, 0, 'g', theme[3], 0);
 			else if(imagetype==IM_RGBA)
 			{
@@ -905,23 +1083,27 @@ void io_render()
 				if(zoom>=ZOOM_LIMIT_ALPHA)
 					print_pixellabels(ix1, ix2, iy1, iy2, 0, 0, 3, 'a', theme[3], 0);
 			}
-			else if(imagetype==IM_BAYER)
+			else if(imagetype==IM_BAYERv2)
 			{
-				print_pixellabels(ix1, ix2, iy1, iy2, 0, 0, bayer[0], labels[bayer[0]], theme[bayer[0]], 1);
-				print_pixellabels(ix1, ix2, iy1, iy2, 1, 0, bayer[1], labels[bayer[1]], theme[bayer[1]], 1);
-				print_pixellabels(ix1, ix2, iy1, iy2, 0, 1, bayer[2], labels[bayer[2]], theme[bayer[2]], 1);
-				print_pixellabels(ix1, ix2, iy1, iy2, 1, 1, bayer[3], labels[bayer[3]], theme[bayer[3]], 1);
+				print_pixellabels(ix1, ix2, iy1, iy2, 0, 0, 0, labels[bayer[0]], theme[bayer[0]], 1);
+				print_pixellabels(ix1, ix2, iy1, iy2, 1, 0, 0, labels[bayer[1]], theme[bayer[1]], 1);
+				print_pixellabels(ix1, ix2, iy1, iy2, 0, 1, 0, labels[bayer[2]], theme[bayer[2]], 1);
+				print_pixellabels(ix1, ix2, iy1, iy2, 1, 1, 0, labels[bayer[3]], theme[bayer[3]], 1);
+			//	print_pixellabels(ix1, ix2, iy1, iy2, 0, 0, bayer[0], labels[bayer[0]], theme[bayer[0]], 1);
+			//	print_pixellabels(ix1, ix2, iy1, iy2, 1, 0, bayer[1], labels[bayer[1]], theme[bayer[1]], 1);
+			//	print_pixellabels(ix1, ix2, iy1, iy2, 0, 1, bayer[2], labels[bayer[2]], theme[bayer[2]], 1);
+			//	print_pixellabels(ix1, ix2, iy1, iy2, 1, 1, bayer[3], labels[bayer[3]], theme[bayer[3]], 1);
 			}
 		}
 		if(hist_on)
 		{
 			switch(imagetype)
 			{
-			case IM_GRAYSCALE:
+			case IM_GRAYSCALEv2:
 				draw_histogram(histogram, 256, 0x80808080, (int)tdy, (int)(h-tdy));
 				break;
 			case IM_RGBA:
-			case IM_BAYER:
+			case IM_BAYERv2:
 				{
 					int y1=(int)tdy, y2=(int)(h-tdy), dy=(int)(y2-y1);
 					draw_histogram(histogram    , 256, 0x800000FF, y1       , y1+dy/3);
@@ -933,41 +1115,56 @@ void io_render()
 		}
 		if(profileplotmode>PROFILE_OFF)
 		{
-			void (*draw_profile)(int comp, int color)=profileplotmode==PROFILE_X?draw_profile_x:draw_profile_y;
-			switch(imagetype)
+			void (*draw_profile)(int comp, int color);
+			if(pixelpreview)
 			{
-			case IM_GRAYSCALE:
-				draw_profile(0, 0xFF000000);
-				break;
-			case IM_RGBA:
+				draw_profile=profileplotmode==PROFILE_X?draw_profile_x_preview:draw_profile_y_preview;
 				draw_profile(0, 0xFF0000FF);
 				draw_profile(1, 0xFF00FF00);
 				draw_profile(2, 0xFFFF0000);
 				draw_profile(3, 0xFF000000);
-				break;
-			case IM_BAYER:
-				draw_profile(0, 0xFF000000|0xFF<<(bayer[0]<<3));
-				draw_profile(1, 0xFF000000|0xFF<<(bayer[1]<<3));
-				draw_profile(2, 0xFF000000|0xFF<<(bayer[2]<<3));
-				draw_profile(3, 0xFF000000|0xFF<<(bayer[3]<<3));
-				break;
-			case IM_BAYER_SEPARATE:
-				profileplotmode=PROFILE_OFF;//X
-				break;
+			}
+			else
+			{
+				draw_profile=profileplotmode==PROFILE_X?draw_profile_x:draw_profile_y;
+				switch(imagetype)
+				{
+				case IM_GRAYSCALEv2:
+					draw_profile(0, 0xFF000000);
+					break;
+				case IM_RGBA:
+					draw_profile(0, 0xFF0000FF);
+					draw_profile(1, 0xFF00FF00);
+					draw_profile(2, 0xFFFF0000);
+					draw_profile(3, 0xFF000000);
+					break;
+				case IM_BAYERv2:
+					draw_profile(0, 0xFF000000|0xFF<<(bayer[0]<<3));
+					draw_profile(1, 0xFF000000|0xFF<<(bayer[1]<<3));
+					draw_profile(2, 0xFF000000|0xFF<<(bayer[2]<<3));
+					draw_profile(3, 0xFF000000|0xFF<<(bayer[3]<<3));
+					break;
+				}
 			}
 		}
 		
 		const char *imtypestr="?";
 		switch(imagetype)
 		{
-		case IM_UNINITIALIZED: imtypestr="IM_UNINITIALIZED"; break;
-		case IM_GRAYSCALE:     imtypestr="IM_GRAYSCALE";     break;
-		case IM_RGBA:          imtypestr="IM_RGBA";          break;
-		case IM_BAYER:         imtypestr="IM_BAYER";         break;
-		case IM_BAYER_SEPARATE:imtypestr="IM_BAYER_SEPARATE";break;
+		case IM_UNINITIALIZED:	imtypestr="IM_UNINITIALIZED";	break;
+		case IM_GRAYSCALEv2:	imtypestr="IM_GRAYSCALEv2";	break;
+		case IM_RGBA:		imtypestr="IM_RGBA";		break;
+		case IM_BAYERv2:	imtypestr="IM_BAYERv2";		break;
 		}
 		//g_printed=0;
-		GUIPrint_append(0, 0, h-tdy, 1, 0, "XY(%5d, %5d) / WH %dx%d  x%lf  %s  depth %d  CR %10.6lf", imx, imy, impreview->iw, impreview->ih, zoom, imtypestr, imagedepth, format_CR);
+		GUIPrint_append(0, 0, h-tdy, 1, 0, "XY(%5d, %5d) / WH %dx%d  x%lf bright%d  %s  depth %d  CR %10.6lf",
+			imx, imy, impreview->iw, impreview->ih,
+			zoom,
+			brightness,
+			imtypestr,
+			imagedepth,
+			format_CR
+		);
 		if(bitmode==1)
 			GUIPrint_append(0, 0, h-tdy, 1, 0, "  Bitplane %d", bitplane);
 		else if(bitmode==2)
@@ -979,7 +1176,7 @@ void io_render()
 			unsigned short *p0=(unsigned short*)image->data+idx;
 			switch(imagetype)
 			{
-			case IM_GRAYSCALE:
+			case IM_GRAYSCALEv2:
 				if(has_alpha)
 					GUIPrint_append(0, 0, h-tdy, 1, 0, "  GRAY_ALPHA(%3d, %3d)=0x%04X%04X", (unsigned)p[0], (unsigned)p[3], (unsigned)p0[0], (unsigned)p0[3]);
 				else
@@ -992,8 +1189,7 @@ void io_render()
 					GUIPrint_append(0, 0, h-tdy, 1, 0, "  RGBA(%3d, %3d, %3d, %3d)=0x%016llX", (unsigned)p[0], (unsigned)p[1], (unsigned)p[2], (unsigned)p[3], color);
 				}
 				break;
-			case IM_BAYER:
-			case IM_BAYER_SEPARATE:
+			case IM_BAYERv2:
 				{
 					const char labels[]="RGB";
 					int comp=(imy&1)<<1|imx&1;
