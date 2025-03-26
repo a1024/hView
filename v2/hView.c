@@ -469,7 +469,7 @@ int io_keydn(IOKey key, char c)
 			free(ver);
 		}
 		break;
-	case KEY_F2:
+	case KEY_F2://info
 		{
 			char buf[1024]={0};
 			int nprinted=0;
@@ -527,14 +527,8 @@ int io_keydn(IOKey key, char c)
 				"CWH %d*%5d*%5d preview\n"
 				, impreview->nch, impreview->iw, impreview->ih
 			);
-			//int nprinted=snprintf(buf, sizeof(buf)-1,
-			//	"\"%s\"\n"
-			//	"%td bytes  CWH %d*%d*%d"
-			//	, (char*)fn->data
-			//	, get_filesize((char*)fn->data)
-			//	, image->nch, image->iw, image->ih
-			//);
-			int cancel=messagebox(MBOX_OKCANCEL, "Info - Copy to clipboard?", buf);
+
+			int cancel=messagebox(MBOX_OKCANCEL, "Copy to clipboard?", "%s", buf);
 			if(!cancel)
 				copy_to_clipboard(buf, nprinted);
 		}
