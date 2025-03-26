@@ -23,7 +23,7 @@ Image8* image_alloc8(const unsigned char *src, int iw, int ih, int nch, int srcd
 		memset(image->data, 0, size);
 	return image;
 }
-Image16* image_alloc16(const unsigned short *src, int iw, int ih, int nch, int srcdepth)
+Image16* image_alloc16(const unsigned short *src, int iw, int ih, int srcnch, int nch, int nlevels0, int depth)
 {
 	ptrdiff_t size=(ptrdiff_t)iw*ih*nch*sizeof(short);
 	Image16 *image=(Image16*)malloc(sizeof(Image16)+size);
@@ -34,9 +34,10 @@ Image16* image_alloc16(const unsigned short *src, int iw, int ih, int nch, int s
 	}
 	image->iw=iw;
 	image->ih=ih;
+	image->srcnch=srcnch;
 	image->nch=nch;
-	image->depth=srcdepth;
-	image->srcdepth=srcdepth;
+	image->nlevels0=nlevels0;
+	image->depth=depth;
 	if(src)
 		memcpy(image->data, src, size);
 	else
@@ -252,7 +253,7 @@ void image_inplaceyflip(Image16 *src, char *bayer)
 }
 void image_transpose(Image16 **src, char *bayer)
 {
-	Image16 *dst=image_alloc16(0, src[0]->ih, src[0]->iw, src[0]->nch, src[0]->srcdepth);
+	Image16 *dst=image_alloc16(0, src[0]->ih, src[0]->iw, src[0]->srcnch, src[0]->nch, src[0]->nlevels0, src[0]->depth);
 	dst->depth=src[0]->depth;
 	for(int ky=0;ky<src[0]->ih;++ky)
 	{

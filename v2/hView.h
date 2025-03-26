@@ -47,9 +47,9 @@ extern float tdx, tdy;
 typedef enum IOKeyEnum
 {
 #if defined _MSC_VER || defined _WINDOWS || defined _WIN32
-#	define	IOKEY(LinVAL, VAL, LABEL)	KEY_##LABEL=VAL,
+#	define	IOKEY(LinVAL, VAL, LABEL) KEY_##LABEL=VAL,
 #elif defined __linux__
-#	define	IOKEY(VAL, WinVAL, LABEL)	KEY_##LABEL=VAL,
+#	define	IOKEY(VAL, WinVAL, LABEL) KEY_##LABEL=VAL,
 #endif
 	
 //IO value, win32 value, label
@@ -57,9 +57,9 @@ IOKEY(0x00, 0x00, UNKNOWN)
 
 
 //direct map keys
-IOKEY(0x01, 0x01, LBUTTON)		//inserted
-IOKEY(0x02, 0x04, MBUTTON)		//inserted
-IOKEY(0x03, 0x02, RBUTTON)		//inserted
+IOKEY(0x01, 0x01, LBUTTON)	//inserted
+IOKEY(0x02, 0x04, MBUTTON)	//inserted
+IOKEY(0x03, 0x02, RBUTTON)	//inserted
 
 IOKEY(0x08, 0x08, BKSP)
 IOKEY(0x09, 0x09, TAB)
@@ -205,7 +205,7 @@ int    console_scan_int();
 double console_scan_float();
 
 int sys_check(const char *file, int line, const char *info);
-#define SYS_ASSERT(SUCCESS)	((void)((SUCCESS)!=0||sys_check(file, __LINE__, 0)))
+#define SYS_ASSERT(SUCCESS) ((void)((SUCCESS)!=0||sys_check(file, __LINE__, 0)))
 
 typedef enum MessageBoxTypeEnum
 {
@@ -220,8 +220,8 @@ typedef struct FilterStruct
 	const char *comment, *ext;
 } Filter;
 ArrayHandle dialog_open_folder();
-ArrayHandle	dialog_open_file(Filter *filters, int nfilters, int multiple);
-char*       dialog_save_file(Filter *filters, int nfilters, const char *initialname, int *ret_ext_idx);
+ArrayHandle dialog_open_file(Filter *filters, int nfilters, int multiple);
+char* dialog_save_file(Filter *filters, int nfilters, const char *initialname, int *ret_ext_idx, unsigned short *userext, int userextlen);
 
 void get_window_title(char *buf, int len);
 void set_window_title(const char *format, ...);
@@ -231,7 +231,7 @@ ArrayHandle paste_from_clipboard(int loud);
 
 int copy_bmp_to_clipboard(const unsigned char *rgba, int iw, int ih);
 
-#define GET_KEY_STATE(KEY)	(keyboard[KEY]=(GetAsyncKeyState(KEY)>>15)!=0)
+#define GET_KEY_STATE(KEY) (keyboard[KEY]=(GetAsyncKeyState(KEY)>>15)!=0)
 
 void timer_start(int ms, int id);
 void timer_stop(int id);
@@ -247,39 +247,39 @@ void swapbuffers();
 
 //OpenGL standard macros & types
 #if 1
-#define GL_FUNC_ADD				0x8006//GL/glew.h
-#define GL_MIN					0x8007
-#define GL_MAX					0x8008
-#define GL_MAJOR_VERSION		0x821B
-#define GL_MINOR_VERSION		0x821C
-#define GL_TEXTURE0				0x84C0
-#define GL_TEXTURE1				0x84C1
-#define GL_TEXTURE2				0x84C2
-#define GL_TEXTURE3				0x84C3
-#define GL_TEXTURE4				0x84C4
-#define GL_TEXTURE5				0x84C5
-#define GL_TEXTURE6				0x84C6
-#define GL_TEXTURE7				0x84C7
-#define GL_TEXTURE8				0x84C8
-#define GL_TEXTURE9				0x84C9
-#define GL_TEXTURE10			0x84CA
-#define GL_TEXTURE11			0x84CB
-#define GL_TEXTURE12			0x84CC
-#define GL_TEXTURE13			0x84CD
-#define GL_TEXTURE14			0x84CE
-#define GL_TEXTURE15			0x84CF
+#define GL_FUNC_ADD		0x8006//GL/glew.h
+#define GL_MIN			0x8007
+#define GL_MAX			0x8008
+#define GL_MAJOR_VERSION	0x821B
+#define GL_MINOR_VERSION	0x821C
+#define GL_TEXTURE0		0x84C0
+#define GL_TEXTURE1		0x84C1
+#define GL_TEXTURE2		0x84C2
+#define GL_TEXTURE3		0x84C3
+#define GL_TEXTURE4		0x84C4
+#define GL_TEXTURE5		0x84C5
+#define GL_TEXTURE6		0x84C6
+#define GL_TEXTURE7		0x84C7
+#define GL_TEXTURE8		0x84C8
+#define GL_TEXTURE9		0x84C9
+#define GL_TEXTURE10		0x84CA
+#define GL_TEXTURE11		0x84CB
+#define GL_TEXTURE12		0x84CC
+#define GL_TEXTURE13		0x84CD
+#define GL_TEXTURE14		0x84CE
+#define GL_TEXTURE15		0x84CF
 #define GL_TEXTURE_RECTANGLE	0x84F5
 #define GL_PROGRAM_POINT_SIZE	0x8642
-#define GL_BUFFER_SIZE			0x8764
-#define GL_ARRAY_BUFFER			0x8892
+#define GL_BUFFER_SIZE		0x8764
+#define GL_ARRAY_BUFFER		0x8892
 #define GL_ELEMENT_ARRAY_BUFFER	0x8893
-#define GL_STATIC_DRAW			0x88E4
-#define GL_FRAGMENT_SHADER		0x8B30
-#define GL_VERTEX_SHADER		0x8B31
-#define GL_COMPILE_STATUS		0x8B81
-#define GL_LINK_STATUS			0x8B82
-#define GL_INFO_LOG_LENGTH		0x8B84
-#define GL_DEBUG_OUTPUT			0x92E0//OpenGL 4.3+
+#define GL_STATIC_DRAW		0x88E4
+#define GL_FRAGMENT_SHADER	0x8B30
+#define GL_VERTEX_SHADER	0x8B31
+#define GL_COMPILE_STATUS	0x8B81
+#define GL_LINK_STATUS		0x8B82
+#define GL_INFO_LOG_LENGTH	0x8B84
+#define GL_DEBUG_OUTPUT		0x92E0//OpenGL 4.3+
 
 #define GLFUNCLIST\
 	GLFUNC(glBlendEquation)\
@@ -373,15 +373,15 @@ GLFUNCLIST
 #define		vec2_copy(DST, SRC)		(DST)[0]=(SRC)[0], (DST)[1]=(SRC)[1]
 #define		vec2_add(DST, A, B)		(DST)[0]=(A)[0]+(B)[0], (DST)[1]=(A)[1]+(B)[1]
 #define		vec2_sub(DST, A, B)		(DST)[0]=(A)[0]-(B)[0], (DST)[1]=(A)[1]-(B)[1]
-#define		vec2_add1(DST, V, S)	(DST)[0]=(V)[0]+(S), (DST)[1]=(V)[1]+(S)
-#define		vec2_sub1(DST, V, S)	(DST)[0]=(V)[0]-(S), (DST)[1]=(V)[1]-(S)
-#define		vec2_mul1(DST, V, S)	(DST)[0]=(V)[0]*(S), (DST)[1]=(V)[1]*(S)
-#define		vec2_div1(DST, V, S)	(DST)[0]=(V)[0]/(S), (DST)[1]=(V)[1]/(S)
+#define		vec2_add1(DST, V, S)		(DST)[0]=(V)[0]+(S), (DST)[1]=(V)[1]+(S)
+#define		vec2_sub1(DST, V, S)		(DST)[0]=(V)[0]-(S), (DST)[1]=(V)[1]-(S)
+#define		vec2_mul1(DST, V, S)		(DST)[0]=(V)[0]*(S), (DST)[1]=(V)[1]*(S)
+#define		vec2_div1(DST, V, S)		(DST)[0]=(V)[0]/(S), (DST)[1]=(V)[1]/(S)
 #define		vec2_dot(A, B)			((A)[0]*(B)[0]+(A)[1]*(B)[1])
-#define		vec2_cross(DST, A, B)	((A)[0]*(B)[1]-(A)[1]*(B)[0])
-#define		vec2_abs(A)				sqrtf(vec2_dot(A, A))
+#define		vec2_cross(DST, A, B)		((A)[0]*(B)[1]-(A)[1]*(B)[0])
+#define		vec2_abs(A)			sqrtf(vec2_dot(A, A))
 #define		vec2_abs2(A)			vec2_dot(A, A)
-#define		vec2_arg(A)				atan((A)[1]/(A)[0])
+#define		vec2_arg(A)			atan((A)[1]/(A)[0])
 #define		vec2_arg2(A)			atan2((A)[1], (A)[0])
 #define		vec2_eq(A, B)			((A)[0]==(B)[0]&&(A)[1]==(B)[1])
 #define		vec2_ne(A, B)			((A)[0]!=(B)[0]||(A)[1]!=(B)[1])
@@ -391,14 +391,14 @@ GLFUNCLIST
 
 #define		vec3_copy(DST, SRC)		(DST)[0]=(SRC)[0], (DST)[1]=(SRC)[1], (DST)[2]=(SRC)[2]
 #define		vec3_set1(V3, GAIN)		(V3)[0]=(V3)[1]=(V3)[2]=GAIN
-#define		vec3_setp(V3, POINTER)	(V3)[0]=(POINTER)[0], (V3)[1]=(POINTER)[1], (V3)[2]=(POINTER)[2]
-#define		vec3_seti(V3, X, Y, Z)	(V3)[0]=X, (V3)[1]=Y, (V3)[2]=Z
+#define		vec3_setp(V3, POINTER)		(V3)[0]=(POINTER)[0], (V3)[1]=(POINTER)[1], (V3)[2]=(POINTER)[2]
+#define		vec3_seti(V3, X, Y, Z)		(V3)[0]=X, (V3)[1]=Y, (V3)[2]=Z
 #define		vec3_add(DST, A, B)		(DST)[0]=(A)[0]+(B)[0], (DST)[1]=(A)[1]+(B)[1], (DST)[2]=(A)[2]+(B)[2]
 #define		vec3_sub(DST, A, B)		(DST)[0]=(A)[0]-(B)[0], (DST)[1]=(A)[1]-(B)[1], (DST)[2]=(A)[2]-(B)[2]
-#define		vec3_add1(DST, V, S)	(DST)[0]=(V)[0]+(S), (DST)[1]=(V)[1]+(S), (DST)[2]=(V)[2]+(S)
-#define		vec3_sub1(DST, V, S)	(DST)[0]=(V)[0]-(S), (DST)[1]=(V)[1]-(S), (DST)[2]=(V)[2]-(S)
-#define		vec3_mul1(DST, V, S)	(DST)[0]=(V)[0]*(S), (DST)[1]=(V)[1]*(S), (DST)[2]=(V)[2]*(S)
-#define		vec3_div1(DST, V, S)	(DST)[0]=(V)[0]/(S), (DST)[1]=(V)[1]/(S), (DST)[2]=(V)[2]/(S)
+#define		vec3_add1(DST, V, S)		(DST)[0]=(V)[0]+(S), (DST)[1]=(V)[1]+(S), (DST)[2]=(V)[2]+(S)
+#define		vec3_sub1(DST, V, S)		(DST)[0]=(V)[0]-(S), (DST)[1]=(V)[1]-(S), (DST)[2]=(V)[2]-(S)
+#define		vec3_mul1(DST, V, S)		(DST)[0]=(V)[0]*(S), (DST)[1]=(V)[1]*(S), (DST)[2]=(V)[2]*(S)
+#define		vec3_div1(DST, V, S)		(DST)[0]=(V)[0]/(S), (DST)[1]=(V)[1]/(S), (DST)[2]=(V)[2]/(S)
 #define		vec3_dot(A, B)			((A)[0]*(B)[0]+(A)[1]*(B)[1]+(A)[2]*(B)[2])
 #define		vec3_cross(DST, A, B)\
 	(DST)[0]=(A)[1]*(B)[2]-(A)[2]*(B)[1],\
@@ -406,38 +406,38 @@ GLFUNCLIST
 	(DST)[2]=(A)[0]*(B)[1]-(A)[1]*(B)[0]
 #define		vec3_triple_product(DST, A, B, C, TEMP_F1, TEMP_F2)\
 	TEMP_F1=vec3_dot(A, C), TEMP_F2=vec3_dot(B, C), (DST)[0]=TEMP_F1*(B)[0]-TEMP_F2*(C)[0], (DST)[1]=TEMP_F1*(B)[1]-TEMP_F2*(C)[1], (DST)[2]=TEMP_F1*(B)[2]-TEMP_F2*(C)[2]
-#define		vec3_abs(A)				sqrtf(vec3_dot(A, A))
+#define		vec3_abs(A)			sqrtf(vec3_dot(A, A))
 #define		vec3_abs2(A)			vec3_dot(A, A)
 #define		vec3_theta(A)			atan((A)[2]/sqrtf((A)[0]*(A)[0]+(A)[1]*(A)[1]))
-#define		vec3_phi(A)				atan((A)[1]/(A)[0])
+#define		vec3_phi(A)			atan((A)[1]/(A)[0])
 #define		vec3_phi2(A)			atan2((A)[1], (A)[0])
 #define		vec3_isnan(A)			((A)[0]!=(A)[0]||(A)[1]!=(A)[1]||(A)[2]!=(A)[2])
 #define		vec3_isnan_or_inf(A)	(vec3_isnan(A)||fabsf((A)[0])==infinity||fabsf((A)[1])==infinity||fabsf((A)[2])==infinity)
 #define		vec3_eq(A, B)			((A)[0]==(B)[0]&&(A)[1]==(B)[1]&&(A)[2]==(B)[2])
 #define		vec3_ne(A, B)			((A)[0]!=(B)[0]||(A)[1]!=(B)[1]||(A)[2]!=(B)[2])
 #define		vec3_neg(DST, A)		(DST)[0]=-(A)[0], (DST)[1]=-(A)[1], (DST)[2]=-(A)[2]
-#define		vec3_normalize(DST, A, TEMP_F)		TEMP_F=1/vec3_abs(A), vec3_div1(DST, A, TEMP_F)
+#define		vec3_normalize(DST, A, TEMP_F)	TEMP_F=1/vec3_abs(A), vec3_div1(DST, A, TEMP_F)
 #define		vec3_mix(DST, A, B, X)\
 	(DST)[0]=(A)[0]+((B)[0]-(A)[0])*(X),\
 	(DST)[1]=(A)[1]+((B)[1]-(A)[1])*(X),\
 	(DST)[2]=(A)[2]+((B)[2]-(A)[2])*(X)
 
 //column-major
-#define		mat3_diag(MAT3, GAIN)	memset(MAT3, 0, 9*sizeof(float)), (MAT)[0]=(MAT)[1]=(MAT)[2]=GAIN
-//#define	mat3_diag(MAT3, GAIN)	(MAT3)[0]=GAIN, (MAT3)[1]=0, (MAT3)[2]=0, (MAT3)[3]=0, (MAT3)[4]=GAIN, (MAT3)[5]=0, (MAT3)[6]=0, (MAT3)[7]=0, (MAT3)[8]=GAIN
+#define		mat3_diag(MAT3, GAIN)		memset(MAT3, 0, 9*sizeof(float)), (MAT)[0]=(MAT)[1]=(MAT)[2]=GAIN
+//#define	mat3_diag(MAT3, GAIN)		(MAT3)[0]=GAIN, (MAT3)[1]=0, (MAT3)[2]=0, (MAT3)[3]=0, (MAT3)[4]=GAIN, (MAT3)[5]=0, (MAT3)[6]=0, (MAT3)[7]=0, (MAT3)[8]=GAIN
 
-#define		vec4_copy(DST, SRC)		(DST)[0]=(SRC)[0], (DST)[1]=(SRC)[1], (DST)[2]=(SRC)[2], (DST)[3]=(SRC)[3]
-#define		vec4_dot(DST, A, B, TEMP_V1, TEMP_V2)		TEMP_V1=_mm_loadu_ps(A), TEMP_V1=_mm_mul_ps(TEMP_V1, _mm_loadu_ps(B)), TEMP_V1=_mm_hadd_ps(TEMP_V1, TEMP_V1), TEMP_V1=_mm_hadd_ps(TEMP_V1, TEMP_V1), _mm_store_ss(DST, TEMP_V1)
-#define		vec4_add(DST, A, B)		(DST)[0]=(A)[0]+(B)[0], (DST)[1]=(A)[1]+(B)[1], (DST)[2]=(A)[2]+(B)[2], (DST)[3]=(A)[3]+(B)[3]
-#define		vec4_sub(DST, A, B)		(DST)[0]=(A)[0]-(B)[0], (DST)[1]=(A)[1]-(B)[1], (DST)[2]=(A)[2]-(B)[2], (DST)[3]=(A)[3]-(B)[3]
-#define		vec4_mul1(DST, V, S)	(DST)[0]=(V)[0]*(S), (DST)[1]=(V)[1]*(S), (DST)[2]=(V)[2]*(S), (DST)[3]=(V)[3]*(S)
-//#define		vec4_add(DST, A, B)		{_mm_storeu_ps(DST, _mm_add_ps(_mm_loadu_ps(A), _mm_loadu_ps(B)));}
-//#define		vec4_sub(DST, A, B)		{_mm_storeu_ps(DST, _mm_sub_ps(_mm_loadu_ps(A), _mm_loadu_ps(B)));}
-//#define		vec4_mul1(DST, A, S)	{_mm_storeu_ps(DST, _mm_sub_ps(_mm_loadu_ps(A), _mm_set1_ps(S)));}
+#define		vec4_copy(DST, SRC)			(DST)[0]=(SRC)[0], (DST)[1]=(SRC)[1], (DST)[2]=(SRC)[2], (DST)[3]=(SRC)[3]
+#define		vec4_dot(DST, A, B, TEMP_V1, TEMP_V2)	TEMP_V1=_mm_loadu_ps(A), TEMP_V1=_mm_mul_ps(TEMP_V1, _mm_loadu_ps(B)), TEMP_V1=_mm_hadd_ps(TEMP_V1, TEMP_V1), TEMP_V1=_mm_hadd_ps(TEMP_V1, TEMP_V1), _mm_store_ss(DST, TEMP_V1)
+#define		vec4_add(DST, A, B)			(DST)[0]=(A)[0]+(B)[0], (DST)[1]=(A)[1]+(B)[1], (DST)[2]=(A)[2]+(B)[2], (DST)[3]=(A)[3]+(B)[3]
+#define		vec4_sub(DST, A, B)			(DST)[0]=(A)[0]-(B)[0], (DST)[1]=(A)[1]-(B)[1], (DST)[2]=(A)[2]-(B)[2], (DST)[3]=(A)[3]-(B)[3]
+#define		vec4_mul1(DST, V, S)			(DST)[0]=(V)[0]*(S), (DST)[1]=(V)[1]*(S), (DST)[2]=(V)[2]*(S), (DST)[3]=(V)[3]*(S)
+//#define	vec4_add(DST, A, B)			{_mm_storeu_ps(DST, _mm_add_ps(_mm_loadu_ps(A), _mm_loadu_ps(B)));}
+//#define	vec4_sub(DST, A, B)			{_mm_storeu_ps(DST, _mm_sub_ps(_mm_loadu_ps(A), _mm_loadu_ps(B)));}
+//#define	vec4_mul1(DST, A, S)			{_mm_storeu_ps(DST, _mm_sub_ps(_mm_loadu_ps(A), _mm_set1_ps(S)));}
 
 //column-major
 #define		mat4_copy(DST, SRC)		memcpy(DST, SRC, 16*sizeof(float));
-#define		mat4_identity(M4, GAIN)	memset(M4, 0, 16*sizeof(float)), (M4)[0]=(M4)[5]=(M4)[10]=(M4)[15]=GAIN
+#define		mat4_identity(M4, GAIN)		memset(M4, 0, 16*sizeof(float)), (M4)[0]=(M4)[5]=(M4)[10]=(M4)[15]=GAIN
 #define		mat4_data(M4, X, Y)		(M4)[(X)<<2|(Y)]
 #define		mat4_mat3(DST, M4)\
 	(DST)[0]=(M4)[0], (DST)[1]=(M4)[1], (DST)[2]=(M4)[2],\
@@ -567,7 +567,7 @@ void gl_init();
 extern int error;
 extern const char *gl_error_msg;
 const char* glerr2str(int error);
-#define GL_CHECK(E)	((E=glGetError())==0||log_error(file, __LINE__, 1, gl_error_msg, E, glerr2str(E)))
+#define GL_CHECK(E) ((E=glGetError())==0||log_error(file, __LINE__, 1, gl_error_msg, E, glerr2str(E)))
 
 void set_region_immediate(int x1, int x2, int y1, int y2);//calls glViewport
 
@@ -636,11 +636,15 @@ typedef struct _Image8
 } Image8;
 typedef struct _Image16
 {
-	int iw, ih, nch, depth, srcdepth;
+	int iw, ih,
+		nch,		//buffer channel count
+		srcnch,		//original channel count
+		depth,		//buffer depth = CEIL_LOG2(nlevels0)
+		nlevels0;	//original nlevels = vmax+1
 	unsigned short data[];
 } Image16;
 Image8* image_alloc8(const unsigned char *src, int iw, int ih, int nch, int srcdepth);
-Image16* image_alloc16(const unsigned short *src, int iw, int ih, int nch, int srcdepth);
+Image16* image_alloc16(const unsigned short *src, int iw, int ih, int srcnch, int nch, int nlevels0, int depth);
 void image_free(void *pimage);
 void image_export(Image8 *dst, const Image16* src, int imagetype);
 void image_inplacexflip(Image16 *src, char *bayer);
@@ -661,7 +665,7 @@ void image_transpose(Image16 **src, char *bayer);
 //the following 3 functions return: a negative value on failure; 0 on success
 int load_media(const char *filename, Image16 **image, int erroronfail);
 int save_media(const char *fn, Image8 *image, int erroronfail);
-int save_media_as(Image8 *image, const char *initialname, int namelen, int erroronfail);
+int save_media_as(Image16 *image, Image8 *impreview, const char *initialname, int namelen, int erroronfail);
 
 char* get_codecinfo(void);//don't forget to free(mem)
 

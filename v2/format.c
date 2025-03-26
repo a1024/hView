@@ -211,14 +211,29 @@ static int load_heic(const char *filename, Image16 **image, int erroronfail)
 
 	int stride=4;
 	const uint8_t *data=heif_image_get_plane_readonly(img, heif_channel_interleaved, &stride);	CHECK_LIBHEIF(error);
+	int colorspace=heif_image_get_colorspace(img);
 	has_alpha=heif_image_handle_has_alpha_channel(handle);
+	int srcnch=3;
+	switch(colorspace)
+	{
+	case heif_colorspace_YCbCr:
+		srcnch=3;
+		break;
+	case heif_colorspace_RGB:
+		srcnch=3;
+		break;
+	case heif_colorspace_monochrome:
+		srcnch=1;
+		break;
+	}
+	srcnch+=has_alpha;
 	imagedepth=heif_image_handle_get_luma_bits_per_pixel(handle);
 	imagetype=IM_RGBA;
 #ifdef BENCHMARK
 	long long t2=__rdtsc();
 	LOG_WARNING("HEIC: %lld cycles", t2-t1);
 #endif
-	*image=image_alloc16(0, iw2, ih2, 4, imagedepth);
+	*image=image_alloc16(0, iw2, ih2, srcnch, 4, 1<<imagedepth, imagedepth);
 	unsigned short *dstptr=image[0]->data;
 	for(ptrdiff_t k=0, res=(ptrdiff_t)iw2*ih2;k<res;++k)
 		dstptr[k]=data[k];
@@ -281,7 +296,7 @@ static int load_raw(const char *filename, Image16 **image, int erroronfail)
 		int iw3=(iw2+1)&~1, ih3=(ih2+1)&~1;
 		imagetype=IM_BAYERv2;
 	//	imagetype=IM_GRAYSCALEv2;
-		*image=image_alloc16(0, iw3, ih3, 1, imagedepth);
+		*image=image_alloc16(0, iw3, ih3, 4, 1, decoder->color.maximum+1, imagedepth);
 		if(!*image)
 		{
 			LOG_WARNING("Alloc error");
@@ -304,7 +319,7 @@ static int load_raw(const char *filename, Image16 **image, int erroronfail)
 	else
 	{
 		imagetype=IM_RGBA;
-		*image=image_alloc16(0, iw2, ih2, 4, imagedepth);
+		*image=image_alloc16(0, iw2, ih2, 3, 4, decoder->color.maximum+1, imagedepth);
 		if(!*image)
 		{
 			LOG_WARNING("Alloc error");
@@ -638,7 +653,7 @@ static int huf_load(const char *filename, Image16 **image, int erroronfail)
 			int rootidx=*pqueue;
 			free(pqueue);
 
-			*image=image_alloc16(0, header->width, header->height, 1, imagedepth);
+			*image=image_alloc16(0, header->width, header->height, 4, 1, nlevels, imagedepth);
 		//	*image=image_construct(0, 0, 16, 0, header->width, header->height, 0, 16);
 
 			//debug decode
@@ -755,7 +770,7 @@ static int huf_load(const char *filename, Image16 **image, int erroronfail)
 		int bitidx=0;
 		int interleave=*(int*)header->bayerInfo!=0&&*(int*)header->bayerInfo!=1;
 		int w2=header->width>>1, h2=header->height>>1;
-		*image=image_alloc16(0, header->width, header->height, 1, imagedepth);
+		*image=image_alloc16(0, header->width, header->height, 4, 1, header->nLevels, imagedepth);
 	//	*image=image_construct(0, 0, 16, 0, header->width, header->height, 0, 16);
 		unsigned short *dstptr=(unsigned short*)image[0]->data;
 		for(int ky=0;ky<(int)header->height;++ky)
@@ -823,7 +838,7 @@ static int huf_load(const char *filename, Image16 **image, int erroronfail)
 
 
 //GR
-static int gr_save(const char *dstfn, short *image, int iw, int ih, int nlevels, char *bayermatrix)
+static int gr_save(const char *dstfn, const short *image, int iw, int ih, int nlevels, const char *bayermatrix)
 {
 	int psize=(iw+16)*(int)sizeof(short[2*2]);//2 padded rows * 1 channel * {pixels, errors}
 	short *pixels=(short*)malloc(psize);
@@ -1171,7 +1186,7 @@ int load_media(const char *filename, Image16 **image, int erroronfail)//TODO spe
 		imagetype=IM_BAYERv2;
 		imagedepth=FLOOR_LOG2(nlevels);
 		imagedepth+=(1<<imagedepth)<nlevels;//CEIL_LOG2
-		*image=image_alloc16(0, iw, ih, 1, imagedepth);
+		*image=image_alloc16(0, iw, ih, 4, 1, nlevels, imagedepth);
 	//	*image=image_construct(iw, ih, 16, 0, iw, ih, 0, imagedepth<=8?8:16);
 		bayer[0]=(bayermatrix[0]=='R'?0:(bayermatrix[0]=='G'?1:2));
 		bayer[1]=(bayermatrix[1]=='R'?0:(bayermatrix[1]=='G'?1:2));
@@ -1222,7 +1237,7 @@ int load_media(const char *filename, Image16 **image, int erroronfail)//TODO spe
 			return -1;
 		has_alpha=(nch==4||nch==2)&&!dummy_alpha;
 		imagetype=IM_RGBA;
-		*image=image_alloc16(0, iw, ih, nch>1?4:1, imagedepth);
+		*image=image_alloc16(0, iw, ih, nch, nch>1?4:1, 1<<imagedepth, imagedepth);
 		unsigned short *dstptr=image[0]->data;
 		switch(nch)
 		{
@@ -1402,7 +1417,7 @@ int load_media(const char *filename, Image16 **image, int erroronfail)//TODO spe
 				//int bpp0=av_get_bits_per_pixel(desc);
 				//int bpp=av_get_bits_per_sample(codec->id);//returns 0
 
-				*image=image_alloc16(0, frame2->width, frame2->height, 4, desc->comp->depth);
+				*image=image_alloc16(0, frame2->width, frame2->height, 4, 4, 1<<desc->comp->depth, desc->comp->depth);//MARKER
 			//	*image=image_alloc16((unsigned short*)frame2->data[0], frame2->width, frame2->height, 4, desc->comp->depth);
 			//	*image=image_construct(0, 0, 16, frame2->data[0], frame2->width, frame2->height, padding, 16);
 				if(!*image)
@@ -1607,41 +1622,44 @@ int save_media(const char *fn, Image8 *image, int erroronfail)
 	avformat_free_context(oc);
 	return 0;
 }
-int save_media_as(Image8 *image, const char *initialname, int namelen, int erroronfail)
+int save_media_as(Image16 *image, Image8 *impreview, const char *initialname, int namelen, int erroronfail)
 {
 	Filter filters[]=
 	{
-		{"\'Png is Not Gnu, which in turn is not Unix\' File (*.PNG)", ".PNG"},
-		{"JPEG XL File (*.JXL)", ".JXL"},
-		{"Simple Lossless Image Codec (*.SLI)", ".SLI"},
+		{"\'Png is Not Gnu, which in turn is not Unix\' File (*.PNG)", ".PNG"},//1
+		{"JPEG XL File (*.JXL)", ".JXL"},			//2
+		{"Simple Lossless Image Codec (*.SLI)", ".SLI"},	//3
 	//	{"WebP File (*.WEBP)", ".WEBP"},//error
 	//	{"JPEG File (*.JPG)", ".JPG"},//error
 	//	{"GIF File (*.GIF)", ".GIF"},//error
 	//	{"JPEG2000 File (*.JP2)", ".JP2"},//error
 	//	{"BMP File (*.BMP)", ".BMP"},//error
-		{"TIFF File (*.TIF)", ".TIF"},
-		{"Quite OK Image (*.QOI)", ".QOI"},
+		{"TIFF File (*.TIF)", ".TIF"},		//4
+		{"Quite OK Image (*.QOI)", ".QOI"},	//5
 	//	{"Lossless JPEG (*.LJPG)", ".LJPG"},//error
 	//	{"JPEG-LS (*.JLS)", ".JLS"},//error
 	//	{"LOCO File (*.LOCO)", ".LOCO"},//error
-		{"PPM File (*.PPM)", ".PPM"},//error
+		{"PPM File (*.PPM)", ".PPM"},//error	//6
 	//	{"PBM File (*.PBM)", ".PBM"},//error
-		{"PGM File (*.PGM)", ".PGM"},//error
+		{"PGM File (*.PGM)", ".PGM"},//error	//7
 	//	{"PAM File (*.PAM)", ".PAM"},//error
+		{"Golomb-RAW File (*.GR)", ".GR"},	//8
 	};
 	ArrayHandle name;
 	STR_COPY(name, initialname, namelen);
-	STR_APPEND(name, ".PNG", 4, 1);
+	STR_APPEND(name, "PNG", 4, 1);
 	int ext_selection=0, ret=-1;
-	char *fn=dialog_save_file(filters, _countof(filters), name->data, &ext_selection);
+	char *fn=dialog_save_file(filters, _countof(filters), name->data, &ext_selection, 0, 0);
 	array_free(&name);
 	if(!fn)
 		ret=-2;
 	else
 	{
-		if(ext_selection==3)//.SLI
+		if(!ext_selection)
+			LOG_WARNING("Unrecognized extension");
+		else if(ext_selection==3)//.SLI
 		{
-			ret=slic2_save(fn, image->iw, image->ih, 4, image->depth, image->data);
+			ret=slic2_save(fn, impreview->iw, impreview->ih, 4, impreview->depth, impreview->data);
 			if(!ret)
 			{
 				LOG_WARNING("Failed to save \'%s\'", fn);
@@ -1650,7 +1668,7 @@ int save_media_as(Image8 *image, const char *initialname, int namelen, int error
 		}
 		else if(ext_selection==6)//PPM
 		{
-			size_t res=(size_t)image->iw*image->ih, usize=3*res;
+			size_t res=(size_t)impreview->iw*impreview->ih, usize=3*res;
 			unsigned char *dstbuf=(unsigned char*)malloc(usize);
 			if(!dstbuf)
 			{
@@ -1659,9 +1677,9 @@ int save_media_as(Image8 *image, const char *initialname, int namelen, int error
 			}
 			for(int k=0, kd=0, ks=0;k<res;++k, kd+=3, ks+=4)
 			{
-				dstbuf[kd+0]=image->data[ks+0];
-				dstbuf[kd+1]=image->data[ks+1];
-				dstbuf[kd+2]=image->data[ks+2];
+				dstbuf[kd+0]=impreview->data[ks+0];
+				dstbuf[kd+1]=impreview->data[ks+1];
+				dstbuf[kd+2]=impreview->data[ks+2];
 			}
 			FILE *fdst=fopen(fn, "wb");
 			if(!fdst)
@@ -1669,7 +1687,7 @@ int save_media_as(Image8 *image, const char *initialname, int namelen, int error
 				LOG_WARNING("Cannot open \"%s\" for writing", fn);
 				return -1;
 			}
-			fprintf(fdst, "P6\n%d %d\n255\n", image->iw, image->ih);
+			fprintf(fdst, "P6\n%d %d\n255\n", impreview->iw, impreview->ih);
 			fwrite(dstbuf, 1, usize, fdst);
 			fclose(fdst);
 			free(dstbuf);
@@ -1677,7 +1695,7 @@ int save_media_as(Image8 *image, const char *initialname, int namelen, int error
 		}
 		else if(ext_selection==7)//PGM
 		{
-			size_t res=(size_t)image->iw*image->ih, usize=res;
+			size_t res=(size_t)impreview->iw*impreview->ih, usize=res;
 			unsigned char *dstbuf=(unsigned char*)malloc(usize);
 			if(!dstbuf)
 			{
@@ -1686,9 +1704,9 @@ int save_media_as(Image8 *image, const char *initialname, int namelen, int error
 			}
 			for(int k=0, ks=0;k<res;++k, ks+=4)
 				dstbuf[k]=(
-					+(int)(0.2126*0x1000+0.5)*image->data[ks+0]
-					+(int)(0.7152*0x1000+0.5)*image->data[ks+1]
-					+(int)(0.0722*0x1000+0.5)*image->data[ks+2]
+					+(int)(0.2126*0x1000+0.5)*impreview->data[ks+0]
+					+(int)(0.7152*0x1000+0.5)*impreview->data[ks+1]
+					+(int)(0.0722*0x1000+0.5)*impreview->data[ks+2]
 					+0x800
 				)>>12;
 			FILE *fdst=fopen(fn, "wb");
@@ -1697,14 +1715,35 @@ int save_media_as(Image8 *image, const char *initialname, int namelen, int error
 				LOG_WARNING("Cannot open \"%s\" for writing", fn);
 				return -1;
 			}
-			fprintf(fdst, "P5\n%d %d\n255\n", image->iw, image->ih);
+			fprintf(fdst, "P5\n%d %d\n255\n", impreview->iw, impreview->ih);
 			fwrite(dstbuf, 1, usize, fdst);
 			fclose(fdst);
 			free(dstbuf);
 			ret=0;
 		}
+		else if(ext_selection==8)//PGM
+		{
+			if(imagetype!=IM_BAYERv2)
+			LOG_WARNING("Unrecognized extension \".GR\"");
+			else
+			{
+				const char bayerlabels[]="RGB";
+				char bayermatrix[]=
+				{
+					bayerlabels[bayer[0]],
+					bayerlabels[bayer[1]],
+					bayerlabels[bayer[2]],
+					bayerlabels[bayer[3]],
+				};
+				for(ptrdiff_t k=0, res=(ptrdiff_t)image->iw*image->ih;k<res;++k)
+					image->data[k]^=0x8000;
+				gr_save(fn, image->data, image->iw, image->ih, image->nlevels0, bayermatrix);
+				for(ptrdiff_t k=0, res=(ptrdiff_t)image->iw*image->ih;k<res;++k)
+					image->data[k]^=0x8000;
+			}
+		}
 		else
-			ret=save_media(fn, image, erroronfail);
+			ret=save_media(fn, impreview, erroronfail);
 		free(fn);
 	}
 	return ret;

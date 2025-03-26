@@ -961,9 +961,9 @@ float print_line_enqueue(ArrayHandle *vertices, float tab_origin, float x, float
 	rect[3]=1-(y+height-ry0)*2.f/rdy;//y2
 
 	if(!*vertices)
-		ARRAY_ALLOC(float[4], *vertices, 0, 0, msg_length<<2, 0);//vx, vy, txx, txy		x4 vertices/char
+		ARRAY_ALLOC(float[4], *vertices, 0, 0, (ptrdiff_t)msg_length<<2, 0);//vx, vy, txx, txy		x4 vertices/char
 	else
-		ARRAY_APPEND(*vertices, 0, 0, 1, msg_length<<2);
+		ARRAY_APPEND(*vertices, 0, 0, 1, (ptrdiff_t)msg_length<<2);
 	//vrtx_resize(msg_length<<2, 4);
 
 	int k=ret_idx?*ret_idx:0;
@@ -1029,49 +1029,48 @@ float print_line_enqueue(ArrayHandle *vertices, float tab_origin, float x, float
 }
 void print_line_flush(ArrayHandle vertices, float zoom)
 {
-	if(vertices&&vertices->count)
+	if(!vertices||!vertices->count)
+		return;
+#ifndef NO_3D
+	glDisable(GL_DEPTH_TEST);
+#endif
+	if(sdf_active)
 	{
-#ifndef NO_3D
-		glDisable(GL_DEPTH_TEST);
-#endif
-		if(sdf_active)
-		{
-			setGLProgram(shader_sdftext.program);
-			glUniform1f(u_sdftext_zoom, zoom*16.f/(sdf_txh*sdf_slope));
-			select_texture(sdf_atlas_txid, u_sdftext_atlas);
+		setGLProgram(shader_sdftext.program);
+		glUniform1f(u_sdftext_zoom, zoom*16.f/(sdf_txh*sdf_slope));
+		select_texture(sdf_atlas_txid, u_sdftext_atlas);
 
-			glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);							GL_CHECK(error);
-			glBufferData(GL_ARRAY_BUFFER, (int)(vertices->count*vertices->esize), vertices->data, GL_STATIC_DRAW);GL_CHECK(error);
-			glVertexAttribPointer(a_sdftext_coords, 4, GL_FLOAT, GL_TRUE, 0, 0);	GL_CHECK(error);
+		glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);							GL_CHECK(error);
+		glBufferData(GL_ARRAY_BUFFER, (int)(vertices->count*vertices->esize), vertices->data, GL_STATIC_DRAW);GL_CHECK(error);
+		glVertexAttribPointer(a_sdftext_coords, 4, GL_FLOAT, GL_TRUE, 0, 0);	GL_CHECK(error);
 
-		//	glBindBuffer(GL_ARRAY_BUFFER, 0);										GL_CHECK(error);
-		//	glVertexAttribPointer(a_sdftext_coords, 4, GL_FLOAT, GL_TRUE, 0, vptr);	GL_CHECK(error);
+	//	glBindBuffer(GL_ARRAY_BUFFER, 0);										GL_CHECK(error);
+	//	glVertexAttribPointer(a_sdftext_coords, 4, GL_FLOAT, GL_TRUE, 0, vptr);	GL_CHECK(error);
 
-			glEnableVertexAttribArray(a_sdftext_coords);	GL_CHECK(error);
-			glDrawArrays(GL_QUADS, 0, (int)vertices->count);GL_CHECK(error);
-			glDisableVertexAttribArray(a_sdftext_coords);	GL_CHECK(error);
-		}
-		else
-		{
-			setGLProgram(shader_text.program);
-			select_texture(font_txid, u_text_atlas);
-
-			glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);							GL_CHECK(error);
-			glBufferData(GL_ARRAY_BUFFER, (int)(vertices->count*vertices->esize), vertices->data, GL_STATIC_DRAW);GL_CHECK(error);//set vertices & texcoords
-			glVertexAttribPointer(a_text_coords, 4, GL_FLOAT, GL_TRUE, 0, 0);		GL_CHECK(error);
-
-		//	glBindBuffer(GL_ARRAY_BUFFER, 0);									GL_CHECK(error);
-		//	glVertexAttribPointer(a_text_coords, 4, GL_FLOAT, GL_TRUE, 0, vptr);GL_CHECK(error);
-
-			glEnableVertexAttribArray(a_text_coords);		GL_CHECK(error);
-			glDrawArrays(GL_QUADS, 0, (int)vertices->count);GL_CHECK(error);//draw the quads: 4 vertices per character quad
-			glDisableVertexAttribArray(a_text_coords);		GL_CHECK(error);
-		}
-#ifndef NO_3D
-		glEnable(GL_DEPTH_TEST);
-#endif
-		vertices->count=0;
+		glEnableVertexAttribArray(a_sdftext_coords);	GL_CHECK(error);
+		glDrawArrays(GL_QUADS, 0, (int)vertices->count);GL_CHECK(error);
+		glDisableVertexAttribArray(a_sdftext_coords);	GL_CHECK(error);
 	}
+	else
+	{
+		setGLProgram(shader_text.program);
+		select_texture(font_txid, u_text_atlas);
+
+		glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);							GL_CHECK(error);
+		glBufferData(GL_ARRAY_BUFFER, (int)(vertices->count*vertices->esize), vertices->data, GL_STATIC_DRAW);GL_CHECK(error);//set vertices & texcoords
+		glVertexAttribPointer(a_text_coords, 4, GL_FLOAT, GL_TRUE, 0, 0);		GL_CHECK(error);
+
+	//	glBindBuffer(GL_ARRAY_BUFFER, 0);									GL_CHECK(error);
+	//	glVertexAttribPointer(a_text_coords, 4, GL_FLOAT, GL_TRUE, 0, vptr);GL_CHECK(error);
+
+		glEnableVertexAttribArray(a_text_coords);		GL_CHECK(error);
+		glDrawArrays(GL_QUADS, 0, (int)vertices->count);GL_CHECK(error);//draw the quads: 4 vertices per character quad
+		glDisableVertexAttribArray(a_text_coords);		GL_CHECK(error);
+	}
+#ifndef NO_3D
+	glEnable(GL_DEPTH_TEST);
+#endif
+	vertices->count=0;
 }
 float GUIPrint_enqueue(ArrayHandle *vertices, float tab_origin, float x, float y, float zoom, const char *format, ...)
 {

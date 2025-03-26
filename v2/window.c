@@ -534,7 +534,7 @@ ArrayHandle dialog_open_file(Filter *filters, int nfilters, int multiple)//TODO:
 	return result;
 }
 //const wchar_t		initialname[]=L"Untitled.txt";
-char* dialog_save_file(Filter *filters, int nfilters, const char *initialname, int *ret_ext_idx)
+char* dialog_save_file(Filter *filters, int nfilters, const char *initialname, int *ret_ext_idx, unsigned short *userext, int userextlen)
 {
 	ArrayHandle winfilts=prep_filters(filters, nfilters);
 	
@@ -552,15 +552,15 @@ char* dialog_save_file(Filter *filters, int nfilters, const char *initialname, i
 		
 		&WSTR_AT(winfilts, 0),	//<- filter
 		
-		0, 0,//custom filter & count
-		1,								//<- initial filter index
-		g_wbuf, G_BUF_SIZE,				//<- output filename
+		userext, userextlen,//custom filter & count
+		1,				//<- initial filter index
+		g_wbuf, G_BUF_SIZE,		//<- output filename
 		0, 0,//initial filename
 		0,
 		0,//dialog title
 		OFN_NOTESTFILECREATE|OFN_PATHMUSTEXIST|OFN_EXTENSIONDIFFERENT|OFN_OVERWRITEPROMPT|OFN_NOCHANGEDIR,
-		0, ext_offset,					//<- file offset & extension offset
-		def_ext,						//<- default extension (if user didn't type one)
+		0, ext_offset,			//<- file offset & extension offset
+		def_ext,			//<- default extension (if user didn't type one)
 		0, 0,//data & hook
 		0,//template name
 		0, 0,//reserved
