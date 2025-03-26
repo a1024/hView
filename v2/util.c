@@ -2775,7 +2775,7 @@ ArrayHandle get_filenames(const char *path, const char **extensions, int extCoun
 					break;
 				}
 			}
-			if(found)
+			if(!extCount||found)
 			{
 				STR_ALLOC(filename, 0);
 				if(fullyqualified)

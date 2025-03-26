@@ -1047,15 +1047,11 @@ static void print_pixellabels(int ix1, int ix2, int iy1, int iy2, int xoffset, i
 	for(;iy<yend;++iy)
 	{
 		float y=(float)(iy+yoffset);
-		//if(is_bayer)
-		//	y*=0.5f;
 		int ky=image2screen_y_int(y);
 		int ix=MAXVAR(ix1, 0), xend=MINVAR(ix2+2, image->iw);
 		for(;ix<xend;++ix)
 		{
 			float x=(float)(ix+xoffset);
-			//if(is_bayer)
-			//	x*=0.5f;
 			int kx=image2screen_x_int(x);
 			int idx=image->iw*(iy<<1)+(ix<<1);
 			if(imagetype==IM_RGBA)
