@@ -883,7 +883,7 @@ int toggle_sdftext()
 			if(font_zoom<1)
 				font_zoom=1;
 			else
-				font_zoom=(float)(1<<floor_log2((int)font_zoom));
+				font_zoom=(float)(1<<FLOOR_LOG2((int)font_zoom));
 			font_zoom_min=1, font_zoom_max=32;
 		}
 	}

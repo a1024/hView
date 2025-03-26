@@ -643,9 +643,9 @@ Image8* image_alloc8(const unsigned char *src, int iw, int ih, int nch, int srcd
 Image16* image_alloc16(const unsigned short *src, int iw, int ih, int nch, int srcdepth);
 void image_free(void *pimage);
 void image_export(Image8 *dst, const Image16* src, int imagetype);
-void image_inplacexflip(Image16 *src);
-void image_inplaceyflip(Image16 *src);
-void image_transpose(Image16 **src);
+void image_inplacexflip(Image16 *src, char *bayer);
+void image_inplaceyflip(Image16 *src, char *bayer);
+void image_transpose(Image16 **src, char *bayer);
 
 //typedef struct ImageHeaderStruct//greyscale image object
 //{

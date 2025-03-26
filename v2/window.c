@@ -387,7 +387,9 @@ int messagebox(MessageBoxType type, const char *title, const char *format, ...)/
 	int result=MessageBoxW(ghWnd, g_wbuf, g_wbuf+len, wintypes[type]);
 	switch(type)
 	{
-	case MBOX_OK:result=0;
+	case MBOX_OK:
+		result=0;
+		break;
 	case MBOX_OKCANCEL:
 		switch(result)
 		{
@@ -403,10 +405,10 @@ int messagebox(MessageBoxType type, const char *title, const char *format, ...)/
 	case MBOX_YESNOCANCEL:
 		switch(result)
 		{
-		case IDYES:		result=0;	break;
-		case IDNO:		result=1;	break;
+		case IDYES:	result=0;break;
+		case IDNO:	result=1;break;
 		default:
-		case IDCANCEL:	result=2;	break;
+		case IDCANCEL:	result=2;break;
 		}
 		break;
 	}

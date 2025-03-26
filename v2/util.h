@@ -1,4 +1,4 @@
-//util.h - Utilities declarations
+//util.h - Utilities
 //Copyright (C) 2023  Ayman Wagih Mohsen
 //
 //This program is free software: you can redistribute it and/or modify
@@ -19,21 +19,29 @@
 #define INC_UTIL_H
 #ifdef _MSC_VER
 #define _CRT_SECURE_NO_WARNINGS
+#elif !defined _GNU_SOURCE
+#define _GNU_SOURCE
 #endif
-#include<stddef.h>//for size_t
+#include<stddef.h>//size_t, ptrdiff_t
 #ifdef __cplusplus
 extern "C"
 {
+#endif
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable:4200)//no default-constructor for struct with zero-length array
 #endif
 
 //utility
 #ifdef _MSC_VER
 #define	ALIGN(N) __declspec(align(N))
-#define INLINE static
+#define AWM_INLINE __forceinline static
+//#define INLINE static
 //#define sprintf_s snprintf
 #else
 #define	ALIGN(N) __attribute__((aligned(N)))
-#define INLINE static inline
+#define AWM_INLINE __attribute__((always_inline)) inline static
+//#define INLINE static inline	//plain inline doesn't inline
 #ifndef _countof
 #define _countof(A) (sizeof(A)/sizeof(*(A)))
 #endif
@@ -148,6 +156,29 @@ extern "C"
 		DST=_mm_extract_epi32(result, 0);\
 	}while(0)
 
+#ifdef __GNUC__
+#define UMUL128(DST_HI, DST_LO, A, B)\
+	do\
+	{\
+		unsigned __int128 _x=(unsigned __int128)(A)*(B);\
+		DST_LO=(unsigned long long)_x;\
+		DST_HI=(unsigned long long)(_x>>64);\
+	}while(0)
+#define MULHI64(DST, A, B) DST=(unsigned long long)((unsigned __int128)(A)*(B)>>64)
+#define UDIV128(DST_Q, DST_R, NUM_HI, NUM_LO, DEN)\
+	do\
+	{\
+		unsigned __int128 _num=(unsigned __int128)(NUM_HI)<<64|(NUM_LO);\
+		unsigned long long _den=DEN;\
+		DST_Q=_num/_den;\
+		DST_R=_num%_den;\
+	}while(0)
+#elif defined _MSC_VER
+#define UMUL128(DST_HI, DST_LO, A, B) DST_LO=_umul128(A, B, &(DST_HI))
+#define MULHI64(DST, A, B) _umul128(A, B, &(DST))
+#define UDIV128(DST_Q, DST_R, NUM_HI, NUM_LO, DEN) DST_Q=_udiv128(NUM_HI, NUM_LO, DEN, &(DST_R))
+#endif
+
 #define MOVEOBJ(SRC, DST, SIZE) memcpy(DST, SRC, SIZE), memset(SRC, 0, SIZE)
 #define MODVAR(DST, SRC, N) DST=(SRC)%(N), DST+=(N)&-(DST<0)
 #define SHIFT_LEFT_SIGNED(X, SH) ((SH)<0?(X)>>-(SH):(X)<<(SH))
@@ -155,9 +186,11 @@ extern "C"
 #define UPDATE_MIN(M, X) if(M>X)M=X
 #define UPDATE_MAX(M, X) if(M<X)M=X
 #define THREEWAY(L, R) (((L)>(R))-((L)<(R)))
-#define MIX(V0, V1, X) ((V0)+((V1)-(V0))*(X))
+#define MIXVAR(V0, V1, X) ((V0)+((V1)-(V0))*(X))
 #define FLOOR_LOG2(X)		(sizeof(X)==8?63-(int)_lzcnt_u64((unsigned long long)(X)):31-(int)_lzcnt_u32((unsigned)(X)))
 #define FLOOR_LOG2_P1(X)	(sizeof(X)==8?64-(int)_lzcnt_u64((unsigned long long)(X)):32-(int)_lzcnt_u32((unsigned)(X)))
+#define FLOOR_LOG2_32x4(X) _mm_sub_epi32(_mm_srli_epi32(_mm_castps_si128(_mm_cvtepi32_ps(X)), 23), _mm_set1_epi32(127))
+#define FLOOR_LOG2_32x8(X) _mm256_sub_epi32(_mm256_srli_epi32(_mm256_castps_si256(_mm256_cvtepi32_ps(X)), 23), _mm256_set1_epi32(127))
 //#define FLOOR_LOG2_64(X)	(63-(int)_lzcnt_u64(X))
 //#define FLOOR_LOG2_P1_64(X)	(64-(int)_lzcnt_u64(X))
 //#define FLOOR_LOG2_32(X)	(31-(int)_lzcnt_u32(X))
@@ -167,16 +200,24 @@ extern "C"
 #define LSB_IDX_16(X)	(int)_tzcnt_u16(X)
 #define HAMMING_WEIGHT(X) (int)(sizeof(X)==8?_mm_popcnt_u32(X):_mm_popcnt_u64(X))
 
-#define G_BUF_SIZE	4096
+#define G_BUF_SIZE 4096
 extern char g_buf[G_BUF_SIZE];
 
 void memfill(void *dst, const void *src, size_t dstbytes, size_t srcbytes);
+#define FILLMEM(PTR, DATA, ASIZE, ESIZE)\
+	do\
+	{\
+		*(PTR)=(DATA);\
+		memfill((PTR)+1, PTR, (ASIZE)-(ESIZE), ESIZE);\
+	}while(0)
 void memswap_slow(void *p1, void *p2, size_t size);
 void memswap(void *p1, void *p2, size_t size, void *temp);
 void memreverse(void *p, size_t count, size_t esize);//calls memswap
+void reverse16(void *start, void *end);
 void memrotate(void *p, size_t byteoffset, size_t bytesize, void *temp);//temp buffer is min(byteoffset, bytesize-byteoffset)
 int binary_search(const void *base, size_t count, size_t esize, int (*threeway)(const void*, const void*), const void *val, size_t *idx);//returns true if found, otherwise the idx is where val should be inserted, standard bsearch doesn't do this
 void isort(void *base, size_t count, size_t esize, int (*threeway)(const void*, const void*));//binary insertion sort
+int strcmp_ci(const char *s1, const char *s2);
 
 typedef enum GetOptRetEnum
 {
@@ -186,52 +227,73 @@ typedef enum GetOptRetEnum
 } GetOptRet;
 int acme_getopt(int argc, char **argv, int *start, const char **keywords, int kw_count);//keywords[i]: shortform char, followed by longform null-terminated string, returns 
 
-int floor_log2(unsigned long long n);
+int hammingweight16(unsigned short x);
+int hammingweight32(unsigned x);
+int hammingweight64(unsigned long long x);
+//int floor_log2_p1(unsigned long long n);
+//int floor_log2(unsigned long long n);		//use (63-_lzcnt_u64(n)) instead
+//int floor_log2_32(unsigned n);		//use (31-_lzcnt_u32(n)) instead
 int ceil_log2(unsigned long long n);
+int ceil_log2_32(unsigned n);
+//int get_lsb_index(unsigned long long n);//returns lsb position + 1,  returns register bit count if n is zero
+//int get_lsb_index32(unsigned n);
+//int get_lsb_index16(unsigned short n);
 int floor_log10(double x);
+unsigned floor_sqrt(unsigned long long x);
+unsigned exp2_fix24_neg(unsigned x);
+unsigned exp2_neg_fix24_avx2(unsigned x);
+unsigned long long exp2_fix24(int x);
+int log2_fix24(unsigned long long x);
+#define POW_FIX24(BASE, EXP) exp2_fix24((int)((long long)(EXP)*log2_fix24(BASE)>>24))
 double power(double x, int y);
 double _10pow(int n);
-int minimum(int a, int b);
-int maximum(int a, int b);
 int acme_isdigit(char c, char base);
+//#ifdef __GNUC__
+//unsigned long long _udiv128(unsigned long long hi, unsigned long long lo, unsigned long long den, unsigned long long *rem);
+//unsigned long long _umul128(unsigned long long a, unsigned long long b, unsigned long long *hi);
+//#endif
 
-double time_ms();
+double time_ms(void);
+double time_sec(void);
 
 typedef struct TimeInfoStruct
 {
 	int days, hours, mins;
 	float secs;
 } TimeInfo;
-void parsetimedelta(double delta, TimeInfo *ti);
-int timedelta2str(char *buf, size_t len, double ms);
-int acme_strftime(char *buf, size_t len, const char *format);//prints current time to string
+void parsetimedelta(double secs, TimeInfo *ti);
+int timedelta2str(char *buf, size_t len, double secs);
+int acme_strftime(char *buf, size_t len, const char *format);//prints current time to string, recommended format: "%Y-%m-%d_%H%M%S"
+int print_timestamp(const char *format);//"%Y-%m-%d_%H%M%S"
 
 int print_bin8(int x);
 int print_bin32(unsigned x);
 int print_binn(unsigned long long x, int nbits);
+void print_nan(double x, int total, int decimal);
+int print_memsize(char *buf, ptrdiff_t bufsize, long long memsize, int totaldigits);
+
+double convert_size(double bytesize, int *log1024);
+int print_size(double bytesize, int ndigits, int pdigits, char *str, int len);
 
 //error handling
 int log_error(const char *file, int line, int quit, const char *format, ...);//doesn't stop execution
 #define LOG_ERROR(format, ...)   log_error(file, __LINE__, 1, format, ##__VA_ARGS__)
 #define LOG_ERROR2(format, ...)  log_error(__FILE__, __LINE__, 1, format, ##__VA_ARGS__)
 #define LOG_WARNING(format, ...) log_error(file, __LINE__, 0, format, ##__VA_ARGS__)
-int valid(const void *p);
-int pause();
-#ifdef _MSC_VER
-int pause1();
-#endif
+#define ASSERT_MSG(SUCCESS, MSG, ...) ((SUCCESS)!=0||log_error(file, __LINE__, 1, MSG, ##__VA_ARGS__))
+//int valid(const void *p);
+int pause(void);
+//#ifdef _MSC_VER
+//int pause1(void);
+//#endif
 int pause_abort(const char *file, int lineno, const char *extraInfo);
 #define PANIC() pause_abort(file, __LINE__, 0)
-#define ASSERT(SUCCESS)   ((SUCCESS)!=0||pause_abort(file, __LINE__, #SUCCESS))
-#define ASSERT_P(POINTER) (valid(POINTER)||pause_abort(file, __LINE__, #POINTER " == 0"))
+#define ASSERT(SUCCESS) ((SUCCESS)!=0||pause_abort(file, __LINE__, #SUCCESS))
+//#define ASSERT_P(POINTER) (void)(valid(POINTER)||pause_abort(file, __LINE__, #POINTER " == 0"))
 
 
 //ARRAY
 #if 1
-#ifdef _MSC_VER
-#pragma warning(push)
-#pragma warning(disable:4200)//no default-constructor for struct with zero-length array
-#endif
 typedef struct ArrayHeaderStruct//32 bytes on 64 bit system, or 16 bytes on 32 bit system
 {
 	size_t count,
@@ -239,10 +301,8 @@ typedef struct ArrayHeaderStruct//32 bytes on 64 bit system, or 16 bytes on 32 b
 	void (*destructor)(void*);
 	unsigned char data[];
 } ArrayHeader, *ArrayHandle;
-#ifdef _MSC_VER
-#pragma warning(pop)
-#endif
 ArrayHandle array_construct(const void *src, size_t esize, size_t count, size_t rep, size_t pad, void (*destructor)(void*));
+size_t array_append(ArrayHandle *dst, const void *src, size_t esize, size_t count, size_t rep, size_t pad, void (*destructor)(void*));//arr can be 0, returns original array size
 ArrayHandle array_copy(ArrayHandle *arr);//shallow
 void  array_clear(ArrayHandle *arr);//keeps allocation
 void  array_free(ArrayHandle *arr);
@@ -252,13 +312,14 @@ void* array_insert(ArrayHandle *arr, size_t idx, const void *data, size_t count,
 void* array_erase(ArrayHandle *arr, size_t idx, size_t count);//does not reallocate
 void* array_replace(ArrayHandle *arr, size_t idx, size_t rem_count, const void *data, size_t ins_count, size_t rep, size_t pad);
 
+#define ARRAY_AT(ETYPE, ARR, IDX) (ETYPE*)((ARR)&&IDX<(ARR)->count?(ARR)->data+(IDX)*(ARR)->esize:LOG_ERROR("OOB"))
 void* array_at(ArrayHandle *arr, size_t idx);
 void* array_back(ArrayHandle *arr);
 
-int str_append(ArrayHandle *str, const char *format, ...);//requires C99, prints twice
+int str_append(ArrayHandle *str, const char *format, ...);//requires C99, calls vsnprintf twice
 
 #define ARRAY_ALLOC(ELEM_TYPE, ARR, DATA, COUNT, PAD, DESTRUCTOR) ARR=array_construct(DATA, sizeof(ELEM_TYPE), COUNT, 1, PAD, DESTRUCTOR)
-#define ARRAY_APPEND(ARR, DATA, COUNT, REP, PAD)  array_insert(&(ARR), (ARR)->count, DATA, COUNT, REP, PAD)
+#define ARRAY_APPEND(ARR, DATA, COUNT, REP, PAD) array_insert(&(ARR), (ARR)->count, DATA, COUNT, REP, PAD)
 #define ARRAY_APPEND_OFFSET(ARR, DATA, COUNT, REP, PAD) (((char*)array_insert(&(ARR), (ARR)->count, DATA, COUNT, REP, PAD)-(ARR)->data)/(ARR)->esize)
 //#define ARRAY_DATA(ARR) (ARR)->data
 //#define ARRAY_I(ARR, IDX) *(int*)array_at(&ARR, IDX)
@@ -285,18 +346,11 @@ int str_append(ArrayHandle *str, const char *format, ...);//requires C99, prints
 
 //double-linked LIST of identical size arrays,		append-only, no mid-insertion
 #if 1
-#ifdef _MSC_VER
-#pragma warning(push)
-#pragma warning(disable:4200)//no default-constructor for struct with zero-length array
-#endif
 typedef struct DNodeStruct
 {
 	struct DNodeStruct *prev, *next;
 	unsigned char data[];
 } DNodeHeader, *DNodeHandle;
-#ifdef _MSC_VER
-#pragma warning(pop)
-#endif
 typedef struct DListStruct
 {
 	DNodeHandle i, f;
@@ -311,6 +365,7 @@ void dlist_init(DListHandle list, size_t objsize, size_t objpernode, void (*dest
 void dlist_copy(DListHandle dst, DListHandle src);
 void dlist_clear(DListHandle list);
 size_t dlist_appendtoarray(DListHandle list, ArrayHandle *dst);
+//void dlist_appendtoarrayandclear(DListHandle list, ArrayHandle *dst);
 
 void* dlist_push_back1(DListHandle list, const void *obj);//shallow copy of obj
 void* dlist_push_back(DListHandle list, const void *data, size_t count);
@@ -333,7 +388,7 @@ int   dlist_it_dec(DListItHandle it);
 #endif
 
 
-//ordered MAP (implemented as a (self-balancing) red-black tree)
+//ordered MAP/SET (implemented as a (self-balancing) red-black tree)
 #if 1
 typedef struct RBNodeStruct
 {
@@ -364,13 +419,13 @@ RBNodeHandle* map_insert(MapHandle map, const void *data, int *found);//the map 
 int           map_erase(MapHandle map, const void *data, RBNodeHandle node);//either pass data object or node
 
 void map_clear_r(MapHandle map, RBNodeHandle node);
-void map_debugprint_r(RBNodeHandle *node, int depth, void (*printer)(RBNodeHandle *node, int depth));
+void map_traverse_r(RBNodeHandle *node, int depth, void (*callback)(RBNodeHandle *node, int depth, void *param), void *param);
 
-#define MAP_INIT(MAP, ETYPE, CMP, DESTRUCTOR) map_init(MAP, sizeof(ETYPE), CMP, DESTRUCTOR)
-#define MAP_ERASE_DATA(MAP, DATA)             map_erase(MAP, DATA, 0)
-#define MAP_ERASE_NODE(MAP, NODE)             map_erase(MAP, 0, NODE)
-#define MAP_CLEAR(MAP)                        map_clear_r(MAP, (MAP)->root), (MAP)->root=0, (MAP)->nnodes=0
-#define MAP_DEBUGPRINT(MAP, PRINTER)          map_debugprint_r(&(MAP)->root, 0, PRINTER)
+#define MAP_INIT(MAP, ETYPE, CMP, DESTRUCTOR)	map_init(MAP, sizeof(ETYPE), CMP, DESTRUCTOR)
+#define MAP_ERASE_DATA(MAP, DATA)		map_erase(MAP, DATA, 0)
+#define MAP_ERASE_NODE(MAP, NODE)		map_erase(MAP, 0, NODE)
+#define MAP_CLEAR(MAP)				map_clear_r(MAP, (MAP)->root), (MAP)->root=0, (MAP)->nnodes=0
+#define MAP_TRAVERSE(MAP, PRINTER, PARAM)	map_traverse_r(&(MAP)->root, 0, PRINTER, PARAM)
 #endif
 
 
@@ -391,7 +446,7 @@ typedef struct SListStruct
 		back;	//prev always nullptr, can only append to back
 } SList, *SListHandle;
 
-//API
+//single-linked list API
 void slist_init(SListHandle list, size_t esize, void (*destructor)(void*));
 void slist_clear(SListHandle list);
 void* slist_push_front(SListHandle list, const void *data);
@@ -460,7 +515,7 @@ void bitstring_print(BitstringHandle str);
 #endif
 
 
-//Max-heap-based priority queue
+//Priority Queue (Max-heap-based)
 #if 1
 typedef struct PQueueStruct
 {
@@ -513,13 +568,53 @@ ptrdiff_t get_filesize(const char *filename);//-1 not found,  0: folder (probabl
 
 int acme_stricmp(const char *a, const char *b);//case insensitive strcmp
 ptrdiff_t acme_strrchr(const char *str, ptrdiff_t len, char c);//find last occurrence, with known length for backward search
-ArrayHandle filter_path(const char *path, int isfile);//replaces back slashes with slashes, and adds trailing slash if missing, as ArrayHandle
-ArrayHandle get_filenames(const char *path, const char **extensions, int extCount, int fullyqualified);//returns array of strings (ArrayHandle), returns all filenames if no extensions provided
+ArrayHandle filter_path(const char *path, int len, int slash);//replaces back slashes with slashes, adds trailing slash if missing, as ArrayHandle
+void get_filetitle(const char *fn, int len, int *idx_start, int *idx_end);//pass -1 for len if unknown
+ArrayHandle get_filenames(const char *path, const char **extensions, int extCount, int fullyqualified);//returns array of strings, extensions without period '.'
 
 ArrayHandle load_file(const char *filename, int bin, int pad, int erroronfail);
-int save_file_bin(const char *filename, const unsigned char *src, size_t srcSize);
+int save_file(const char *filename, const unsigned char *src, size_t srcsize, int is_bin);
 
-	
+ArrayHandle searchfor_file(const char *searchpath, const char *filetitle);
+
+int get_cpu_features(void);//returns  0: old CPU,  1: AVX2,  3: AVX-512
+int query_cpu_cores(void);
+size_t query_mem_usage();
+
+void* mt_exec(void (*func)(void*), void *args, int argbytes, int nthreads);
+void  mt_finish(void *mt_ctx);
+
+//PROFILER  (spawns a thread)		FIXME port to Linux
+#if defined PROFILER && (defined _MSC_VER || defined _WIN32)
+
+//	#define ENABLE_PROFILER_DISASSEMBLY
+
+void* prof_start();
+void prof_end(void *prof_ctx);
+#endif
+
+//Color Printf
+#define COLORPRINTF_BK_DEFAULT 0x0C0C0C
+#define COLORPRINTF_TXT_DEFAULT 0xF2F2F2
+void colorprintf_init(void);//no initialization is needed as it's ON by default
+int colorprintf(int textcolor, int bkcolor, const char *format, ...);//0x00BBGGRR
+void colorgen0(int *colors, int count, int maxbrightness);//maxbrightness is componentwise
+void colorgen(int *colors, int count, int minbrightness, int maxbrightness, int maxtrials);//distance-based rejection sampling  O(N^2)  brightness range [0 ~ 765]
+
+#ifdef _WIN32
+int print_systemerror(const char *file, int line, const char *funcname, int errorcode, int quit);//GetLastError
+#define SYSTEMERROR(FUNCNAME)   print_systemerror(__FILE__, __LINE__, FUNCNAME, GetLastError(), 1)
+#define SYSTEMWARNING(FUNCNAME) print_systemerror(__FILE__, __LINE__, FUNCNAME, GetLastError(), 0)
+#endif
+
+void file_delete(char *fn);
+void get_tmpfn(char *dst);//dst is MAX_PATH
+void exec_process(char *cmd, const char *currdir, int loud, double *elapsed, long long *maxmem);
+
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 #ifdef __cplusplus
 }
 #endif

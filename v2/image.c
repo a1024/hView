@@ -202,7 +202,7 @@ void image_export(Image8 *dst, const Image16 *src, int imagetype)
 	}
 }
 
-void image_inplacexflip(Image16 *src)
+void image_inplacexflip(Image16 *src, char *bayer)
 {
 	int rowstride=src->nch*src->iw;
 	for(int ky=0;ky<src->ih;++ky)
@@ -219,8 +219,14 @@ void image_inplacexflip(Image16 *src)
 			pbwd-=src->nch;
 		}
 	}
+	if(bayer)
+	{
+		char temp;
+		SWAPVAR(bayer[0], bayer[1], temp);
+		SWAPVAR(bayer[2], bayer[3], temp);
+	}
 }
-void image_inplaceyflip(Image16 *src)
+void image_inplaceyflip(Image16 *src, char *bayer)
 {
 	int rowstride=src->nch*src->iw;
 	ptrdiff_t size=(ptrdiff_t)rowstride*src->ih;
@@ -237,8 +243,14 @@ void image_inplaceyflip(Image16 *src)
 		pfwd+=rowstride;
 		pbwd-=rowstride;
 	}
+	if(bayer)
+	{
+		char temp;
+		SWAPVAR(bayer[0], bayer[2], temp);
+		SWAPVAR(bayer[1], bayer[3], temp);
+	}
 }
-void image_transpose(Image16 **src)
+void image_transpose(Image16 **src, char *bayer)
 {
 	Image16 *dst=image_alloc16(0, src[0]->ih, src[0]->iw, src[0]->nch, src[0]->srcdepth);
 	dst->depth=src[0]->depth;
@@ -254,4 +266,9 @@ void image_transpose(Image16 **src)
 	}
 	free(*src);
 	*src=dst;
+	if(bayer)
+	{
+		char temp;
+		SWAPVAR(bayer[1], bayer[2], temp);
+	}
 }

@@ -1,4 +1,5 @@
 #include"hView.h"
+#include<stdio.h>
 #include<stdlib.h>
 #include<string.h>
 #include<math.h>
@@ -47,7 +48,7 @@ ArrayHandle vertices_2d=0;
 
 ProfilePlotMode profileplotmode=PROFILE_OFF;
 
-int bitmode=0,//0: off, 1: colorful bitplanes, 2: monochrome bitplanes
+int bitmode=0,//0: off, 1: monochrome bitplanes, 2: colorful bitplanes
 	bitplane=-1;
 int pixelpreview=1;
 int brightness=0;//impreview = CLAMP(image<<brightness)
@@ -199,39 +200,78 @@ static void update_image(int settitle, int render)
 		}
 	//	impreview=image_construct(0, 0, 8, 0, image->iw, image->ih, 0, image->depth);
 	}
-	if(bitmode==1)
+	if(bitmode)
 	{
-		const unsigned short *src=(const unsigned short*)image->data;
-		unsigned char *dst=(unsigned char*)impreview->data;
-		int sh=bitplane+16-imagedepth, srcidx, dstidx;
-		for(int ky=0;ky<image->ih;++ky)
+		const unsigned short *src=image->data;
+		unsigned char *dst=impreview->data;
+		int srcidx, dstidx;
+		switch(imagetype)
 		{
-			for(int kx=0;kx<image->iw;++kx)
+		case IM_GRAYSCALEv2:
+			for(int ky=0;ky<image->ih;++ky)
 			{
-				srcidx=(image->iw*ky+kx)<<2, dstidx=(impreview->iw*ky+kx)<<2;
-				for(int kc=0;kc<3;++kc)
-					dst[dstidx|kc]=src[srcidx|kc]>>sh&1?255:0;
-				dst[dstidx|3]=src[srcidx|3]>>8;//copy alpha
+				for(int kx=0;kx<image->iw;++kx)
+				{
+					srcidx=image->iw*ky+kx, dstidx=(impreview->iw*ky+kx)<<2;
+					for(int kc=0;kc<3;++kc)
+						dst[dstidx|kc]=src[srcidx]>>bitplane&1?255:0;
+				//	dst[dstidx|3]=src[srcidx|3];//copy alpha
+					dst[dstidx|3]=255;
+				}
 			}
-		}
-	}
-	else if(bitmode==2)
-	{
-		const unsigned long long *src=(const unsigned long long*)image->data;
-		unsigned char *dst=(unsigned char*)impreview->data;
-		int kb=bitplane%imagedepth, kc=bitplane/imagedepth;
-		int sh=(kc<<4)+kb+16-imagedepth, srcidx, dstidx;
-		for(int ky=0;ky<image->ih;++ky)
-		{
-			for(int kx=0;kx<image->iw;++kx)
+			break;
+		case IM_RGBA:
+			if(bitmode==1)//monochrome bitplanes
 			{
-				srcidx=image->iw*ky+kx, dstidx=(impreview->iw*ky+kx)<<2;
-				int val=src[srcidx]>>sh&1?255:0;
-				dst[dstidx]=val;
-				dst[dstidx|1]=val;
-				dst[dstidx|2]=val;
-				dst[dstidx|3]=src[srcidx]>>(48+8);//copy alpha
+				int kb=bitplane%imagedepth, kc=bitplane/imagedepth;
+				for(int ky=0;ky<image->ih;++ky)
+				{
+					for(int kx=0;kx<image->iw;++kx)
+					{
+						srcidx=(image->iw*ky+kx)<<2, dstidx=(impreview->iw*ky+kx)<<2;
+						int val=src[srcidx]>>kb&1?255:0;
+						dst[dstidx|0]=val;
+						dst[dstidx|1]=val;
+						dst[dstidx|2]=val;
+					//	dst[dstidx|3]=src[srcidx];//copy alpha
+						dst[dstidx|3]=255;
+					}
+				}
 			}
+			else//colorful bitplanes
+			{
+				for(int ky=0;ky<image->ih;++ky)
+				{
+					for(int kx=0;kx<image->iw;++kx)
+					{
+						srcidx=(image->iw*ky+kx)<<2, dstidx=(impreview->iw*ky+kx)<<2;
+						for(int kc=0;kc<3;++kc)
+							dst[dstidx|kc]=src[srcidx|kc]>>bitplane&1?255:0;
+					//	dst[dstidx|3]=src[srcidx|3]>>8;//copy alpha
+						dst[dstidx|3]=255;
+					}
+				}
+			}
+			break;
+		case IM_BAYERv2:
+			{
+				int kb=bitplane%imagedepth, kc=bitplane/imagedepth;
+				for(int ky=0;ky<impreview->ih;++ky)
+				{
+					for(int kx=0;kx<impreview->iw;++kx)
+					{
+						srcidx=image->iw*(ky<<1|(bayer[kc]>>1))+(kx<<1|(bayer[kc]&1));
+						dstidx=(impreview->iw*ky+kx)<<2;
+						int bit=src[srcidx]>>kb&1?255:0;
+						dst[dstidx|0]=bit;
+						dst[dstidx|1]=bit;
+						dst[dstidx|2]=bit;
+					//	dst[dstidx|3]=src[srcidx|3];//copy alpha
+						dst[dstidx|3]=255;
+					}
+				}
+			}
+			break;
 		}
 	}
 	else
@@ -244,6 +284,33 @@ static void update_image(int settitle, int render)
 		center_image();
 	if(render)
 		io_render();
+}
+static int bitplane_mreduce(int bitplane)
+{
+	switch(imagetype)
+	{
+	case IM_GRAYSCALEv2:
+		if(bitmode)
+			MODVAR(bitplane, bitplane, imagedepth);
+		break;
+	case IM_RGBA:
+		if(bitmode==2)
+			MODVAR(bitplane, bitplane, imagedepth);
+		else if(bitmode==1)
+		{
+			int n=imagedepth*3;
+			MODVAR(bitplane, bitplane, n);
+		}
+		break;
+	case IM_BAYERv2:
+		if(bitmode)
+		{
+			int n=imagedepth*4;
+			MODVAR(bitplane, bitplane, n);
+		}
+		break;
+	}
+	return bitplane;
 }
 static void zoom_at(int xs, int ys, double factor)
 {
@@ -276,7 +343,7 @@ int io_init(int argc, char **argv)//return false to abort
 	//	"E:/Share Box/Scope/20241107/20241107_164651_573.huf"
 	//	"E:/Share Box/Scope/20241107/20241107_164228_958.huf"
 	//	"C:/Projects/datasets/dataset-RAW/6K9A8788.CR3"
-		, 1);
+		, -1, 0);
 	load_media((char*)fn->data, &image, 1);
 	if(image)
 		update_image(1, 0);
@@ -285,7 +352,7 @@ int io_init(int argc, char **argv)//return false to abort
 #else
 	if(argc>0)
 	{
-		fn=filter_path(argv[0], 1);
+		fn=filter_path(argv[0], -1, 0);
 		load_media((char*)fn->data, &image, 1);
 		if(image)
 			update_image(1, 0);
@@ -381,6 +448,8 @@ int io_keydn(IOKey key, char c)
 				"Q: Equalize histogram\n"
 				"Left/Right: prev/next image\n"
 				"Ctrl O: Open image\n"
+				"R/F5: Refresh\n"
+				"Ctrl X/Y/R/T: Flip/rotate/transpose\n"
 				"Ctrl S: Save as\n"
 				"Ctrl A: Set alpha to 1\n"
 				"Ctrl C: Copy pixel values from screen (when zoomed in)\n"
@@ -392,11 +461,82 @@ int io_keydn(IOKey key, char c)
 				"\n"
 				"Quote: Toggle bitplane view\n"
 				"Brackets: Select bitplane\n"
-				"\n"
-				"%s",
-				ver?ver:""
+				"%s %s\n"
+				"%s"
+				, __DATE__, __TIME__
+				, ver?ver:""
 			);
 			free(ver);
+		}
+		break;
+	case KEY_F2:
+		{
+			char buf[1024]={0};
+			int nprinted=0;
+			ptrdiff_t usize=((ptrdiff_t)image->nch*image->iw*image->ih*image->srcdepth+7)>>3;
+			ptrdiff_t csize=get_filesize((char*)fn->data);
+			int extidx=0;
+			get_filetitle((char*)fn->data, (int)fn->count, 0, &extidx);
+			//extidx+=fn->data[extidx]=='.';
+			nprinted+=snprintf(buf+nprinted, sizeof(buf)-1-nprinted,
+				"\"%s\"\n"
+				"%10td bytes ("
+				, (char*)fn->data
+				, usize
+			);
+			nprinted+=print_memsize(buf+nprinted, sizeof(buf)-1-nprinted, usize, 8);
+			nprinted+=snprintf(buf+nprinted, sizeof(buf)-1-nprinted,
+				") uncompressed\n"
+				"%10td bytes ("
+				, csize
+			);
+			nprinted+=print_memsize(buf+nprinted, sizeof(buf)-1-nprinted, csize, 8);
+			nprinted+=snprintf(buf+nprinted, sizeof(buf)-1-nprinted,
+				") %s\n"
+				, (char*)fn->data+extidx
+			);
+			switch(imagetype)
+			{
+			case IM_GRAYSCALEv2:
+				nprinted+=snprintf(buf+nprinted, sizeof(buf)-1-nprinted,
+					" WH   %5d*%5d\n"
+					, image->iw, image->ih
+				);
+				break;
+			case IM_RGBA:
+				nprinted+=snprintf(buf+nprinted, sizeof(buf)-1-nprinted,
+					"CWH %d*%5d*%5d\n"
+					, image->nch, image->iw, image->ih
+				);
+				break;
+			case IM_BAYERv2:
+				{
+					char labels[]="RGB";
+					nprinted+=snprintf(buf+nprinted, sizeof(buf)-1-nprinted,
+						" WH   %5d*%5d %c%c%c%c\n"
+						, image->iw, image->ih
+						, labels[bayer[0]]
+						, labels[bayer[1]]
+						, labels[bayer[2]]
+						, labels[bayer[3]]
+					);
+				}
+				break;
+			}
+			nprinted+=snprintf(buf+nprinted, sizeof(buf)-1-nprinted,
+				"CWH %d*%5d*%5d preview\n"
+				, impreview->nch, impreview->iw, impreview->ih
+			);
+			//int nprinted=snprintf(buf, sizeof(buf)-1,
+			//	"\"%s\"\n"
+			//	"%td bytes  CWH %d*%d*%d"
+			//	, (char*)fn->data
+			//	, get_filesize((char*)fn->data)
+			//	, image->nch, image->iw, image->ih
+			//);
+			int cancel=messagebox(MBOX_OKCANCEL, "Info - Copy to clipboard?", buf);
+			if(!cancel)
+				copy_to_clipboard(buf, nprinted);
 		}
 		break;
 	case KEY_ESC:
@@ -479,7 +619,7 @@ int io_keydn(IOKey key, char c)
 					image_free(&image);
 					image=im2;
 					array_free(&fn);
-					fn=filter_path(fn2[0]->data, 1);
+					fn=filter_path(fn2[0]->data, -1, 0);
 					update_image(1, 1);
 				}
 				array_free(&filenames);
@@ -501,7 +641,7 @@ int io_keydn(IOKey key, char c)
 					image=im2;
 					if(fn)
 						array_free(&fn);
-					fn=filter_path(fn2->data, 1);
+					fn=filter_path(fn2->data, -1, 0);
 					update_image(1, 0);
 				}
 				array_free(&fn2);
@@ -719,54 +859,97 @@ int io_keydn(IOKey key, char c)
 				calc_hist();
 		}
 		return 1;
-	case 'X'://toggle horizontal profile plot
-		if(profileplotmode!=PROFILE_X)
-			profileplotmode=PROFILE_X;
-		else
-			profileplotmode=PROFILE_OFF;
+	case 'X':
+		if(GET_KEY_STATE(KEY_CTRL))//horizontal flip
+		{
+			image_inplacexflip(image, bayer);
+			update_image(0, 1);
+			break;
+		}
+		else//toggle horizontal profile plot
+		{
+			if(profileplotmode!=PROFILE_X)
+				profileplotmode=PROFILE_X;
+			else
+				profileplotmode=PROFILE_OFF;
+		}
 		return 1;
-	case 'Y'://toggle vertical profile plot
-		if(profileplotmode!=PROFILE_Y)
-			profileplotmode=PROFILE_Y;
-		else
-			profileplotmode=PROFILE_OFF;
+	case 'Y':
+		if(GET_KEY_STATE(KEY_CTRL))//vertical flip
+		{
+			image_inplaceyflip(image, bayer);
+			update_image(0, 1);
+			break;
+		}
+		else//toggle vertical profile plot
+		{
+			if(profileplotmode!=PROFILE_Y)
+				profileplotmode=PROFILE_Y;
+			else
+				profileplotmode=PROFILE_OFF;
+		}
 		return 1;
+	case 'R':case KEY_F5:
+		if(key=='R'&&GET_KEY_STATE(KEY_CTRL))//rotate 90 degrees
+		{
+			if(GET_KEY_STATE(KEY_SHIFT))//clockwise
+			{
+				image_inplacexflip(image, bayer);
+				image_transpose(&image, bayer);
+			}
+			else//counter-clockwise
+			{
+				image_transpose(&image, bayer);
+				image_inplacexflip(image, bayer);
+			}
+			update_image(0, 1);
+			break;
+		}
+		else if(fn)
+		{
+			Image16 *im2=0;
+			load_media(fn->data, &im2, 0);
+			if(im2)
+			{
+				image_free(&image);
+				image=im2;
+				update_image(0, 1);
+			}
+		}
+		break;
+	case 'T':
+		if(GET_KEY_STATE(KEY_CTRL))//transpose
+		{
+			image_transpose(&image, bayer);
+			update_image(0, 1);
+		}
+		break;
 	case KEY_QUOTE://toggle bitplane view
-		bitmode+=1-(GET_KEY_STATE(KEY_SHIFT)<<2);
-		MODVAR(bitmode, bitmode, 3);
-		if(bitmode&&bitplane==-1)
-			bitplane=imagedepth-1;
-		if(bitmode==1)
-			MODVAR(bitplane, bitplane, imagedepth);
+		switch(imagetype)
+		{
+		case IM_GRAYSCALEv2:
+			bitmode=!bitmode;
+			break;
+		case IM_RGBA:
+			bitmode+=1-(GET_KEY_STATE(KEY_SHIFT)<<2);
+			MODVAR(bitmode, bitmode, 3);
+			break;
+		case IM_BAYERv2:
+			bitmode=!bitmode;
+			break;
+		}
+		bitplane=bitplane_mreduce(bitplane);
 		update_image(0, 1);
 		break;
-	case KEY_LBRACKET://prev bitplane
+	case KEY_LBRACKET://'[': prev bitplane  MSB <- LSB
+	case KEY_RBRACKET://']': next bitplane  MSB -> LSB
 		if(bitmode)
 		{
-			int n=bitmode==2?imagedepth*3:imagedepth;
-			++bitplane;
-			MODVAR(bitplane, bitplane, n);
+			bitplane+=2*(key==KEY_LBRACKET)-1;
+			bitplane=bitplane_mreduce(bitplane);
 			update_image(0, 1);
 		}
 		break;
-	case KEY_RBRACKET://next bitplane
-		if(bitmode)
-		{
-			int n=bitmode==2?imagedepth*3:imagedepth;
-			--bitplane;
-			MODVAR(bitplane, bitplane, n);
-			update_image(0, 1);
-		}
-		break;
-	//case KEY_SPACE://what is this?
-	//	if(image)
-	//	{
-	//		if(imagetype==IM_BAYER)
-	//			test48(image, imagedepth, bayer);
-	//		else
-	//			test49(image, imagedepth);
-	//	}
-	//	break;
 	}
 	return 0;
 }
@@ -1162,17 +1345,16 @@ void io_render()
 			imtypestr,
 			imagedepth,
 			filesize,
-			(double)image->nch*image->iw*image->ih*image->depth/(8*filesize)
+			(double)image->nch*image->iw*image->ih*image->srcdepth/(8*filesize)
 		);
-		if(bitmode==1)
-			GUIPrint_append(0, 0, h-tdy, 1, 0, "  Bitplane %d", bitplane);
-		else if(bitmode==2)
-			GUIPrint_append(0, 0, h-tdy, 1, 0, "  Ch %d Bitplane %d", bitplane/imagedepth, bitplane%imagedepth);
+		if(bitmode==2)
+			GUIPrint_append(0, 0, h-tdy, 1, 0, "  Bitplane  %2d", bitplane);
+		else if(bitmode==1)
+			GUIPrint_append(0, 0, h-tdy, 1, 0, "  Bitplane%d:%2d", bitplane/imagedepth, bitplane%imagedepth);
 		if((unsigned)imx<(unsigned)impreview->iw&&(unsigned)imy<(unsigned)impreview->ih)
 		{
-			int idx=(impreview->iw*imy+imx)<<2;
-			unsigned char *p=impreview->data+idx;
-			unsigned short *p0=(unsigned short*)image->data+idx;
+			unsigned char *p=impreview->data+((ptrdiff_t)impreview->iw*imy+imx)*impreview->nch;
+			unsigned short *p0=(unsigned short*)image->data+((ptrdiff_t)image->iw*imy+imx)*image->nch;
 			switch(imagetype)
 			{
 			case IM_GRAYSCALEv2:

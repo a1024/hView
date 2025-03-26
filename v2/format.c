@@ -278,27 +278,9 @@ static int load_raw(const char *filename, Image16 **image, int erroronfail)
 	imagedepth=ceil_log2(decoder->color.maximum);
 	if(*(int*)bayer)
 	{
-#if 0
-		int iw3=(iw2+1)&~1, ih3=(ih2+1)&~1;
-		imagetype=IM_GRAYSCALEv2;
-		*image=image_alloc16(0, iw3, ih3, 1, imagedepth);
-		if(!*image)
-		{
-			LOG_WARNING("Alloc error");
-			return 0;
-		}
-		memset(image[0]->data, 0, sizeof(short)*iw3*ih3);
-		for(int ky=0;ky<ih2;++ky)//can't use memcpy because of odd->even dimension padding
-		{
-			const unsigned short *srcptr=(const unsigned short*)decoder->rawdata.raw_alloc+iw2*ky;
-			unsigned short *dstptr=image[0]->data+iw3*ky;
-			for(int kx=0;kx<iw2;++kx)
-				*dstptr++=*srcptr++;
-		}
-#endif
-#if 1
 		int iw3=(iw2+1)&~1, ih3=(ih2+1)&~1;
 		imagetype=IM_BAYERv2;
+	//	imagetype=IM_GRAYSCALEv2;
 		*image=image_alloc16(0, iw3, ih3, 1, imagedepth);
 		if(!*image)
 		{
@@ -318,7 +300,6 @@ static int load_raw(const char *filename, Image16 **image, int erroronfail)
 				*dstptr++=*srcptr++;
 		}
 		//memcpy(image[0]->data, decoder->rawdata.raw_alloc, sizeof(short)*iw2*ih2);
-#endif
 	}
 	else
 	{
@@ -333,43 +314,22 @@ static int load_raw(const char *filename, Image16 **image, int erroronfail)
 		for(ptrdiff_t k=0, res=(ptrdiff_t)4*iw2*ih2;k<res;k+=4)//set alpha to 1
 			image[0]->data[k+3]=(1<<imagedepth)-1;
 	}
-#if 1
 	switch(decoder->sizes.flip)
 	{
 	case 0:break;//upright
 	case 3://requires 180
-		image_inplacexflip(*image);
-		image_inplaceyflip(*image);
-		{
-			int temp;
-			SWAPVAR(bayer[0], bayer[3], temp);
-			SWAPVAR(bayer[1], bayer[2], temp);
-		}
+		image_inplacexflip(*image, bayer);
+		image_inplaceyflip(*image, bayer);
 		break;
-	case 5://requires 90 CCW	actually CW
-		image_inplacexflip(*image);
-		image_transpose(image);
-		{
-			int temp=bayer[0];
-			bayer[0]=bayer[1];
-			bayer[1]=bayer[3];
-			bayer[3]=bayer[2];
-			bayer[2]=temp;
-		}
+	case 5://requires 90 CCW	actually CW because y is negative
+		image_inplacexflip(*image, bayer);
+		image_transpose(image, bayer);
 		break;
-	case 6://requires 90 CW		actually CCW
-		image_transpose(image);
-		image_inplacexflip(*image);
-		{
-			int temp=bayer[0];
-			bayer[0]=bayer[2];
-			bayer[2]=bayer[3];
-			bayer[3]=bayer[1];
-			bayer[1]=temp;
-		}
+	case 6://requires 90 CW		actually CCW because y is negative
+		image_transpose(image, bayer);
+		image_inplacexflip(*image, bayer);
 		break;
 	}
-#endif
 	libraw_free_image(decoder);
 	libraw_close(decoder);
 	
