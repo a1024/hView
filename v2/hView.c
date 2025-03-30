@@ -3,6 +3,7 @@
 #include<stdlib.h>
 #include<string.h>
 #include<math.h>
+#include<sys/stat.h>
 static const char file[]=__FILE__;
 
 //active keys turn on timer
@@ -36,6 +37,9 @@ int imagedepth=0;
 char bayer[4]={0};//shift ammounts for the 4 Bayer mosaic components, -1 for grayscale, example: RGGB is {0, 8, 8, 16}
 int has_alpha=0;
 ptrdiff_t filesize=0;
+time_t created=0, lastmodified=0, lastaccess=0;
+struct tm datelastmodified={0};
+char strlastmodified[128]={0};
 unsigned char background[]={0, 0, 0, 255};
 
 static ArrayHandle vertices_text=0;
@@ -473,6 +477,7 @@ int io_keydn(IOKey key, char c)
 			char buf[1024]={0};
 			int nprinted=0;
 			ptrdiff_t usize=0;
+			time_t created2=0, lastmodified2=0, lastaccess2=0;
 			switch(imagetype)
 			{
 			case IM_GRAYSCALEv2:
@@ -487,25 +492,40 @@ int io_keydn(IOKey key, char c)
 			int extidx=0;
 			if(fn)
 			{
-				ptrdiff_t csize=get_filesize((char*)fn->data);
-				get_filetitle((char*)fn->data, (int)fn->count, 0, &extidx);
-				nprinted+=snprintf(buf+nprinted, sizeof(buf)-1-nprinted,
-					"\"%s\"\n"
-					"%11td bytes ("
-					, (char*)fn->data
-					, usize
-				);
-				nprinted+=print_memsize(buf+nprinted, sizeof(buf)-1-nprinted, usize, 8);
-				nprinted+=snprintf(buf+nprinted, sizeof(buf)-1-nprinted,
-					") bitmap\n"
-					"%11td bytes ("
-					, csize
-				);
-				nprinted+=print_memsize(buf+nprinted, sizeof(buf)-1-nprinted, csize, 8);
-				nprinted+=snprintf(buf+nprinted, sizeof(buf)-1-nprinted,
-					") %s\n"
-					, (char*)fn->data+extidx
-				);
+				struct stat info={0};
+				int e2=stat((char*)fn->data, &info);
+				if(e2)
+					nprinted+=snprintf(buf+nprinted, sizeof(buf)-1-nprinted,
+						"\"%s\"\n"
+						"INACCESSIBLE\n"
+						, (char*)fn->data
+					);
+				else
+				{
+					ptrdiff_t csize=info.st_size;
+				//	ptrdiff_t csize=get_filesize((char*)fn->data);
+					created2=info.st_ctime;
+					lastmodified2=info.st_mtime;
+					lastaccess2=info.st_atime;
+					get_filetitle((char*)fn->data, (int)fn->count, 0, &extidx);
+					nprinted+=snprintf(buf+nprinted, sizeof(buf)-1-nprinted,
+						"\"%s\"\n"
+						"%11td bytes ("
+						, (char*)fn->data
+						, usize
+					);
+					nprinted+=print_memsize(buf+nprinted, sizeof(buf)-1-nprinted, usize, 8);
+					nprinted+=snprintf(buf+nprinted, sizeof(buf)-1-nprinted,
+						") bitmap\n"
+						"%11td bytes ("
+						, csize
+					);
+					nprinted+=print_memsize(buf+nprinted, sizeof(buf)-1-nprinted, csize, 8);
+					nprinted+=snprintf(buf+nprinted, sizeof(buf)-1-nprinted,
+						") %s\n"
+						, (char*)fn->data+extidx
+					);
+				}
 			}
 			else
 			{
@@ -554,6 +574,16 @@ int io_keydn(IOKey key, char c)
 				"CWH %d*%5d*%5d preview\n"
 				, impreview->nch, impreview->iw, impreview->ih
 			);
+			if(created2)
+			{
+				struct tm date={0};
+				localtime_s(&date, &created2);
+				nprinted+=(int)strftime(buf+nprinted, sizeof(buf)-1-nprinted, "C %Y-%m-%d_%H%M%S\n", &date);
+				localtime_s(&date, &lastmodified2);
+				nprinted+=(int)strftime(buf+nprinted, sizeof(buf)-1-nprinted, "M %Y-%m-%d_%H%M%S\n", &date);
+				localtime_s(&date, &lastaccess2);
+				nprinted+=(int)strftime(buf+nprinted, sizeof(buf)-1-nprinted, "A %Y-%m-%d_%H%M%S\n", &date);
+			}
 
 			int cancel=messagebox(MBOX_OKCANCEL, "Copy to clipboard?", "%s", buf);
 			if(!cancel)
@@ -1372,7 +1402,8 @@ void io_render()
 		case IM_BAYERv2:	imtypestr="IM_BAYERv2";		break;
 		}
 		//g_printed=0;
-		GUIPrint_append(0, 0, h-tdy, 1, 0, "XY(%5d, %5d) / WH%5d x%5d  x%lf bright%d  %s  depth %d  %10td bytes %10.6lf:1",
+		GUIPrint_append(0, 0, h-tdy, 1, 0, "%s  XY(%5d, %5d) / WH%5d x%5d  x%lf bright%d  %s  depth %d  %10td bytes %10.6lf:1",
+			strlastmodified,
 			imx, imy, impreview->iw, impreview->ih,
 			zoom,
 			brightness,

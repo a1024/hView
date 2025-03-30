@@ -1,5 +1,6 @@
 #include"hView.h"
 #include<stdlib.h>
+#include<sys/stat.h>
 #include<libavformat/avformat.h>
 #include<libavcodec/avcodec.h>
 #include<libavutil/opt.h>
@@ -69,11 +70,20 @@ void* slic2_load(const char *filename, int *ret_iw, int *ret_ih, int *ret_nch, i
 
 static void update_globals(const char *fn, Image16 *image)//accesses globals
 {
-	filesize=get_filesize(fn);
-	if(filesize>0)
+	struct stat info={0};
+	int e2=stat(fn, &info);
+//	filesize=get_filesize(fn);
+	if(!e2)
 	{
 		int nch=0;
 		const unsigned short *data=image->data;
+		
+		filesize=info.st_size;
+		created=info.st_ctime;
+		lastmodified=info.st_mtime;
+		lastaccess=info.st_atime;
+		localtime_s(&datelastmodified, &lastmodified);
+		strftime(strlastmodified, sizeof(strlastmodified)-1, "M %Y-%m-%d_%H%M%S", &datelastmodified);
 
 		//if(imagedepth<16)
 		//{

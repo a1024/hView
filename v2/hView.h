@@ -4,6 +4,7 @@
 #ifndef INC_PXVIEW3D_H
 #define INC_PXVIEW3D_H
 #include"util.h"
+#include<time.h>
 #define WIN32_LEAN_AND_MEAN
 #include<Windows.h>
 #include<GL/gl.h>
@@ -704,6 +705,9 @@ extern char bayer[4];
 extern int debayer_on;
 extern int has_alpha;
 extern ptrdiff_t filesize;
+extern time_t created, lastmodified, lastaccess;
+extern struct tm datelastmodified;
+extern char strlastmodified[128];
 extern unsigned char background[4];
 extern int brightness;
 
