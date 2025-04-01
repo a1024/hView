@@ -54,7 +54,7 @@ void image_export(Image8 *dst, const Image16 *src, int imagetype)
 	CLAMP2(brightness, 0, imagedepth-8);
 	if(!dst||!src)
 	{
-		LOG_ERROR("image_export  src %zd  dst %zd", src, dst);
+		LOG_ERROR("image_export  src 0x%016zX  dst 0x%016zX", src, dst);
 		return;
 	}
 	const unsigned short *srcptr=src->data;

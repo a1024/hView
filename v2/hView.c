@@ -473,20 +473,23 @@ int io_keydn(IOKey key, char c)
 				"Ctrl H: Toggle hexadecimal pixel labels\n"
 				"P: Toggle pixel label source\n"
 				"X/Y: Toggle horizontal/vertical cross-section profiles\n"
-				"\n"
 				"Quote: Toggle bitplane view\n"
 				"Brackets: Select bitplane\n"
+				"F1: Controls\n"
+				"F2: Metadata\n"
+				"\n"
+				"%s\n"
 				"%s %s\n"
-				"%s"
-				, __DATE__, __TIME__
 				, ver?ver:""
+				, __DATE__, __TIME__
 			);
 			free(ver);
 		}
 		break;
 	case KEY_F2://info
+		if(image&&impreview)
 		{
-			char buf[1024]={0};
+			char buf[2048]={0};
 			int nprinted=0;
 			ptrdiff_t usize=0;
 			time_t created2=0, lastmodified2=0, lastaccess2=0;
@@ -550,6 +553,7 @@ int io_keydn(IOKey key, char c)
 				nprinted+=print_memsize(buf+nprinted, sizeof(buf)-1-nprinted, usize, 8);
 				nprinted+=snprintf(buf+nprinted, sizeof(buf)-1-nprinted, ") bitmap\n");
 			}
+			nprinted+=snprintf(buf+nprinted, sizeof(buf)-1-nprinted, "\n");
 			switch(imagetype)
 			{
 			default://make gcc happy
@@ -593,6 +597,7 @@ int io_keydn(IOKey key, char c)
 			if(created2)
 			{
 				struct tm date={0};
+				nprinted+=snprintf(buf+nprinted, sizeof(buf)-1-nprinted, "\n");
 				localtime_s(&date, &created2);
 				nprinted+=(int)strftime(buf+nprinted, sizeof(buf)-1-nprinted, "%Y-%m-%d_%H%M%S Created\n", &date);
 				localtime_s(&date, &lastmodified2);

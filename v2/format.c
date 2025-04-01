@@ -1376,34 +1376,37 @@ static void load_ffmpeg()
 	if(ffmpeg_ready)
 		return;
 	api_load(&handle_avformat,
+		"avformat-61"
 #ifdef _WIN32
-		"avformat-60.dll",
+		".dll",
 #elif defined __linux__
-		"avformat-60.so",
+		".so",
 #endif
 		&avformat, symnames_avformat, _countof(symnames_avformat)
 	);
 	api_load(&handle_avcodec,
+		"avcodec-61"
 #ifdef _WIN32
-		"avcodec-60.dll",
+		".dll",
 #elif defined __linux__
-		"avcodec-60.so",
+		".so",
 #endif
 		&avcodec, symnames_avcodec, _countof(symnames_avcodec)
 	);
 	api_load(&handle_avutil,
 #ifdef _WIN32
-		"avutil-58.dll",
+		"avutil-59.dll",
 #elif defined __linux__
-		"avutil-58.so",
+		"avutil-59.so",
 #endif
 		&avutil, symnames_avutil, _countof(symnames_avutil)
 	);
 	api_load(&handle_swscale,
+		"swscale-8"
 #ifdef _WIN32
-		"swscale-7.dll",
+		".dll",
 #elif defined __linux__
-		"swscale-7.so",
+		".so",
 #endif
 		&swscale, symnames_swscale, _countof(symnames_swscale)
 	);
@@ -1450,6 +1453,11 @@ int load_media(const char *filename, Image16 **image, int erroronfail)
 			image[0]->data[k+3]=im2[k+3];
 		}
 		free(im2);
+		has_alpha=nch==4;
+		imagetype=IM_RGBA;
+		imagedepth=8;
+		*(int*)bayer=0;
+		update_globals(filename, *image);
 		return 0;
 	}
 	int len=(int)strlen(filename);
@@ -2101,7 +2109,6 @@ char* get_codecinfo(void)//don't forget to free(mem)
 		ptr+=snprintf(ptr, end-ptr, "FFmpeg:\tNot found\n");
 	else
 	{
-	//	ptr+=snprintf(ptr, end-ptr, "FFmpeg:\n");
 		ver=LIBAVCODEC_VERSION_INT;
 		print_version(&ptr, end, "avcodec", ver>>16&255, ver>>8&255, ver&255, 0);
 		ver=avcodec.avcodec_version();
@@ -2121,64 +2128,27 @@ char* get_codecinfo(void)//don't forget to free(mem)
 		print_version(&ptr, end, "swscale", ver>>16&255, ver>>8&255, ver&255, 1);
 	}
 	
+	ptr+=snprintf(ptr, end-ptr, "\n");
 	apiload_libheif();
 	if(handle_libheif==(void*)-1)
 		ptr+=snprintf(ptr, end-ptr, "libheif:\tNot found\n");
 	else
 	{
-		ptr+=snprintf(ptr, end-ptr, "\n");
 		ver=LIBHEIF_NUMERIC_VERSION;//0xHHMMLL00
 		print_version(&ptr, end, "libheif", ver>>24&255, ver>>16&255, ver>>8&255, 0);
 		ver=libheif.heif_get_version_number();//0xHHMMLL00
 		print_version(&ptr, end, "libheif", ver>>24&255, ver>>16&255, ver>>8&255, 1);
 	}
-
+	
+	ptr+=snprintf(ptr, end-ptr, "\n");
 	apiload_libraw();
 	if(handle_libraw==(void*)-1)
 		ptr+=snprintf(ptr, end-ptr, "libraw:\tNot found\n");
 	else
 	{
-		ptr+=snprintf(ptr, end-ptr, "\n");
 		ver=libraw.libraw_versionNumber();
 		print_version(&ptr, end, "libraw", ver>>16&255, ver>>8&255, ver&255, 1);
 	}
-
 	return str;
 #undef BUFLEN
-#if 0
-	int printed=0;
-//	printed+=snprintf(g_buf+printed, sizeof(g_buf)-1-printed, "FFmpeg:\n");
-	//LIBAVCODEC_VERSION_INT
-	unsigned ver=avcodec_version();
-	printed+=snprintf(g_buf+printed, sizeof(g_buf)-1-printed,
-		"%-10s %u.%u.%u\n",
-		"avcodec", ver>>16&255, ver>>8&255, ver&255
-	);
-	ver=avformat_version();
-	printed+=snprintf(g_buf+printed, sizeof(g_buf)-1-printed,
-		"%-10s %u.%u.%u\n",
-		"avformat", ver>>16&255, ver>>8&255, ver&255
-	);
-	ver=avutil_version();
-	printed+=snprintf(g_buf+printed, sizeof(g_buf)-1-printed,
-		"%-10s %u.%u.%u\n",
-		"avutil", ver>>16&255, ver>>8&255, ver&255
-	);
-	ver=swscale_version();
-	printed+=snprintf(g_buf+printed, sizeof(g_buf)-1-printed,
-		"%-10s %u.%u.%u\n",
-		"swscale", ver>>16&255, ver>>8&255, ver&255
-	);
-
-	ver=LIBHEIF_NUMERIC_VERSION;
-	printed+=snprintf(g_buf+printed, sizeof(g_buf)-1-printed,
-		"%-10s %u.%u.%u .h\n",
-		"libheif", ver>>24&255, ver>>16&255, ver>>8&255
-	);
-	ver=heif_get_version_number();//0xHHMMLL00
-	printed+=snprintf(g_buf+printed, sizeof(g_buf)-1-printed,
-		"%-10s %u.%u.%u .dll\n",
-		"libheif", ver>>24&255, ver>>16&255, ver>>8&255
-	);
-#endif
 }
