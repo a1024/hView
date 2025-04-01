@@ -366,6 +366,7 @@ int sys_check(const char *file, int line, const char *info)
 		size_t size=FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER|FORMAT_MESSAGE_FROM_SYSTEM|FORMAT_MESSAGE_IGNORE_INSERTS, NULL, error, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPSTR)&messageBuffer, 0, NULL);
 		log_error(file, line, 1, "%s%sGetLastError() returned %d: %s", info?info:"", info?"\n":"", error, messageBuffer);
 		LocalFree(messageBuffer);
+		(void)size;
 	}
 	return 0;
 }
@@ -419,12 +420,12 @@ int messagebox(MessageBoxType type, const char *title, const char *format, ...)/
 	return result;
 }
 
-static void free_pchar(void *data)
-{
-	char **str=(char**)data;
-	free(*str);
-	*str=0;
-}
+//static void free_pchar(void *data)
+//{
+//	char **str=(char**)data;
+//	free(*str);
+//	*str=0;
+//}
 ArrayHandle dialog_open_folder()
 {
 	ArrayHandle arr=0;
@@ -708,6 +709,7 @@ Image8 *paste_bmp_from_clipboard()
 			int copied=GetDIBits(hDC2, hBm2, 0, s.cy, image->data, &bmh, DIB_RGB_COLORS);
 			hBm2=(HBITMAP)SelectObject(hDC2, hBm2);
 			DeleteDC(hDC2);
+			(void)copied;
 		}
 		break;
 	case CF_DIBV5://added 20210402
@@ -822,6 +824,7 @@ Image8 *paste_bmp_from_clipboard()
 		break;
 	}
 	CloseClipboard();
+	(void)size;
 	return image;
 }
 
@@ -878,7 +881,7 @@ void swapbuffers()
 {
 	SwapBuffers(ghDC);
 }
-LRESULT __stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM lParam)
+static LRESULT __stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPARAM lParam)
 {
 	switch(message)
 	{
@@ -1049,7 +1052,11 @@ int __stdcall WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrev, _In_ c
 	}
 
 	ShowWindow(ghWnd, nShowCmd);
-
+	
+#if defined __GNUC__ && defined _WIN32
+	console_start();
+	console_end();
+#endif
 	int ret;
 	for(;;)
 	{

@@ -116,15 +116,18 @@ int console_scan(char *buf, int len)
 int console_scan_int()
 {
 	int read=console_scan(g_buf2, G_BUF_SIZE);
+	(void)read;
 	return atoi(g_buf2);
 }
 double console_scan_float()
 {
 	int read=console_scan(g_buf2, G_BUF_SIZE);
+	(void)read;
 	return atof(g_buf2);
 }
 void console_pause()
 {
 	console_log("Enter 0 to continue... ");
 	int k=console_scan(g_buf2, G_BUF_SIZE);
+	(void)k;
 }

@@ -34,7 +34,7 @@ Image16 *image=0;
 Image8 *impreview=0;
 ImageType imagetype=IM_UNINITIALIZED;
 int imagedepth=0;
-char bayer[4]={0};//shift ammounts for the 4 Bayer mosaic components, -1 for grayscale, example: RGGB is {0, 8, 8, 16}
+char bayer[4]={0};//indices for the 4 Bayer mosaic components, example: RGGB is {0, 1, 1, 2}
 int has_alpha=0;
 ptrdiff_t filesize=0;
 time_t created=0, lastmodified=0, lastaccess=0;
@@ -91,7 +91,6 @@ static void equalize_ch(const unsigned short *src, unsigned char *dst, int iw, i
 	int mask=nlevels-1;
 	if(!(disableZS&1))
 		memset(hist, 0, nlevels*sizeof(int));
-	int res=iw*ih;
 	for(int ky=0;ky<ih;++ky)
 	{
 		const unsigned short *srcptr=src+srcystride*ky;
@@ -132,8 +131,10 @@ static void equalize(void)
 	}
 	switch(imagetype)
 	{
+	default://make gcc happy
+		break;
 	case IM_GRAYSCALEv2:
-		equalize_ch((unsigned short*)image->data, impreview->data, image->iw, image->ih, 1, image->iw, hist, nlevels, 0);
+		equalize_ch(image->data, impreview->data, image->iw, image->ih, 1, image->iw, hist, nlevels, 0);
 		for(ptrdiff_t k=0, res=(ptrdiff_t)4*impreview->iw*impreview->ih;k<res;k+=4)//broadcast channel
 		{
 			impreview->data[k+1]=impreview->data[k];
@@ -141,9 +142,9 @@ static void equalize(void)
 		}
 		break;
 	case IM_RGBA:
-		equalize_ch((unsigned short*)image->data+0, impreview->data+0, image->iw, image->ih, 4, image->iw<<2, hist, nlevels, 0);
-		equalize_ch((unsigned short*)image->data+1, impreview->data+1, image->iw, image->ih, 4, image->iw<<2, hist, nlevels, 0);
-		equalize_ch((unsigned short*)image->data+2, impreview->data+2, image->iw, image->ih, 4, image->iw<<2, hist, nlevels, 0);
+		equalize_ch(image->data+0, impreview->data+0, image->iw, image->ih, 4, image->iw<<2, hist, nlevels, 0);
+		equalize_ch(image->data+1, impreview->data+1, image->iw, image->ih, 4, image->iw<<2, hist, nlevels, 0);
+		equalize_ch(image->data+2, impreview->data+2, image->iw, image->ih, 4, image->iw<<2, hist, nlevels, 0);
 		break;
 	case IM_BAYERv2://FIXME bayer matrix
 		for(int kc=0, assigned=0;kc<4;++kc)//green first
@@ -151,7 +152,7 @@ static void equalize(void)
 			if(bayer[kc]==1)
 			{
 				equalize_ch(
-					(unsigned short*)image->data+image->iw*(kc>>1)+(kc&1),
+					image->data+image->iw*(kc>>1)+(kc&1),
 					impreview->data+1, image->iw>>1, image->ih>>1,
 					2, image->iw*2,
 					hist, nlevels, assigned?1:2
@@ -159,12 +160,12 @@ static void equalize(void)
 				assigned=1;
 			}
 		}
-		for(int kc=0, assigned=0;kc<4;++kc)
+		for(int kc=0;kc<4;++kc)
 		{
 			if(bayer[kc]!=1)
 			{
 				equalize_ch(
-					(unsigned short*)image->data+image->iw*(kc>>1)+(kc&1),
+					image->data+image->iw*(kc>>1)+(kc&1),
 					impreview->data+bayer[kc], image->iw>>1, image->ih>>1,
 					2, image->iw*2,
 					hist, nlevels, 0
@@ -191,6 +192,8 @@ static void update_image(int settitle, int render)
 			image_free(&impreview);
 		switch(imagetype)
 		{
+		default://make gcc happy
+			break;
 		case IM_GRAYSCALEv2:
 			impreview=image_alloc8(0, image->iw, image->ih, 4, 8);
 			break;
@@ -210,6 +213,8 @@ static void update_image(int settitle, int render)
 		int srcidx, dstidx;
 		switch(imagetype)
 		{
+		default://make gcc happy
+			break;
 		case IM_GRAYSCALEv2:
 			for(int ky=0;ky<image->ih;++ky)
 			{
@@ -226,7 +231,8 @@ static void update_image(int settitle, int render)
 		case IM_RGBA:
 			if(bitmode==1)//monochrome bitplanes
 			{
-				int kb=bitplane%imagedepth, kc=bitplane/imagedepth;
+				int kb=bitplane%imagedepth;
+			//	int kc=bitplane/imagedepth;
 				for(int ky=0;ky<image->ih;++ky)
 				{
 					for(int kx=0;kx<image->iw;++kx)
@@ -292,6 +298,8 @@ static int bitplane_mreduce(int bitplane)
 {
 	switch(imagetype)
 	{
+	default://make gcc happy
+		break;
 	case IM_GRAYSCALEv2:
 		if(bitmode)
 			MODVAR(bitplane, bitplane, imagedepth);
@@ -413,10 +421,12 @@ int io_keydn(IOKey key, char c)
 	{
 		switch(key)
 		{
+		default://make gcc happy
+			break;
 		case 'A'://set alpha to one
 			if(imagetype==IM_RGBA)
 			{
-				unsigned short *data=(unsigned short*)image->data;
+				unsigned short *data=image->data;
 				ptrdiff_t res=image->iw*image->ih;
 				for(ptrdiff_t k=0;k<res;++k)
 					data[k<<2|3]=0xFFFF;
@@ -439,6 +449,8 @@ int io_keydn(IOKey key, char c)
 	}
 	switch(key)
 	{
+	default://make gcc happy
+		break;
 	case KEY_F1:
 		{
 			char *ver=get_codecinfo();
@@ -480,6 +492,8 @@ int io_keydn(IOKey key, char c)
 			time_t created2=0, lastmodified2=0, lastaccess2=0;
 			switch(imagetype)
 			{
+			default://make gcc happy
+				break;
 			case IM_GRAYSCALEv2:
 			case IM_RGBA:
 				usize=(ptrdiff_t)ceil((double)image->srcnch*image->iw*image->ih*log2(image->nlevels0)/8);
@@ -538,6 +552,8 @@ int io_keydn(IOKey key, char c)
 			}
 			switch(imagetype)
 			{
+			default://make gcc happy
+				break;
 			case IM_GRAYSCALEv2:
 				nprinted+=snprintf(buf+nprinted, sizeof(buf)-1-nprinted,
 					"CWH %d*%5d*%5d G\n"
@@ -562,10 +578,10 @@ int io_keydn(IOKey key, char c)
 					nprinted+=snprintf(buf+nprinted, sizeof(buf)-1-nprinted,
 						" WH   %5d*%5d %c%c%c%c\n"
 						, image->iw, image->ih
-						, labels[bayer[0]]
-						, labels[bayer[1]]
-						, labels[bayer[2]]
-						, labels[bayer[3]]
+						, labels[(int)bayer[0]]
+						, labels[(int)bayer[1]]
+						, labels[(int)bayer[2]]
+						, labels[(int)bayer[3]]
 					);
 				}
 				break;
@@ -578,11 +594,11 @@ int io_keydn(IOKey key, char c)
 			{
 				struct tm date={0};
 				localtime_s(&date, &created2);
-				nprinted+=(int)strftime(buf+nprinted, sizeof(buf)-1-nprinted, "C %Y-%m-%d_%H%M%S\n", &date);
+				nprinted+=(int)strftime(buf+nprinted, sizeof(buf)-1-nprinted, "%Y-%m-%d_%H%M%S Created\n", &date);
 				localtime_s(&date, &lastmodified2);
-				nprinted+=(int)strftime(buf+nprinted, sizeof(buf)-1-nprinted, "M %Y-%m-%d_%H%M%S\n", &date);
+				nprinted+=(int)strftime(buf+nprinted, sizeof(buf)-1-nprinted, "%Y-%m-%d_%H%M%S Modified\n", &date);
 				localtime_s(&date, &lastaccess2);
-				nprinted+=(int)strftime(buf+nprinted, sizeof(buf)-1-nprinted, "A %Y-%m-%d_%H%M%S\n", &date);
+				nprinted+=(int)strftime(buf+nprinted, sizeof(buf)-1-nprinted, "%Y-%m-%d_%H%M%S Accessed\n", &date);
 			}
 
 			int cancel=messagebox(MBOX_OKCANCEL, "Copy to clipboard?", "%s", buf);
@@ -638,7 +654,7 @@ int io_keydn(IOKey key, char c)
 					break;
 				}
 			}
-			ArrayHandle filenames=get_filenames(path->data, 0, 0, 1), *fn2;
+			ArrayHandle filenames=get_filenames((char*)path->data, 0, 0, 1), *fn2;
 			if(filenames&&filenames->count)
 			{
 				array_free(&path);
@@ -646,7 +662,7 @@ int io_keydn(IOKey key, char c)
 				for(int k=0;k<(int)filenames->count;++k)
 				{
 					fn2=array_at(&filenames, k);
-					if(!strcmp(fn2[0]->data, fn->data))
+					if(!strcmp((char*)fn2[0]->data, (char*)fn->data))
 					{
 						currentidx=k;
 						break;
@@ -657,7 +673,7 @@ int io_keydn(IOKey key, char c)
 				for(int k=currentidx+step;MODVAR(k, k, (int)filenames->count), k!=currentidx;k+=step)
 				{
 					fn2=array_at(&filenames, k);
-					if(!load_media(fn2[0]->data, &im2, 0))
+					if(!load_media((char*)fn2[0]->data, &im2, 0))
 					{
 						currentidx=k;
 						break;
@@ -670,7 +686,7 @@ int io_keydn(IOKey key, char c)
 					image_free(&image);
 					image=im2;
 					array_free(&fn);
-					fn=filter_path(fn2[0]->data, -1, 0);
+					fn=filter_path((char*)fn2[0]->data, -1, 0);
 					update_image(1, 1);
 				}
 				array_free(&filenames);
@@ -685,14 +701,14 @@ int io_keydn(IOKey key, char c)
 			if(fn2)
 			{
 				Image16 *im2=0;
-				int error=load_media(fn2->data, &im2, 1);
+				int error=load_media((char*)fn2->data, &im2, 1);
 				if(im2&&!error)
 				{
 					image_free(&image);
 					image=im2;
 					if(fn)
 						array_free(&fn);
-					fn=filter_path(fn2->data, -1, 0);
+					fn=filter_path((char*)fn2->data, -1, 0);
 					update_image(1, 0);
 				}
 				array_free(&fn2);
@@ -783,6 +799,8 @@ int io_keydn(IOKey key, char c)
 					format=" %5d";
 				switch(imagetype)
 				{
+				default://make gcc happy
+					break;
 				case IM_GRAYSCALEv2:
 					{
 						str_append(&str, "%d bit GRAY:\n", imagedepth);
@@ -828,7 +846,13 @@ int io_keydn(IOKey key, char c)
 					{
 						const char labels[]="RGB";
 						const unsigned short *ptr=(const unsigned short*)image->data;
-						str_append(&str, "%d bit %c%c%c%c:\n", imagedepth, labels[bayer[0]], labels[bayer[1]], labels[bayer[2]], labels[bayer[3]]);
+						str_append(&str, "%d bit %c%c%c%c:\n"
+							, imagedepth
+							, labels[(int)bayer[0]]
+							, labels[(int)bayer[1]]
+							, labels[(int)bayer[2]]
+							, labels[(int)bayer[3]]
+						);
 						int iy=MAXVAR(iy1, 0)&~1, yend=MINVAR(iy2+2, image->ih);
 						for(;iy<yend;++iy)
 						{
@@ -959,7 +983,7 @@ int io_keydn(IOKey key, char c)
 		else if(fn)
 		{
 			Image16 *im2=0;
-			load_media(fn->data, &im2, 0);
+			load_media((char*)fn->data, &im2, 0);
 			if(im2)
 			{
 				image_free(&image);
@@ -978,6 +1002,8 @@ int io_keydn(IOKey key, char c)
 	case KEY_QUOTE://toggle bitplane view
 		switch(imagetype)
 		{
+		default://make gcc happy
+			break;
 		case IM_GRAYSCALEv2:
 			bitmode=!bitmode;
 			break;
@@ -1008,6 +1034,8 @@ int io_keyup(IOKey key, char c)
 {
 	switch(key)
 	{
+	default://make gcc happy
+		break;
 	case KEY_LBUTTON:
 		if(drag==DRAG_IMAGE)//stop dragging
 		{
@@ -1150,6 +1178,8 @@ static void draw_profile_x(int comp, int color)//horizontal cross-section profil
 		int lgstride=0;
 		switch(imagetype)
 		{
+		default://make gcc happy
+			break;
 		case IM_GRAYSCALEv2:
 			row=image->data+((size_t)image->iw*iy);
 			lgstride=0;
@@ -1164,17 +1194,16 @@ static void draw_profile_x(int comp, int color)//horizontal cross-section profil
 		//	row=image->data+((image->iw*iy+(comp&1))<<2|bayer[comp]);
 			lgstride=2;
 			break;
-		default:
-			return;
 		}
 		int ix;
 		float y2;
 		int nlevels=(1<<imagedepth)-1;
 		float gain=(h>>1)/(float)nlevels;
+		int mask=imagetype==IM_BAYERv2;
 		for(int kx=0;kx<w;++kx)
 		{
 			ix=screen2image_x_int(kx);
-			ix&=~(imagetype==IM_BAYERv2);
+			ix&=~mask;
 			if((unsigned)ix<(unsigned)image->iw)
 				y2=h-tdy-row[ix<<lgstride]*gain;
 			else
@@ -1193,6 +1222,8 @@ static void draw_profile_y(int comp, int color)//vertical cross-section profile
 		int stride=0;
 		switch(imagetype)
 		{
+		default://make gcc happy
+			break;
 		case IM_GRAYSCALEv2:
 			col=image->data+ix;
 			stride=image->iw;
@@ -1207,18 +1238,17 @@ static void draw_profile_y(int comp, int color)//vertical cross-section profile
 		//	col=image->data+((ix+(image->iw&-(comp>>1)))<<2|bayer[comp]);
 			stride=image->iw<<1;
 			break;
-		default:
-			return;
 		}
 		
 		float x2;
 		int iy;
 		int nlevels=(1<<imagedepth)-1;
 		float gain=(w>>1)/(float)nlevels;
+		int mask=imagetype==IM_BAYERv2;
 		for(int ky=0;ky<h;++ky)
 		{
 			iy=screen2image_y_int(ky);
-			iy&=~(imagetype==IM_BAYERv2);
+			iy&=~mask;
 			if((unsigned)iy<(unsigned)image->ih)
 				x2=col[iy*stride]*gain;
 			else
@@ -1238,10 +1268,11 @@ static void draw_profile_x_preview(int comp, int color)//horizontal cross-sectio
 		int ix;
 		float y2;
 		float gain=(h>>1)/255.f;
+		int mask=imagetype==IM_BAYERv2;
 		for(int kx=0;kx<w;++kx)
 		{
 			ix=screen2image_x_int(kx);
-			ix&=~(imagetype==IM_BAYERv2);
+			ix&=~mask;
 			if((unsigned)ix<(unsigned)impreview->iw)
 				y2=h-tdy-row[ix<<lgstride]*gain;
 			else
@@ -1262,10 +1293,11 @@ static void draw_profile_y_preview(int comp, int color)//vertical cross-section 
 		float x2;
 		int iy;
 		float gain=(w>>1)/255.f;
+		int mask=imagetype==IM_BAYERv2;
 		for(int ky=0;ky<h;++ky)
 		{
 			iy=screen2image_y_int(ky);
-			iy&=~(imagetype==IM_BAYERv2);
+			iy&=~mask;
 			if((unsigned)iy<(unsigned)impreview->ih)
 				x2=col[iy*stride]*gain;
 			else
@@ -1334,16 +1366,18 @@ void io_render()
 			}
 			else if(imagetype==IM_BAYERv2)
 			{
-				print_pixellabels(ix1, ix2, iy1, iy2, 0, 0, 0, labels[bayer[0]], theme[bayer[0]], 1, tight);
-				print_pixellabels(ix1, ix2, iy1, iy2, 1, 0, 0, labels[bayer[1]], theme[bayer[1]], 1, tight);
-				print_pixellabels(ix1, ix2, iy1, iy2, 0, 1, 0, labels[bayer[2]], theme[bayer[2]], 1, tight);
-				print_pixellabels(ix1, ix2, iy1, iy2, 1, 1, 0, labels[bayer[3]], theme[bayer[3]], 1, tight);
+				print_pixellabels(ix1, ix2, iy1, iy2, 0, 0, 0, labels[(int)bayer[0]], theme[(int)bayer[0]], 1, tight);
+				print_pixellabels(ix1, ix2, iy1, iy2, 1, 0, 0, labels[(int)bayer[1]], theme[(int)bayer[1]], 1, tight);
+				print_pixellabels(ix1, ix2, iy1, iy2, 0, 1, 0, labels[(int)bayer[2]], theme[(int)bayer[2]], 1, tight);
+				print_pixellabels(ix1, ix2, iy1, iy2, 1, 1, 0, labels[(int)bayer[3]], theme[(int)bayer[3]], 1, tight);
 			}
 		}
 		if(hist_on)
 		{
 			switch(imagetype)
 			{
+			default://make gcc happy
+				break;
 			case IM_GRAYSCALEv2:
 				draw_histogram(histogram, 256, 0x80808080, (int)tdy, (int)(h-tdy));
 				break;
@@ -1374,6 +1408,8 @@ void io_render()
 				draw_profile=profileplotmode==PROFILE_X?draw_profile_x:draw_profile_y;
 				switch(imagetype)
 				{
+				default://make gcc happy
+					break;
 				case IM_GRAYSCALEv2:
 					draw_profile(0, 0xFF000000);
 					break;
@@ -1396,6 +1432,8 @@ void io_render()
 		const char *imtypestr="?";
 		switch(imagetype)
 		{
+		default://make gcc happy
+			break;
 		case IM_UNINITIALIZED:	imtypestr="IM_UNINITIALIZED";	break;
 		case IM_GRAYSCALEv2:	imtypestr="IM_GRAYSCALEv2";	break;
 		case IM_RGBA:		imtypestr="IM_RGBA";		break;
@@ -1422,6 +1460,8 @@ void io_render()
 			unsigned short *p0=(unsigned short*)image->data+((ptrdiff_t)image->iw*imy+imx)*image->nch;
 			switch(imagetype)
 			{
+			default://make gcc happy
+				break;
 			case IM_GRAYSCALEv2:
 				if(has_alpha)
 					GUIPrint_append(0, 0, h-tdy, 1, 0, "  GRAY_ALPHA(%3d, %3d)=0x%04X%04X",
@@ -1436,22 +1476,26 @@ void io_render()
 					long long color;
 					memcpy(&color, p0, sizeof(color));
 					GUIPrint_append(0, 0, h-tdy, 1, 0, "  RGBA(%3d, %3d, %3d, %3d)=0x%016llX",
-						(unsigned)p[0], (unsigned)p[1], (unsigned)p[2], (unsigned)p[3], color
+						(unsigned)p[0],
+						(unsigned)p[1],
+						(unsigned)p[2],
+						(unsigned)p[3],
+						color
 					);
 				}
 				break;
 			case IM_BAYERv2:
 				{
 					const char labels[]="RGB";
-					int comp=(imy&1)<<1|imx&1;
+					int comp=(imy&1)<<1|(imx&1);
 					GUIPrint_append(0, 0, h-tdy, 1, 0, "  %c%c%c%c  %c(%5d/%5d)=0x%04X",
-						labels[bayer[0]],
-						labels[bayer[1]],
-						labels[bayer[2]],
-						labels[bayer[3]],
-						labels[bayer[comp]],
-						(unsigned)p0[bayer[comp]], image->nlevels0,
-						(unsigned)p0[bayer[comp]]
+						labels[(int)bayer[0]],
+						labels[(int)bayer[1]],
+						labels[(int)bayer[2]],
+						labels[(int)bayer[3]],
+						labels[(int)bayer[comp]],
+						(unsigned)p0[(int)bayer[comp]], image->nlevels0,
+						(unsigned)p0[(int)bayer[comp]]
 					);
 				}
 				break;
@@ -1468,7 +1512,7 @@ void io_render()
 		//else
 		//	GUIPrint(0, 0, h-tdy, 1, "XY(%d, %d) / WH %dx%d  x%lf  %s  %d bit", imx, imy, impreview->iw, impreview->ih, zoom, imtypestr, imagedepth);
 	}
-	extern int mouse_bypass;
+	//extern int mouse_bypass;
 	static double t=0;
 	double t2=time_sec();
 	GUIPrint(0, 0, 0, 1, "fps %lf", t2?1/(t2-t):0);
@@ -1489,4 +1533,6 @@ int io_quit_request()//return 1 to exit
 }
 void io_cleanup()//cleanup
 {
+	image_free(&image);
+	image_free(&impreview);
 }

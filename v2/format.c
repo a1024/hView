@@ -1,6 +1,9 @@
 #include"hView.h"
 #include<stdlib.h>
 #include<sys/stat.h>
+#ifndef _WIN32
+#include<dlfcn.h>
+#endif
 #include<libavformat/avformat.h>
 #include<libavcodec/avcodec.h>
 #include<libavutil/opt.h>
@@ -9,18 +12,8 @@
 #include<libavfilter/buffersrc.h>
 #include<libavfilter/buffersink.h>
 #include<libswscale/swscale.h>
-#ifdef _MSC_VER
-#pragma comment(lib, "avcodec.lib")
-#pragma comment(lib, "avformat.lib")
-#pragma comment(lib, "avutil.lib")
-#pragma comment(lib, "swscale.lib")
-#endif
 #ifdef HVIEW_INCLUDE_LIBHEIF
 #include<libheif/heif.h>
-#ifdef _MSC_VER
-#pragma comment(lib, "libheif-1.lib")
-#pragma comment(lib, "liblibde265.lib")
-#endif
 #define CHECK_LIBHEIF(E)\
 	do\
 	{\
@@ -31,38 +24,33 @@
 			return -1;\
 		}\
 	}while(0)
-//#define CHECK_LIBHEIF(E) (!(E).code||LOG_WARNING("%s", (E).message))
 #endif
 #ifdef HVIEW_INCLUDE_LIBRAW
 #include<libraw/libraw.h>
-#ifdef _MSC_VER
-#pragma comment(lib, "libraw.lib")
-#endif
 #define CHECK_LIBRAW(E)\
 	do\
 	{\
 		if(E)\
 		{\
 			if(erroronfail)\
-				LOG_WARNING("Libraw error %d: %s", E, libraw_strerror(E));\
+				LOG_WARNING("Libraw error %d: %s", E, libraw.libraw_strerror(E));\
 			return -1;\
 		}\
 	}while(0)
-//#define CHECK_LIBRAW(E) ((E)==LIBRAW_SUCCESS||LOG_WARNING("Libraw error %d: %s", E, libraw_strerror(E)))
 #endif
 static const char file[]=__FILE__;
 
+static char ffmpegerror[AV_ERROR_MAX_STRING_SIZE]={0};
 #define CHECK_AV(E)\
 	do\
 	{\
 		if(E<0)\
 		{\
 			if(erroronfail)\
-				LOG_WARNING("%s", av_err2str(E));\
+				LOG_WARNING("%s", avutil.av_strerror(E, ffmpegerror, AV_ERROR_MAX_STRING_SIZE));\
 			return -1;\
 		}\
 	}while(0)
-//#define CHECK_AV(E) (!(E)||LOG_WARNING("%s", av_err2str(E)))
 
 int   slic2_save(const char *filename, int iw, int ih, int nch, int depth, const void *src);
 void* slic2_load(const char *filename, int *ret_iw, int *ret_ih, int *ret_nch, int *ret_depth, int *ret_dummy_alpha, int force_alpha);
@@ -75,7 +63,7 @@ static void update_globals(const char *fn, Image16 *image)//accesses globals
 //	filesize=get_filesize(fn);
 	if(!e2)
 	{
-		int nch=0;
+		//int nch=0;
 		const unsigned short *data=image->data;
 		
 		filesize=info.st_size;
@@ -105,7 +93,7 @@ static void update_globals(const char *fn, Image16 *image)//accesses globals
 		{
 		case IM_GRAYSCALEv2:
 			has_alpha=0;//FIXME G+A
-			nch=1;
+			//nch=1;
 			break;
 		case IM_RGBA:
 			{
@@ -138,7 +126,9 @@ static void update_globals(const char *fn, Image16 *image)//accesses globals
 			break;
 		case IM_BAYERv2:
 			has_alpha=0;
-			nch=1;
+			//nch=1;
+			break;
+		default://make gcc happy
 			break;
 		}
 		//format_CR=(double)image->iw*image->ih*imagedepth*(nch+has_alpha)/(filesize*8);
@@ -186,32 +176,115 @@ static void update_globals(const char *fn, Image16 *image)//accesses globals
 }
 
 
+static void api_load(void **phandle, const char *libname, void *api, const char **symnames, int symcount)
+{
+	void *handle=*phandle;
+	if(handle)//ptr: loaded  or  -1: missing/incompatible
+		return;
+	void (__stdcall **ptr)()=(void (__stdcall**)())api;
+#ifdef _WIN32
+	handle=LoadLibraryA(libname);
+#elif defined __linux__
+	handle=dlopen(libname, RTLD_LAZY|RTLD_GLOBAL);
+#endif
+	if(!handle)
+	{
+		*phandle=(void*)-1;
+		return;
+	}
+	for(int k=0;k<symcount;++k)
+	{
+#ifdef _WIN32
+		ptr[k]=(void (__stdcall*)())GetProcAddress((HMODULE)handle, symnames[k]);
+#elif defined __linux__
+		ptr[k]=dlsym(handle, symnames[k]);
+#endif
+		if(!ptr[k])
+		{
+			LOG_WARNING("%s: cannot find %s", libname, symnames[k]);
+#ifdef _WIN32
+			FreeLibrary((HMODULE)handle);
+#elif defined __linux__
+			dlclose(handle);
+#endif
+			handle=(void*)-1;
+			break;
+		}
+	}
+	*phandle=handle;
+}
 
 #ifdef HVIEW_INCLUDE_LIBHEIF
+#define APILIST_LIBHEIF\
+	APIFUNC(heif_get_version_number, uint32_t (__stdcall *heif_get_version_number)(void))\
+	APIFUNC(heif_context_alloc, struct heif_context* (__stdcall *heif_context_alloc)(void))\
+	APIFUNC(heif_context_read_from_file, struct heif_error (__stdcall *heif_context_read_from_file)(struct heif_context*, const char* filename, const struct heif_reading_options*))\
+	APIFUNC(heif_context_free, void (__stdcall *heif_context_free)(struct heif_context*))\
+	APIFUNC(heif_context_get_primary_image_handle, struct heif_error (__stdcall *heif_context_get_primary_image_handle)(struct heif_context* ctx, struct heif_image_handle**))\
+	APIFUNC(heif_image_handle_get_width, int (__stdcall *heif_image_handle_get_width)(const struct heif_image_handle* handle))\
+	APIFUNC(heif_image_handle_get_height, int (__stdcall *heif_image_handle_get_height)(const struct heif_image_handle* handle))\
+	APIFUNC(heif_decode_image, struct heif_error (__stdcall *heif_decode_image)(const struct heif_image_handle* in_handle, struct heif_image** out_img, enum heif_colorspace colorspace, enum heif_chroma chroma, const struct heif_decoding_options* options))\
+	APIFUNC(heif_image_get_plane_readonly, const uint8_t* (__stdcall *heif_image_get_plane_readonly)(const struct heif_image*, enum heif_channel channel, int* out_stride))\
+	APIFUNC(heif_image_get_colorspace, enum heif_colorspace (__stdcall *heif_image_get_colorspace)(const struct heif_image*))\
+	APIFUNC(heif_image_handle_has_alpha_channel, int (__stdcall *heif_image_handle_has_alpha_channel)(const struct heif_image_handle*))\
+	APIFUNC(heif_image_handle_get_luma_bits_per_pixel, int (__stdcall *heif_image_handle_get_luma_bits_per_pixel)(const struct heif_image_handle*))\
+	APIFUNC(heif_image_release, void (__stdcall *heif_image_release)(const struct heif_image*))\
+	APIFUNC(heif_image_handle_release, void (__stdcall *heif_image_handle_release)(const struct heif_image_handle*))
+static const char *symnames_libheif[]=
+{
+#define APIFUNC(NAME, DECL) #NAME,
+	APILIST_LIBHEIF
+#undef  APIFUNC
+};
+typedef struct _APILibHEIF
+{
+#define APIFUNC(NAME, DECL) DECL;
+	APILIST_LIBHEIF
+#undef  APIFUNC
+} APILibHEIF;
+static APILibHEIF libheif={0};
+static void *handle_libheif=0;
+static void apiload_libheif(void)
+{
+	api_load(&handle_libheif,
+#ifdef _WIN32
+		"libheif-1.dll",
+#elif defined __linux__
+		"libheif-1.so",
+#endif
+		&libheif, symnames_libheif, _countof(symnames_libheif)
+	);
+}
 static int load_heic(const char *filename, Image16 **image, int erroronfail)
 {
-	struct heif_context *ctx=heif_context_alloc();
+	apiload_libheif();
+	if(handle_libheif==(void*)-1)//missing/incompatible
+		return -1;
+
+	struct heif_context *ctx=libheif.heif_context_alloc();
 #ifdef BENCHMARK
 	long long t1=__rdtsc();
 #endif
-	struct heif_error error=heif_context_read_from_file(ctx, g_buf, 0);	CHECK_LIBHEIF(error);//TODO: file may not exist
+	struct heif_error error=libheif.heif_context_read_from_file(ctx, g_buf, 0);	CHECK_LIBHEIF(error);//TODO: file may not exist
 	if(error.code)
 	{
 		if(erroronfail)
 			LOG_WARNING("%s", error.message);
-		heif_context_free(ctx);
+		libheif.heif_context_free(ctx);
 		return -1;
 	}
 
 	struct heif_image_handle *handle=0;
-	error=heif_context_get_primary_image_handle(ctx, &handle);	CHECK_LIBHEIF(error);//get a handle to the primary image
+	error=libheif.heif_context_get_primary_image_handle(ctx, &handle);	CHECK_LIBHEIF(error);//get a handle to the primary image
 
-	heif_context_free(ctx);
+	libheif.heif_context_free(ctx);
 
-	int iw2=heif_image_handle_get_width(handle), ih2=heif_image_handle_get_height(handle);
+	int
+		iw2=libheif.heif_image_handle_get_width(handle),
+		ih2=libheif.heif_image_handle_get_height(handle);
 
 	struct heif_image *img=0;
-	error=heif_decode_image(handle, &img, heif_colorspace_RGB, heif_chroma_interleaved_RGBA, 0);	CHECK_LIBHEIF(error);
+	error=libheif.heif_decode_image(handle, &img, heif_colorspace_RGB, heif_chroma_interleaved_RGBA, 0);	CHECK_LIBHEIF(error);
 	if(!img)
 	{
 		if(erroronfail)
@@ -220,9 +293,9 @@ static int load_heic(const char *filename, Image16 **image, int erroronfail)
 	}
 
 	int stride=4;
-	const uint8_t *data=heif_image_get_plane_readonly(img, heif_channel_interleaved, &stride);	CHECK_LIBHEIF(error);
-	int colorspace=heif_image_get_colorspace(img);
-	has_alpha=heif_image_handle_has_alpha_channel(handle);
+	const uint8_t *data=libheif.heif_image_get_plane_readonly(img, heif_channel_interleaved, &stride);	CHECK_LIBHEIF(error);
+	int colorspace=libheif.heif_image_get_colorspace(img);
+	has_alpha=libheif.heif_image_handle_has_alpha_channel(handle);
 	int srcnch=3;
 	switch(colorspace)
 	{
@@ -237,7 +310,7 @@ static int load_heic(const char *filename, Image16 **image, int erroronfail)
 		break;
 	}
 	srcnch+=has_alpha;
-	imagedepth=heif_image_handle_get_luma_bits_per_pixel(handle);
+	imagedepth=libheif.heif_image_handle_get_luma_bits_per_pixel(handle);
 	imagetype=IM_RGBA;
 #ifdef BENCHMARK
 	long long t2=__rdtsc();
@@ -251,35 +324,75 @@ static int load_heic(const char *filename, Image16 **image, int erroronfail)
 	//assign_from_RGBA8((int*)data, iw2, ih2);
 
 
-	heif_image_release(img);
-	heif_image_handle_release(handle);
+	libheif.heif_image_release(img);
+	libheif.heif_image_handle_release(handle);
 	
 	update_globals(filename, *image);
 	return 0;
 }
 #endif
+
 #ifdef HVIEW_INCLUDE_LIBRAW
+#define APILIST_LIBRAW\
+	APIFUNC(libraw_versionNumber, int (__stdcall *libraw_versionNumber)())\
+	APIFUNC(libraw_strerror, const char *(__stdcall *libraw_strerror)(int errorcode))\
+	APIFUNC(libraw_init, libraw_data_t *(__stdcall *libraw_init)(unsigned int flags))\
+	APIFUNC(libraw_open_file, int (__stdcall *libraw_open_file)(libraw_data_t *, const char *))\
+	APIFUNC(libraw_open_wfile, int (__stdcall *libraw_open_wfile)(libraw_data_t *, const wchar_t *))\
+	APIFUNC(libraw_unpack, int (__stdcall *libraw_unpack)(libraw_data_t *))\
+	APIFUNC(libraw_raw2image, int (__stdcall *libraw_raw2image)(libraw_data_t *))\
+	APIFUNC(libraw_free_image, void (__stdcall *libraw_free_image)(libraw_data_t *))\
+	APIFUNC(libraw_close, void (__stdcall *libraw_close)(libraw_data_t *))
+static const char *symnames_libraw[]=
+{
+#define APIFUNC(NAME, DECL) #NAME,
+	APILIST_LIBRAW
+#undef  APIFUNC
+};
+typedef struct _APILibRAW
+{
+#define APIFUNC(NAME, DECL) DECL;
+	APILIST_LIBRAW
+#undef  APIFUNC
+} APILibRAW;
+static APILibRAW libraw={0};
+static void *handle_libraw=0;
+static void apiload_libraw(void)
+{
+	api_load(&handle_libraw,
+#ifdef _WIN32
+		"libraw.dll",
+#elif defined __linux__
+		"libraw.so",
+#endif
+		&libraw, symnames_libraw, _countof(symnames_libraw)
+	);
+}
 static int load_raw(const char *filename, Image16 **image, int erroronfail)
 {
-	libraw_data_t *decoder=libraw_init(0);
+	apiload_libraw();
+	if(handle_libraw==(void*)-1)//missing/incompatible
+		return -1;
+
+	libraw_data_t *decoder=libraw.libraw_init(0);
 	if(!decoder)
 	{
 		LOG_WARNING("Failed to initialize libraw decoder");
 		return -1;
 	}
-	//int error=libraw_open_wfile(decoder, filename);
-	int error=libraw_open_file(decoder, filename);
+	//int error=libraw.libraw_open_wfile(decoder, filename);
+	int error=libraw.libraw_open_file(decoder, filename);
 	if(error)
 	{
 		if(erroronfail)
-			LOG_WARNING("Libraw error %d: %s", error, libraw_strerror(error));
+			LOG_WARNING("Libraw error %d: %s", error, libraw.libraw_strerror(error));
 		return -1;
 	}
 	
 	//int iw2=decoder->sizes.raw_width;
 	//int ih2=decoder->sizes.raw_height;
-	error=libraw_unpack(decoder);		CHECK_LIBRAW(error);
-	error=libraw_raw2image(decoder);	CHECK_LIBRAW(error);
+	error=libraw.libraw_unpack(decoder);	CHECK_LIBRAW(error);
+	error=libraw.libraw_raw2image(decoder);	CHECK_LIBRAW(error);
 	const int rgbidx[]={0, 1, 2, 1};//assuming  decoder->rawdata.iparams.cdesc == "RGBG"
 	bayer[0]=rgbidx[decoder->rawdata.iparams.filters>>0*2&3];
 	bayer[1]=rgbidx[decoder->rawdata.iparams.filters>>1*2&3];
@@ -355,8 +468,8 @@ static int load_raw(const char *filename, Image16 **image, int erroronfail)
 		image_inplacexflip(*image, bayer);
 		break;
 	}
-	libraw_free_image(decoder);
-	libraw_close(decoder);
+	libraw.libraw_free_image(decoder);
+	libraw.libraw_close(decoder);
 	
 	has_alpha=0;
 	update_globals(filename, *image);
@@ -599,7 +712,7 @@ static int huf_load(const char *filename, Image16 **image, int erroronfail)
 	{
 		HuffDataHeader *hData=(HuffDataHeader*)(header->histogram+header->nLevels);
 		unsigned *bitstream=hData->data;
-		HuffDecodeCell decroot={0};
+		//HuffDecodeCell decroot={0};
 		if(*(int*)hData->DATA!=('D'|'A'<<8|'T'<<16|'A'<<24))
 		{
 			if(erroronfail)
@@ -670,15 +783,15 @@ static int huf_load(const char *filename, Image16 **image, int erroronfail)
 #if 1
 			unsigned short *dstptr=(unsigned short*)image[0]->data;
 			int bitidx=0, kd=0, kx=0, ky=0;
-			unsigned state=*bitstream;
+			//unsigned state=*bitstream;
 			while(kd<res&&bitidx<hData->cBitSize)
 			{
-				int prev=rootidx;//
+				//int prev=rootidx;//
 				int node=rootidx;
 				while(bitidx<hData->cBitSize&&(tree[node].branch[0]!=-1||tree[node].branch[1]!=-1))
 				{
 					int bit=bitstream[bitidx>>5]>>(bitidx&31)&1;
-					prev=node;//
+					//prev=node;//
 					node=tree[node].branch[bit];
 					++bitidx;
 				}
@@ -762,6 +875,11 @@ static int huf_load(const char *filename, Image16 **image, int erroronfail)
 			}
 		}
 		huf_freetable(&decroot);
+#else
+	(void)huf_freetable;
+	(void)huf_buildtable;
+	(void)huf_tree_debugcheck;
+	(void)huf_tree_debugprint;
 #endif
 	}
 	else if(header->version==5)//RVL
@@ -778,8 +896,8 @@ static int huf_load(const char *filename, Image16 **image, int erroronfail)
 		bayer_sh2[3]+=16-imagedepth;
 		int *bitstream=(int*)header->histogram;
 		int bitidx=0;
-		int interleave=*(int*)header->bayerInfo!=0&&*(int*)header->bayerInfo!=1;
-		int w2=header->width>>1, h2=header->height>>1;
+		//int interleave=*(int*)header->bayerInfo!=0&&*(int*)header->bayerInfo!=1;
+		//int w2=header->width>>1, h2=header->height>>1;
 		*image=image_alloc16(0, header->width, header->height, 4, 1, header->nLevels, imagedepth);
 	//	*image=image_construct(0, 0, 16, 0, header->width, header->height, 0, 16);
 		unsigned short *dstptr=(unsigned short*)image[0]->data;
@@ -1143,10 +1261,197 @@ static short* gr_load(const char *srcfn, int *ret_iw, int *ret_ih, int *ret_nlev
 }
 
 
+#if 1
+#define APILIST_AVFORMAT\
+	APIFUNC(avformat_version, unsigned (__stdcall *avformat_version)(void))\
+	APIFUNC(avformat_alloc_context, AVFormatContext *(__stdcall *avformat_alloc_context)(void))\
+	APIFUNC(avformat_open_input, int (__stdcall *avformat_open_input)(AVFormatContext **ps, const char *url, const AVInputFormat *fmt, AVDictionary **options))\
+	APIFUNC(avformat_find_stream_info, int (__stdcall *avformat_find_stream_info)(AVFormatContext *ic, AVDictionary **options))\
+	APIFUNC(avformat_close_input, void (__stdcall *avformat_close_input)(AVFormatContext **s))\
+	APIFUNC(avformat_alloc_output_context2, int (__stdcall *avformat_alloc_output_context2)(AVFormatContext **ctx, const AVOutputFormat *oformat, const char *format_name, const char *filename))\
+	APIFUNC(avformat_new_stream, AVStream *(__stdcall *avformat_new_stream)(AVFormatContext *s, const AVCodec *c))\
+	APIFUNC(avformat_free_context, void (__stdcall *avformat_free_context)(AVFormatContext *s))\
+	APIFUNC(av_read_frame, int (__stdcall *av_read_frame)(AVFormatContext *s, AVPacket *pkt))
+static const char *symnames_avformat[]=
+{
+#define APIFUNC(NAME, DECL) #NAME,
+	APILIST_AVFORMAT
+#undef  APIFUNC
+};
+typedef struct _APIAVFORMAT
+{
+#define APIFUNC(NAME, DECL) DECL;
+	APILIST_AVFORMAT
+#undef  APIFUNC
+} APIAVFORMAT;
+static APIAVFORMAT avformat={0};
+static void *handle_avformat=0;
+#endif
+
+#if 1
+#define APILIST_AVCODEC\
+	APIFUNC(avcodec_version, unsigned (__stdcall *avcodec_version)(void))\
+	APIFUNC(avcodec_find_encoder, const AVCodec *(__stdcall *avcodec_find_encoder)(enum AVCodecID id))\
+	APIFUNC(avcodec_find_decoder, const AVCodec *(__stdcall *avcodec_find_decoder)(enum AVCodecID id))\
+	APIFUNC(avcodec_alloc_context3, AVCodecContext *(__stdcall *avcodec_alloc_context3)(const AVCodec *codec))\
+	APIFUNC(avcodec_parameters_to_context, int (__stdcall *avcodec_parameters_to_context)(AVCodecContext *codec, const AVCodecParameters *par))\
+	APIFUNC(avcodec_open2, int (__stdcall *avcodec_open2)(AVCodecContext *avctx, const AVCodec *codec, AVDictionary **options))\
+	APIFUNC(avcodec_send_packet, int (__stdcall *avcodec_send_packet)(AVCodecContext *avctx, const AVPacket *avpkt))\
+	APIFUNC(avcodec_receive_packet, int (__stdcall *avcodec_receive_packet)(AVCodecContext *avctx, AVPacket *avpkt))\
+	APIFUNC(avcodec_send_frame, int (__stdcall *avcodec_send_frame)(AVCodecContext *avctx, const AVFrame *frame))\
+	APIFUNC(avcodec_receive_frame, int (__stdcall *avcodec_receive_frame)(AVCodecContext *avctx, AVFrame *frame))\
+	APIFUNC(avcodec_free_context, void (__stdcall *avcodec_free_context)(AVCodecContext **avctx))\
+	APIFUNC(av_packet_alloc, AVPacket *(__stdcall *av_packet_alloc)(void))\
+	APIFUNC(av_packet_free, void (__stdcall* av_packet_free)(AVPacket **pkt))\
+	APIFUNC(av_packet_unref, void (__stdcall* av_packet_unref)(AVPacket *pkt))
+static const char *symnames_avcodec[]=
+{
+#define APIFUNC(NAME, DECL) #NAME,
+	APILIST_AVCODEC
+#undef  APIFUNC
+};
+typedef struct _APIAVCODEC
+{
+#define APIFUNC(NAME, DECL) DECL;
+	APILIST_AVCODEC
+#undef  APIFUNC
+} APIAVCODEC;
+static APIAVCODEC avcodec={0};
+static void *handle_avcodec=0;
+#endif
+
+#if 1
+#define APILIST_AVUTIL\
+	APIFUNC(avutil_version, unsigned (__stdcall *avutil_version)(void))\
+	APIFUNC(av_strerror, int (__stdcall *av_strerror)(int errnum, char *errbuf, size_t errbuf_size))\
+	APIFUNC(av_frame_alloc, AVFrame *(__stdcall *av_frame_alloc)(void))\
+	APIFUNC(av_frame_free, void (__stdcall* av_frame_free)(AVFrame **frame))\
+	APIFUNC(av_frame_get_buffer, int (__stdcall* av_frame_get_buffer)(AVFrame *frame, int align))\
+	APIFUNC(av_pix_fmt_desc_get, const AVPixFmtDescriptor *(__stdcall* av_pix_fmt_desc_get)(enum AVPixelFormat pix_fmt))\
+	APIFUNC(av_dict_set, int (__stdcall* av_dict_set)(AVDictionary **pm, const char *key, const char *value, int flags))\
+	APIFUNC(av_image_fill_arrays, int (__stdcall* av_image_fill_arrays)(uint8_t *dst_data[4], int dst_linesize[4], const uint8_t *src, enum AVPixelFormat pix_fmt, int width, int height, int align))
+static const char *symnames_avutil[]=
+{
+#define APIFUNC(NAME, DECL) #NAME,
+	APILIST_AVUTIL
+#undef  APIFUNC
+};
+typedef struct _APIAVUTIL
+{
+#define APIFUNC(NAME, DECL) DECL;
+	APILIST_AVUTIL
+#undef  APIFUNC
+} APIAVUTIL;
+static APIAVUTIL avutil={0};
+static void *handle_avutil=0;
+#endif
+
+#if 1
+#define APILIST_SWSCALE\
+	APIFUNC(swscale_version, unsigned (__stdcall* swscale_version)(void))\
+	APIFUNC(sws_isSupportedInput, int (__stdcall* sws_isSupportedInput)(enum AVPixelFormat pix_fmt))\
+	APIFUNC(sws_isSupportedOutput, int (__stdcall* sws_isSupportedOutput)(enum AVPixelFormat pix_fmt))\
+	APIFUNC(sws_getContext, struct SwsContext *(__stdcall* sws_getContext)(int srcW, int srcH, enum AVPixelFormat srcFormat, int dstW, int dstH, enum AVPixelFormat dstFormat, int flags, SwsFilter *srcFilter, SwsFilter *dstFilter, const double *param))\
+	APIFUNC(sws_scale, int (__stdcall* sws_scale)(struct SwsContext *c, const uint8_t *const srcSlice[], const int srcStride[], int srcSliceY, int srcSliceH, uint8_t *const dst[], const int dstStride[]))\
+	APIFUNC(sws_freeContext, void (__stdcall* sws_freeContext)(struct SwsContext *swsContext))
+static const char *symnames_swscale[]=
+{
+#define APIFUNC(NAME, DECL) #NAME,
+	APILIST_SWSCALE
+#undef  APIFUNC
+};
+typedef struct _APISWSCALE
+{
+#define APIFUNC(NAME, DECL) DECL;
+	APILIST_SWSCALE
+#undef  APIFUNC
+} APISWSCALE;
+static APISWSCALE swscale={0};
+static void *handle_swscale=0;
+#endif
+
+static int ffmpeg_ready=0;//0: not loaded,  1: don't use,  2: ready
+static void load_ffmpeg()
+{
+	if(ffmpeg_ready)
+		return;
+	api_load(&handle_avformat,
+#ifdef _WIN32
+		"avformat-60.dll",
+#elif defined __linux__
+		"avformat-60.so",
+#endif
+		&avformat, symnames_avformat, _countof(symnames_avformat)
+	);
+	api_load(&handle_avcodec,
+#ifdef _WIN32
+		"avcodec-60.dll",
+#elif defined __linux__
+		"avcodec-60.so",
+#endif
+		&avcodec, symnames_avcodec, _countof(symnames_avcodec)
+	);
+	api_load(&handle_avutil,
+#ifdef _WIN32
+		"avutil-58.dll",
+#elif defined __linux__
+		"avutil-58.so",
+#endif
+		&avutil, symnames_avutil, _countof(symnames_avutil)
+	);
+	api_load(&handle_swscale,
+#ifdef _WIN32
+		"swscale-7.dll",
+#elif defined __linux__
+		"swscale-7.so",
+#endif
+		&swscale, symnames_swscale, _countof(symnames_swscale)
+	);
+	if(
+		handle_avformat==(void*)-1	//missing/incompatible
+	||	handle_avcodec==(void*)-1
+	||	handle_avutil==(void*)-1
+	||	handle_swscale==(void*)-1
+	)
+	{
+		ffmpeg_ready=1;
+		return;
+	}
+	ffmpeg_ready=2;
+}
+
 //https://github.com/ShootingKing-AM/ffmpeg-pseudocode-tutorial
 //https://github.com/leandromoreira/ffmpeg-libav-tutorial/blob/master/README.md
-int load_media(const char *filename, Image16 **image, int erroronfail)//TODO special loader for HEIC, AVIF, RAW
+int load_media(const char *filename, Image16 **image, int erroronfail)
 {
+	static int callctr=0;
+	load_ffmpeg();
+	if(ffmpeg_ready!=2)//fallback
+	{
+		if(erroronfail&&!(callctr++))
+			LOG_WARNING("FFmpeg not found");
+
+		unsigned short *stbi_load_16(char const *filename, int *x, int *y, int *channels_in_file, int desired_channels);
+		unsigned char* stbi_load(const char *filename, int *x, int *y, int *channels_in_file, int desired_channels);
+		int iw=0, ih=0, nch=0;
+		unsigned char *im2=stbi_load(filename, &iw, &ih, &nch, 4);
+		if(!im2)
+		{
+			if(erroronfail)
+				LOG_WARNING("Cannot open \"%s\"", filename);
+			return -1;
+		}
+		*image=image_alloc16(0, iw, ih, nch, 4, 256, 8);
+		for(ptrdiff_t k=0, res=(ptrdiff_t)4*iw*ih;k<res;k+=4)//byte -> word
+		{
+			image[0]->data[k+0]=im2[k+0];
+			image[0]->data[k+1]=im2[k+1];
+			image[0]->data[k+2]=im2[k+2];
+			image[0]->data[k+3]=im2[k+3];
+		}
+		free(im2);
+		return 0;
+	}
 	int len=(int)strlen(filename);
 #ifdef HVIEW_INCLUDE_LIBHEIF
 	if(
@@ -1321,18 +1626,18 @@ int load_media(const char *filename, Image16 **image, int erroronfail)//TODO spe
 		!_stricmp(filename+len-4, ".TXT")||
 		!_stricmp(filename+len-4, ".SVG")
 	)
-		return 1;
+		return -2;
 
 	int error;
-	AVFormatContext *formatContext=avformat_alloc_context();
+	AVFormatContext *formatContext=avformat.avformat_alloc_context();
 	if(!formatContext)
 	{
 		LOG_WARNING("Allocation error");
 		return -1;
 	}
-	error=avformat_open_input(&formatContext, filename, 0, 0);
+	error=avformat.avformat_open_input(&formatContext, filename, 0, 0);
 	CHECK_AV(error);
-	error=avformat_find_stream_info(formatContext, 0);	CHECK_AV(error);
+	error=avformat.avformat_find_stream_info(formatContext, 0);	CHECK_AV(error);
 
 	AVCodec const *codec=0;
 	AVCodecParameters *codecParameters=0;
@@ -1340,10 +1645,10 @@ int load_media(const char *filename, Image16 **image, int erroronfail)//TODO spe
 	for(unsigned i=0;i<formatContext->nb_streams;++i)
 	{
 		AVStream *stream=formatContext->streams[i];
-		AVCodec const *localCodec=avcodec_find_decoder(stream->codecpar->codec_id);
+		AVCodec const *localCodec=avcodec.avcodec_find_decoder(stream->codecpar->codec_id);
 		if(!localCodec)
 		{
-			unsigned version=avcodec_version();
+			unsigned version=avcodec.avcodec_version();
 			LOG_WARNING("This codec is not supported on this build of libavcodec %d.%d.%d", version>>16&0xFF, version>>8&0xFF, version&0xFF);
 			continue;
 		}
@@ -1363,49 +1668,49 @@ int load_media(const char *filename, Image16 **image, int erroronfail)//TODO spe
 			LOG_WARNING("Cannot open \'%s\'", filename);
 		return -1;
 	}
-	AVCodecContext *codecContext=avcodec_alloc_context3(codec);
+	AVCodecContext *codecContext=avcodec.avcodec_alloc_context3(codec);
 	if(!codecContext)
 	{
 		if(erroronfail)
 			LOG_WARNING("Allocation error");
 		return -1;
 	}
-	error=avcodec_parameters_to_context(codecContext, codecParameters);	CHECK_AV(error);
-	error=avcodec_open2(codecContext, codec, NULL);	CHECK_AV(error);
-	AVFrame *frame=av_frame_alloc();
-	AVPacket *packet=av_packet_alloc();
+	error=avcodec.avcodec_parameters_to_context(codecContext, codecParameters);	CHECK_AV(error);
+	error=avcodec.avcodec_open2(codecContext, codec, NULL);	CHECK_AV(error);
+	AVFrame *frame=avutil.av_frame_alloc();
+	AVPacket *packet=avcodec.av_packet_alloc();
 	if(!frame||!packet)
 	{
 		LOG_WARNING("Allocation error");
 		return -1;
 	}
-	while((error=av_read_frame(formatContext, packet))>=0)
+	while((error=avformat.av_read_frame(formatContext, packet))>=0)
 	{
 		if(packet->stream_index==video_stream_index)
 		{
 			//int result=decode_packet(packet, codecContext, frame);
-			error=avcodec_send_packet(codecContext, packet);	CHECK_AV(error);
+			error=avcodec.avcodec_send_packet(codecContext, packet);	CHECK_AV(error);
 			while(error>=0)
 			{
-				error=avcodec_receive_frame(codecContext, frame);
+				error=avcodec.avcodec_receive_frame(codecContext, frame);
 				if(error==AVERROR(EAGAIN)||error==AVERROR_EOF)
 					break;
 				CHECK_AV(error);
 			
 				enum AVPixelFormat format=frame->format;
-				if(!sws_isSupportedInput(format))
+				if(!swscale.sws_isSupportedInput(format))
 				{
 					if(erroronfail)
 						LOG_WARNING("Unsupported input pixel format %d", format);
 					return -1;
 				}
-				if(!sws_isSupportedOutput(AV_PIX_FMT_RGB32))
+				if(!swscale.sws_isSupportedOutput(AV_PIX_FMT_RGB32))
 				{
 					if(erroronfail)
 						LOG_WARNING("Unsupported output pixel format %d", format);
 					return -1;
 				}
-				AVFrame *frame2=av_frame_alloc();
+				AVFrame *frame2=avutil.av_frame_alloc();
 				if(!frame2)
 				{
 					LOG_WARNING("Allocation error");
@@ -1414,16 +1719,16 @@ int load_media(const char *filename, Image16 **image, int erroronfail)//TODO spe
 				frame2->width=frame->width;
 				frame2->height=frame->height;
 				frame2->format=AV_PIX_FMT_RGBA64LE;
-				av_frame_get_buffer(frame2, 32);
+				avutil.av_frame_get_buffer(frame2, 32);
 
-				struct SwsContext *swsctx=sws_getContext(frame->width, frame->height, frame->format, frame2->width, frame2->height, frame2->format, 0, 0, 0, 0);
-				sws_scale(swsctx, frame->data, frame->linesize, 0, frame->height, frame2->data, frame2->linesize);
+				struct SwsContext *swsctx=swscale.sws_getContext(frame->width, frame->height, frame->format, frame2->width, frame2->height, frame2->format, 0, 0, 0, 0);
+				swscale.sws_scale(swsctx, (const uint8_t *const*)frame->data, frame->linesize, 0, frame->height, frame2->data, frame2->linesize);
 
 				int padding=abs(frame2->linesize[0])/8-frame2->width;//division by 8 is because a single pixel is 64-bit (8 bytes)
 				if(padding<0)
 					padding=0;
 				
-				AVPixFmtDescriptor const *desc=av_pix_fmt_desc_get(frame->format);
+				AVPixFmtDescriptor const *desc=avutil.av_pix_fmt_desc_get(frame->format);
 				//int bpp0=av_get_bits_per_pixel(desc);
 				//int bpp=av_get_bits_per_sample(codec->id);//returns 0
 
@@ -1466,19 +1771,19 @@ int load_media(const char *filename, Image16 **image, int erroronfail)//TODO spe
 				//	SWAPVAR(p[0], p[2], temp);
 				//}
 
-				sws_freeContext(swsctx);
-				av_frame_free(&frame2);
+				swscale.sws_freeContext(swsctx);
+				avutil.av_frame_free(&frame2);
 				break;//get just the first frame
 			}
 		}
-		av_packet_unref(packet);
+		avcodec.av_packet_unref(packet);
 		if(*image)
 			break;//get one frame
 	}
-	avformat_close_input(&formatContext);
-	av_packet_free(&packet);
-	av_frame_free(&frame);
-	avcodec_free_context(&codecContext);
+	avformat.avformat_close_input(&formatContext);
+	avcodec.av_packet_free(&packet);
+	avutil.av_frame_free(&frame);
+	avcodec.avcodec_free_context(&codecContext);
 	
 	update_globals(filename, *image);
 	return 0;
@@ -1487,16 +1792,24 @@ int load_media(const char *filename, Image16 **image, int erroronfail)//TODO spe
 
 int save_media(const char *fn, Image8 *image, int erroronfail)
 {
+	load_ffmpeg();
+	if(ffmpeg_ready!=2)
+	{
+		if(erroronfail)
+			LOG_WARNING("FFmpeg not found");
+		return -1;
+	}
+
 	enum AVPixelFormat srcfmt=image->depth==16?AV_PIX_FMT_RGBA64LE:AV_PIX_FMT_RGBA;
 	int error=0;
 	AVFormatContext *oc=0;
-	error=avformat_alloc_output_context2(&oc, 0, 0, fn);	CHECK_AV(error);
+	error=avformat.avformat_alloc_output_context2(&oc, 0, 0, fn);	CHECK_AV(error);
 	if(!oc&&erroronfail)
 	{
 		LOG_WARNING("Allocation error");
 		return -1;
 	}
-	AVStream *stream=avformat_new_stream(oc, 0);
+	AVStream *stream=avformat.avformat_new_stream(oc, 0);
 	if(!stream)
 	{
 		LOG_WARNING("Allocation error");
@@ -1541,14 +1854,14 @@ int save_media(const char *fn, Image8 *image, int erroronfail)
 	//	LOG_WARNING("Cannot save \'%s\'", fn);
 	//	return -1;
 	//}
-	AVCodec const *codec=avcodec_find_encoder(codecid);
+	AVCodec const *codec=avcodec.avcodec_find_encoder(codecid);
 	if(!codec)
 	{
 		LOG_WARNING("Cannot save \'%s\'", fn);
 		return -1;
 	}
 
-	AVCodecContext *cc=avcodec_alloc_context3(codec);
+	AVCodecContext *cc=avcodec.avcodec_alloc_context3(codec);
 	if(!cc)
 	{
 		LOG_WARNING("Allocation error");
@@ -1579,15 +1892,15 @@ int save_media(const char *fn, Image8 *image, int erroronfail)
 
 	//TODO set codec options (which depend on the codec)
 	AVDictionary *opt=0;
-	av_dict_set(&opt, "slow", 0, 0);
+	avutil.av_dict_set(&opt, "slow", 0, 0);
 
-	error=avcodec_open2(cc, codec, &opt);	CHECK_AV(error);//-22: Invalid Argument
-	AVFrame *frame=av_frame_alloc();
+	error=avcodec.avcodec_open2(cc, codec, &opt);	CHECK_AV(error);//-22: Invalid Argument
+	AVFrame *frame=avutil.av_frame_alloc();
 	frame->width=image->iw;
 	frame->height=image->ih;
 	frame->format=image->depth==16?AV_PIX_FMT_RGBA64LE:AV_PIX_FMT_RGBA;
-	error=av_frame_get_buffer(frame, 0);		CHECK_AV(error);
-	av_image_fill_arrays(frame->data, frame->linesize, image->data, srcfmt, image->iw, image->ih, 1);
+	error=avutil.av_frame_get_buffer(frame, 0);		CHECK_AV(error);
+	avutil.av_image_fill_arrays(frame->data, frame->linesize, image->data, srcfmt, image->iw, image->ih, 1);
 
 	AVPacket packet={0};
 	//av_init_packet(&packet);//deprecated warning
@@ -1600,36 +1913,36 @@ int save_media(const char *fn, Image8 *image, int erroronfail)
 		LOG_WARNING("Cannot save \'%s\'", fn);
 	else
 	{
-		error=avcodec_send_frame(cc, frame);	CHECK_AV(error);
+		error=avcodec.avcodec_send_frame(cc, frame);	CHECK_AV(error);
 		while(error>=0)
 		{
-			error=avcodec_receive_packet(cc, &packet);
+			error=avcodec.avcodec_receive_packet(cc, &packet);
 			if(error==AVERROR(EAGAIN)||error==AVERROR_EOF)
 				break;
 			CHECK_AV(error);
 
 			fwrite(packet.data, 1, packet.size, f);
-			av_packet_unref(&packet);
+			avcodec.av_packet_unref(&packet);
 		}
 
 		//flush encoder
-		error=avcodec_send_frame(cc, 0);		CHECK_AV(error);
+		error=avcodec.avcodec_send_frame(cc, 0);	CHECK_AV(error);
 		while(error>=0)
 		{
-			error=avcodec_receive_packet(cc, &packet);
+			error=avcodec.avcodec_receive_packet(cc, &packet);
 			if(error==AVERROR(EAGAIN)||error==AVERROR_EOF)
 				break;
 			CHECK_AV(error);
 
 			fwrite(packet.data, 1, packet.size, f);
-			av_packet_unref(&packet);
+			avcodec.av_packet_unref(&packet);
 		}
 		fclose(f);
 	}
 
-	av_frame_free(&frame);
-	avcodec_free_context(&cc);
-	avformat_free_context(oc);
+	avutil.av_frame_free(&frame);
+	avcodec.avcodec_free_context(&cc);
+	avformat.avformat_free_context(oc);
 	return 0;
 }
 int save_media_as(Image16 *image, Image8 *impreview, const char *initialname, int namelen, int erroronfail)
@@ -1659,7 +1972,7 @@ int save_media_as(Image16 *image, Image8 *impreview, const char *initialname, in
 	STR_COPY(name, initialname, namelen);
 	STR_APPEND(name, "PNG", 4, 1);
 	int ext_selection=0, ret=-1;
-	char *fn=dialog_save_file(filters, _countof(filters), name->data, &ext_selection, 0, 0);
+	char *fn=dialog_save_file(filters, _countof(filters), (char*)name->data, &ext_selection, 0, 0);
 	array_free(&name);
 	if(!fn)
 		ret=-2;
@@ -1740,14 +2053,14 @@ int save_media_as(Image16 *image, Image8 *impreview, const char *initialname, in
 				const char bayerlabels[]="RGB";
 				char bayermatrix[]=
 				{
-					bayerlabels[bayer[0]],
-					bayerlabels[bayer[1]],
-					bayerlabels[bayer[2]],
-					bayerlabels[bayer[3]],
+					bayerlabels[(int)bayer[0]],
+					bayerlabels[(int)bayer[1]],
+					bayerlabels[(int)bayer[2]],
+					bayerlabels[(int)bayer[3]],
 				};
 				for(ptrdiff_t k=0, res=(ptrdiff_t)image->iw*image->ih;k<res;++k)
 					image->data[k]^=0x8000;
-				gr_save(fn, image->data, image->iw, image->ih, image->nlevels0, bayermatrix);
+				gr_save(fn, (short*)image->data, image->iw, image->ih, image->nlevels0, bayermatrix);
 				for(ptrdiff_t k=0, res=(ptrdiff_t)image->iw*image->ih;k<res;++k)
 					image->data[k]^=0x8000;
 			}
@@ -1783,34 +2096,52 @@ char* get_codecinfo(void)//don't forget to free(mem)
 	char *ptr=str, *end=str+BUFLEN-1;
 	int ver;
 	
-//	ptr+=snprintf(ptr, end-ptr, "FFmpeg:\n");
-	ver=LIBAVCODEC_VERSION_INT;
-	print_version(&ptr, end, "avcodec", ver>>16&255, ver>>8&255, ver&255, 0);
-	ver=avcodec_version();
-	print_version(&ptr, end, "avcodec", ver>>16&255, ver>>8&255, ver&255, 1);
+	load_ffmpeg();
+	if(ffmpeg_ready!=2)
+		ptr+=snprintf(ptr, end-ptr, "FFmpeg:\tNot found\n");
+	else
+	{
+	//	ptr+=snprintf(ptr, end-ptr, "FFmpeg:\n");
+		ver=LIBAVCODEC_VERSION_INT;
+		print_version(&ptr, end, "avcodec", ver>>16&255, ver>>8&255, ver&255, 0);
+		ver=avcodec.avcodec_version();
+		print_version(&ptr, end, "avcodec", ver>>16&255, ver>>8&255, ver&255, 1);
 	
-	ver=LIBAVFORMAT_VERSION_INT;
-	print_version(&ptr, end, "avformat", ver>>16&255, ver>>8&255, ver&255, 0);
-	ver=avformat_version();
-	print_version(&ptr, end, "avformat", ver>>16&255, ver>>8&255, ver&255, 1);
+		ver=LIBAVFORMAT_VERSION_INT;
+		print_version(&ptr, end, "avformat", ver>>16&255, ver>>8&255, ver&255, 0);
+		ver=avformat.avformat_version();
+		print_version(&ptr, end, "avformat", ver>>16&255, ver>>8&255, ver&255, 1);
 	
-	ver=avutil_version();
-	print_version(&ptr, end, "avutil", ver>>16&255, ver>>8&255, ver&255, 1);
+		ver=avutil.avutil_version();
+		print_version(&ptr, end, "avutil", ver>>16&255, ver>>8&255, ver&255, 1);
 
-	ver=LIBSWSCALE_VERSION_INT;
-	print_version(&ptr, end, "swscale", ver>>16&255, ver>>8&255, ver&255, 0);
-	ver=swscale_version();
-	print_version(&ptr, end, "swscale", ver>>16&255, ver>>8&255, ver&255, 1);
+		ver=LIBSWSCALE_VERSION_INT;
+		print_version(&ptr, end, "swscale", ver>>16&255, ver>>8&255, ver&255, 0);
+		ver=swscale.swscale_version();
+		print_version(&ptr, end, "swscale", ver>>16&255, ver>>8&255, ver&255, 1);
+	}
 	
-	ptr+=snprintf(ptr, end-ptr, "\n");
-	ver=LIBHEIF_NUMERIC_VERSION;//0xHHMMLL00
-	print_version(&ptr, end, "libheif", ver>>24&255, ver>>16&255, ver>>8&255, 0);
-	ver=heif_get_version_number();//0xHHMMLL00
-	print_version(&ptr, end, "libheif", ver>>24&255, ver>>16&255, ver>>8&255, 1);
-	
-	ptr+=snprintf(ptr, end-ptr, "\n");
-	ver=libraw_versionNumber();
-	print_version(&ptr, end, "libraw", ver>>16&255, ver>>8&255, ver&255, 1);
+	apiload_libheif();
+	if(handle_libheif==(void*)-1)
+		ptr+=snprintf(ptr, end-ptr, "libheif:\tNot found\n");
+	else
+	{
+		ptr+=snprintf(ptr, end-ptr, "\n");
+		ver=LIBHEIF_NUMERIC_VERSION;//0xHHMMLL00
+		print_version(&ptr, end, "libheif", ver>>24&255, ver>>16&255, ver>>8&255, 0);
+		ver=libheif.heif_get_version_number();//0xHHMMLL00
+		print_version(&ptr, end, "libheif", ver>>24&255, ver>>16&255, ver>>8&255, 1);
+	}
+
+	apiload_libraw();
+	if(handle_libraw==(void*)-1)
+		ptr+=snprintf(ptr, end-ptr, "libraw:\tNot found\n");
+	else
+	{
+		ptr+=snprintf(ptr, end-ptr, "\n");
+		ver=libraw.libraw_versionNumber();
+		print_version(&ptr, end, "libraw", ver>>16&255, ver>>8&255, ver&255, 1);
+	}
 
 	return str;
 #undef BUFLEN

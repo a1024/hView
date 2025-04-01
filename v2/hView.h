@@ -5,14 +5,16 @@
 #define INC_PXVIEW3D_H
 #include"util.h"
 #include<time.h>
+#ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include<Windows.h>
+#endif
 #include<GL/gl.h>
 #ifdef __cplusplus
 extern "C"
 {
 #endif
-//v	copy pixels as text
+//v	copy pixels / as text when zoomed-in
 //v	histogram
 //v	cross-section profile
 //v	equalization
@@ -568,7 +570,7 @@ void gl_init();
 extern int error;
 extern const char *gl_error_msg;
 const char* glerr2str(int error);
-#define GL_CHECK(E) ((E=glGetError())==0||log_error(file, __LINE__, 1, gl_error_msg, E, glerr2str(E)))
+#define GL_CHECK(E) (void)((E=glGetError())==0||log_error(file, __LINE__, 1, gl_error_msg, E, glerr2str(E)))
 
 void set_region_immediate(int x1, int x2, int y1, int y2);//calls glViewport
 

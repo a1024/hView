@@ -832,7 +832,7 @@ unsigned char* slic2_encode(int iw, int ih, int nch, int depth, const void *src,
 		}
 	}//channel-loop
 	SLIC2_ENC_FLUSH(&ec);
-	unsigned char *ret=slic2_dlist_toarray(&list, ret_size);
+	unsigned char *ret=slic2_dlist_toarray(&list, (size_t*)ret_size);
 	slic2_dlist_clear(&list);
 	free(buf);
 	for(int kc=0;kc<4;++kc)

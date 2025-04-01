@@ -132,10 +132,10 @@ void image_export(Image8 *dst, const Image16 *src, int imagetype)
 					//rgb[0]>>=sh;
 					//rgb[1]>>=sh;
 					//rgb[2]>>=sh;
-					rgb[bayer[0]]+=v0;//green tint
-					rgb[bayer[1]]+=v1;
-					rgb[bayer[2]]+=v2;
-					rgb[bayer[3]]+=v3;
+					rgb[(int)bayer[0]]+=v0;//green tint
+					rgb[(int)bayer[1]]+=v1;
+					rgb[(int)bayer[2]]+=v2;
+					rgb[(int)bayer[3]]+=v3;
 					rgb[0]<<=brightness;
 					rgb[1]<<=brightness;
 					rgb[2]<<=brightness;

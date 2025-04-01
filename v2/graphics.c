@@ -284,37 +284,37 @@ const char
 #endif
 
 //shader declarations
-#define		ATTR(NAME, LABEL)	int a_##NAME##_##LABEL=-1;
-#define		SHADER(NAME)		ATTR_##NAME
+#define ATTR(NAME, LABEL)	int a_##NAME##_##LABEL=-1;
+#define SHADER(NAME)		ATTR_##NAME
 SHADER_LIST
-#undef		SHADER
-#undef		ATTR
+#undef  SHADER
+#undef  ATTR
 
-#define		UNIF(NAME, LABEL)	int u_##NAME##_##LABEL=-1;
-#define		SHADER(NAME)		UNIF_##NAME
+#define UNIF(NAME, LABEL)	int u_##NAME##_##LABEL=-1;
+#define SHADER(NAME)		UNIF_##NAME
 SHADER_LIST
-#undef		SHADER
-#undef		UNIF
+#undef  SHADER
+#undef  UNIF
 
-#define		ATTR(NAME, LABEL)	{&a_##NAME##_##LABEL, "a_" #LABEL},
-#define		SHADER(NAME)		ShaderVar attr_##NAME[]={ATTR_##NAME};
+#define ATTR(NAME, LABEL)	{&a_##NAME##_##LABEL, "a_" #LABEL},
+#define SHADER(NAME)		ShaderVar attr_##NAME[]={ATTR_##NAME};
 SHADER_LIST
-#undef		SHADER
-#undef		ATTR
+#undef  SHADER
+#undef  ATTR
 
-#define		UNIF(NAME, LABEL)	{&u_##NAME##_##LABEL, "u_" #LABEL},
-#define		SHADER(NAME)		ShaderVar unif_##NAME[]={UNIF_##NAME};
+#define UNIF(NAME, LABEL)	{&u_##NAME##_##LABEL, "u_" #LABEL},
+#define SHADER(NAME)		ShaderVar unif_##NAME[]={UNIF_##NAME};
 SHADER_LIST
-#undef		SHADER
-#undef		UNIF
+#undef  SHADER
+#undef  UNIF
 
-#define		SHADER(NAME)		ShaderProgram shader_##NAME={"shader_" #NAME, src_vert_##NAME, src_frag_##NAME, attr_##NAME, unif_##NAME, _countof(attr_##NAME), _countof(unif_##NAME), 0};
+#define SHADER(NAME)		ShaderProgram shader_##NAME={"shader_" #NAME, src_vert_##NAME, src_frag_##NAME, attr_##NAME, unif_##NAME, _countof(attr_##NAME), _countof(unif_##NAME), 0};
 SHADER_LIST
-#undef		SHADER
+#undef  SHADER
 
 const char* glerr2str(int error)
 {
-#define 			EC(x)	case x:a=(const char*)#x;break
+#define EC(x) case x:a=(const char*)#x;break
 	const char *a=0;
 	switch(error)
 	{
@@ -331,13 +331,13 @@ const char* glerr2str(int error)
 	default:a="???";break;
 	}
 	return a;
-#undef				EC
+#undef  EC
 }
 const char *gl_error_msg="GL %d: %s";
-#define GL_CHECK(E)	((E=glGetError())==0||log_error(file, __LINE__, 1, gl_error_msg, E, glerr2str(E)))
+//#define GL_CHECK(E) (void)((E=glGetError())==0||log_error(file, __LINE__, 1, gl_error_msg, E, glerr2str(E)))
 
 //shader API
-unsigned			CompileShader(const char *src, unsigned type, const char *programname)
+unsigned CompileShader(const char *src, unsigned type, const char *programname)
 {
 	unsigned shaderID=glCreateShader(type);
 	glShaderSource(shaderID, 1, &src, 0);
@@ -360,7 +360,7 @@ unsigned			CompileShader(const char *src, unsigned type, const char *programname
 	}
 	return shaderID;
 }
-unsigned			make_gl_program_impl(const char *vertSrc, const char *fragSrc, const char *programname)
+unsigned make_gl_program_impl(const char *vertSrc, const char *fragSrc, const char *programname)
 {
 	int error=0;
 	unsigned
@@ -398,7 +398,7 @@ unsigned			make_gl_program_impl(const char *vertSrc, const char *fragSrc, const 
 	GL_CHECK(error);
 	return ProgramID;
 }
-int					make_gl_program(ShaderProgram *p)
+int make_gl_program(ShaderProgram *p)
 {
 	p->program=make_gl_program_impl(p->vsrc, p->fsrc, p->name);
 	if(!p->program)
@@ -543,7 +543,7 @@ void gl_init()
 	GLversion=(const char*)glGetString(GL_VERSION);
 
 	static const char msg2[]="%s is NULL";
-#define GLFUNC(X)	((X=(t_##X)wglGetProcAddress(#X))!=0||log_error(file, __LINE__, 1, msg2, X));
+#define GLFUNC(X)	(void)((X=(t_##X)wglGetProcAddress(#X))!=0||log_error(file, __LINE__, 1, msg2, X));
 	GLFUNCLIST
 #undef  GLFUNC
 		
