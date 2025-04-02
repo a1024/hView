@@ -1328,7 +1328,7 @@ void io_render()
 		int
 			sx1=image2screen_x_int(0), sx2=image2screen_x_int(impreview->iw),
 			sy1=image2screen_y_int(0), sy2=image2screen_y_int(impreview->ih);
-		display_texture_i(sx1, sx2, sy1, sy2, (int*)impreview->data, impreview->iw, impreview->ih, 0, 1, 0, 1, 1, 0);
+		display_texture_i(sx1, sx2, sy1, sy2, (int*)impreview->data, impreview->iw, impreview->ih, 0, 1, 0, 1, 1, 0, 1);
 		int
 			imx=screen2image_x_int(mx),
 			imy=screen2image_y_int(my);

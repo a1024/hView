@@ -485,35 +485,41 @@ void send_color_rgb(unsigned location, int color)
 
 	GL_CHECK(error);
 }
-void set_texture_params(int linear)
+static void set_texture_params(int linear, int antialiased)
 {
 	if(linear)
 	{
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);		GL_CHECK(error);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);		GL_CHECK(error);
 	}
 	else
 	{
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);		GL_CHECK(error);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);		GL_CHECK(error);
 	}
+	if(antialiased)
+	{
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);		GL_CHECK(error);
+	}
+	else
+	{
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);		GL_CHECK(error);
+	}
 }
-void send_texture_pot(unsigned gl_texture, int *rgba, int txw, int txh, int linear)
+void send_texture_pot(unsigned gl_texture, int *rgba, int txw, int txh, int linear, int antialiased)
 {
 	glBindTexture(GL_TEXTURE_2D, gl_texture);		GL_CHECK(error);
-	set_texture_params(linear);
+	set_texture_params(linear, antialiased);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, txw, txh, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);		GL_CHECK(error);
 }
-void send_texture_pot_int16x1(unsigned gl_texture, unsigned *texture, int txw, int txh, int linear)
+void send_texture_pot_int16x1(unsigned gl_texture, unsigned *texture, int txw, int txh, int linear, int antialiased)
 {
 	glBindTexture(GL_TEXTURE_2D, gl_texture);		GL_CHECK(error);
-	set_texture_params(linear);
+	set_texture_params(linear, antialiased);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, txw, txh, 0, GL_RED, GL_UNSIGNED_INT, texture);		GL_CHECK(error);
 }
-void send_texture_pot_grey(unsigned gl_texture, unsigned char *bmp, int txw, int txh, int linear)
+void send_texture_pot_grey(unsigned gl_texture, unsigned char *bmp, int txw, int txh, int linear, int antialiased)
 {
 	glBindTexture(GL_TEXTURE_2D, gl_texture);		GL_CHECK(error);
-	set_texture_params(linear);
+	set_texture_params(linear, antialiased);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, txw, txh, 0, GL_RED, GL_UNSIGNED_BYTE, bmp);		GL_CHECK(error);
 }
 void select_texture(unsigned tx_id, int u_location)
@@ -585,7 +591,7 @@ void gl_init()
 		rect->y1=(float)py/ih, rect->y2=(float)(py+tdy)/ih;
 	}
 	glGenTextures(1, &font_txid);
-	send_texture_pot(font_txid, rgb, iw, ih, 0);
+	send_texture_pot(font_txid, rgb, iw, ih, 0, 0);
 	stbi_image_free(rgb);
 	
 	snprintf(g_buf, G_BUF_SIZE, "%sfont_sdf.PNG", exedir->data);
@@ -614,7 +620,7 @@ void gl_init()
 		sdf_dy=16;
 
 		glGenTextures(1, &sdf_atlas_txid);
-		send_texture_pot_grey(sdf_atlas_txid, bmp, iw, ih, 1);
+		send_texture_pot_grey(sdf_atlas_txid, bmp, iw, ih, 1, 1);
 		stbi_image_free(bmp);
 		sdf_active=1;
 		set_text_colors(colors_text);
@@ -1267,7 +1273,7 @@ void display_texture(int x1, int x2, int y1, int y2, unsigned txid, float alpha,
 	glEnable(GL_DEPTH_TEST);
 #endif
 }
-void display_texture_i(int x1, int x2, int y1, int y2, int *rgb, int txw, int txh, float tx1, float tx2, float ty1, float ty2, float alpha, int linear)
+void display_texture_i(int x1, int x2, int y1, int y2, int *rgb, int txw, int txh, float tx1, float tx2, float ty1, float ty2, float alpha, int linear, int antialiased)
 {
 	static unsigned tx_id=0;
 	if(rgb)
@@ -1301,7 +1307,7 @@ void display_texture_i(int x1, int x2, int y1, int y2, int *rgb, int txw, int tx
 			glGenTextures(1, &tx_id);
 			GL_CHECK(error);
 		}
-		send_texture_pot(tx_id, rgb2, w2, h2, linear);
+		send_texture_pot(tx_id, rgb2, w2, h2, linear, antialiased);
 		//glBindTexture(GL_TEXTURE_2D, tx_id);								GL_CHECK(error);
 		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);	GL_CHECK(error);
 		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);	GL_CHECK(error);
@@ -1515,7 +1521,7 @@ void draw_3d_line(Camera const *cam, const float *w1, const float *w2, int color
 	//prepare texture
 	if(!txid)
 		glGenTextures(1, &txid);
-	send_texture_pot(txid, bitmap, 2, 2, 0);
+	send_texture_pot(txid, bitmap, 2, 2, 0, 0);
 	
 	//prepare coords
 	vrtx_resize(2, 5);

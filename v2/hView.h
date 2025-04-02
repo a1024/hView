@@ -574,9 +574,9 @@ const char* glerr2str(int error);
 
 void set_region_immediate(int x1, int x2, int y1, int y2);//calls glViewport
 
-void send_texture_pot(unsigned gl_texture, int *rgba, int txw, int txh, int linear);
-void send_texture_pot_grey(unsigned gl_texture, unsigned char *bmp, int txw, int txh, int linear);
-void send_texture_pot_int16x1(unsigned gl_texture, unsigned *texture, int txw, int txh, int linear);
+void send_texture_pot(unsigned gl_texture, int *rgba, int txw, int txh, int linear, int antialiased);
+void send_texture_pot_grey(unsigned gl_texture, unsigned char *bmp, int txw, int txh, int linear, int antialiased);
+void send_texture_pot_int16x1(unsigned gl_texture, unsigned *texture, int txw, int txh, int linear, int antialiased);
 void select_texture(unsigned tx_id, int u_location);
 
 void draw_line       (float x1, float y1, float x2, float y2, int color);
@@ -606,7 +606,7 @@ float print_line_enqueue(ArrayHandle *vertices, float tab_origin, float x, float
 void print_line_flush(ArrayHandle vertices, float zoom);
 
 void display_texture(int x1, int x2, int y1, int y2, unsigned txid, float alpha, float tx1, float tx2, float ty1, float ty2);
-void display_texture_i(int x1, int x2, int y1, int y2, int *rgb, int txw, int txh, float tx1, float tx2, float ty1, float ty2, float alpha, int linear);
+void display_texture_i(int x1, int x2, int y1, int y2, int *rgb, int txw, int txh, float tx1, float tx2, float ty1, float ty2, float alpha, int linear, int antialiased);
 
 //3D
 void mat4_lookAt(float *dst, const float *cam, const float *center, const float *up);
