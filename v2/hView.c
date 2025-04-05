@@ -338,11 +338,12 @@ int io_init(int argc, char **argv)//return false to abort
 {
 #ifdef _DEBUG
 	fn=filter_path(
+		"D:/ML/WhatsApp Stickers/STK-20230621-WA0009.webp"
 	//	"E:/Share Box/20230102 dslr/NEF/DSC_0403.NEF"
 	//	"D:/ML/20250320_005230.dng"
 	//	"D:/ML/dataset-RAW/a0001-jmac_DSC1459.dng"
 	//	"D:/ML/dataset-RAW/a0117-kme_006.dng"
-		"D:/ML/dataset-RAW/a0118-20051223_103622__MG_0617.dng"
+	//	"D:/ML/dataset-RAW/a0118-20051223_103622__MG_0617.dng"
 	//	"D:/ML/dataset-RAW/a0128-IMG_0793.dng"
 	//	"D:/ML/00-Taschdid.svg.png"
 	//	"D:/ML/mystery.gr"

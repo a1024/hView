@@ -541,7 +541,7 @@ char* dialog_save_file(Filter *filters, int nfilters, const char *initialname, i
 	
 	int len0=(int)strlen(initialname), ext_offset=0;
 	int len=0;
-	wchar_t def_ext[16]={0};//default extension
+	wchar_t def_ext[MAX_PATH]={0};//default extension
 	UTF8_TO_WCHAR(initialname, len0+1, g_wbuf, G_BUF_SIZE, len);
 	for(ext_offset=len0-1;ext_offset>=0&&initialname[ext_offset]!='.';--ext_offset);
 	memcpy(def_ext, g_wbuf+ext_offset, (len0+1-ext_offset)*sizeof(wchar_t));

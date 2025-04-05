@@ -47,7 +47,12 @@ static char ffmpegerror[AV_ERROR_MAX_STRING_SIZE]={0};
 		if(E<0)\
 		{\
 			if(erroronfail)\
-				LOG_WARNING("%s", avutil.av_strerror(E, ffmpegerror, AV_ERROR_MAX_STRING_SIZE));\
+			{\
+				if(!avutil.av_strerror(E, ffmpegerror, AV_ERROR_MAX_STRING_SIZE))\
+					LOG_WARNING("%s", ffmpegerror);\
+				else\
+					LOG_WARNING("FFmpeg %d", E);\
+			}\
 			return -1;\
 		}\
 	}while(0)
