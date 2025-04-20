@@ -430,7 +430,8 @@ static int load_raw(const char *filename, Image16 **image, int erroronfail)
 			LOG_WARNING("Alloc error");
 			return 0;
 		}
-		memset(image[0]->data, 0, sizeof(short)*iw3*ih3);
+		//memset(image[0]->data, 0, sizeof(short)*iw3*ih3);
+#if 1
 		for(int ky=0;ky<ih2;++ky)//can't use memcpy because of odd->even dimension padding
 		{
 			const unsigned short *srcptr=(const unsigned short*)decoder->rawdata.raw_alloc+iw2*ky;
@@ -442,6 +443,8 @@ static int load_raw(const char *filename, Image16 **image, int erroronfail)
 			for(int kx=0;kx<iw2;++kx)
 				*dstptr++=*srcptr++;
 		}
+#endif
+		memcpy(image[0]->data, decoder->image, sizeof(short)*iw2*ih2);
 		//memcpy(image[0]->data, decoder->rawdata.raw_alloc, sizeof(short)*iw2*ih2);
 	}
 	else
@@ -1483,7 +1486,8 @@ int load_media(const char *filename, Image16 **image, int erroronfail)
 		!_stricmp(filename+len-4, ".KDC")||
 		!_stricmp(filename+len-4, ".MOS")||
 		!_stricmp(filename+len-4, ".NEF")||
-		!_stricmp(filename+len-4, ".REF")
+		!_stricmp(filename+len-4, ".REF")||
+		!_stricmp(filename+len-4, ".RW2")
 	)
 		return load_raw(filename, image, erroronfail);
 #endif

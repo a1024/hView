@@ -1,7 +1,7 @@
 ﻿include_directories(
 	#includes - laptop
 	#"C:/Programs/ffmpeg-6.0-full_build-shared/include"
-	"C:/Projects/a/LibRaw-0.21.3"
+	"C:/Projects/a/LibRaw-0.21.4"
 	"C:/Projects/a/libheif"
 
 	#includes - desktop
@@ -9,7 +9,7 @@
 	#"E:/Programs/ffmpeg-6.0-full_build-shared/include"
 	#"E:/C/SDL2-2.0.12-MSVC/include"
 	"E:/C/a/libheif-1.12.0"
-	"E:/C/a/LibRaw-0.21.3"
+	"E:/C/a/LibRaw-0.21.4"
 )
 #link_directories(
 #	#libraries - laptop

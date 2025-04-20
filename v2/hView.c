@@ -338,7 +338,8 @@ int io_init(int argc, char **argv)//return false to abort
 {
 #ifdef _DEBUG
 	fn=filter_path(
-		"D:/ML/WhatsApp Stickers/STK-20230621-WA0009.webp"
+		"D:/ML/dataset-20250416-raw/P1000058.RW2"
+	//	"D:/ML/WhatsApp Stickers/STK-20230621-WA0009.webp"
 	//	"E:/Share Box/20230102 dslr/NEF/DSC_0403.NEF"
 	//	"D:/ML/20250320_005230.dng"
 	//	"D:/ML/dataset-RAW/a0001-jmac_DSC1459.dng"
@@ -462,6 +463,7 @@ int io_keydn(IOKey key, char c)
 				"C: Fit image to window\n"
 				"+/-: Change brightness\n"
 				"Q: Equalize histogram\n"
+				"G: Reinterpret Bayer image as grayscale and vice versa\n"
 				"Left/Right: prev/next image\n"
 				"Ctrl O: Open image\n"
 				"R/F5: Refresh\n"
@@ -730,6 +732,17 @@ int io_keydn(IOKey key, char c)
 		if(hist_on)
 			calc_hist();
 		return 1;
+	case 'G':
+		if(imagetype==IM_BAYERv2||imagetype==IM_GRAYSCALEv2)
+		{
+			if(imagetype==IM_BAYERv2)
+				imagetype=IM_GRAYSCALEv2;
+			else if(imagetype==IM_GRAYSCALEv2)
+				imagetype=IM_BAYERv2;
+			update_image(0, 0);
+			return 1;
+		}
+		break;
 	case 'E':
 		wpx=0, wpy=0, zoom=1;
 		imagecentered=0;

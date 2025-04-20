@@ -50,9 +50,9 @@ extern float tdx, tdy;
 typedef enum IOKeyEnum
 {
 #if defined _MSC_VER || defined _WINDOWS || defined _WIN32
-#	define	IOKEY(LinVAL, VAL, LABEL) KEY_##LABEL=VAL,
+#	define IOKEY(LinVAL, VAL, LABEL) KEY_##LABEL=VAL,
 #elif defined __linux__
-#	define	IOKEY(VAL, WinVAL, LABEL) KEY_##LABEL=VAL,
+#	define IOKEY(VAL, WinVAL, LABEL) KEY_##LABEL=VAL,
 #endif
 	
 //IO value, win32 value, label
