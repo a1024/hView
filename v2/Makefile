@@ -8,7 +8,7 @@ SRC =\
  image.c\
  slic2.c\
  window.c\
- util.c
+ util.c\
 
 
 INCLUDE =\
@@ -16,8 +16,8 @@ INCLUDE =\
  -I "C:/Projects/a/LibRaw-0.21.4"\
  -I "C:/Projects/a/libheif"\
  -I "E:/Programs/ffmpeg-7.1.1-full_build-shared/include"\
- -I "E:/C/a/libheif-1.12.0"\
  -I "E:/C/a/LibRaw-0.21.4"\
+ -I "E:/C/a/libheif-1.12.0"\
 
 
 hview:
