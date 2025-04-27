@@ -338,7 +338,8 @@ int io_init(int argc, char **argv)//return false to abort
 {
 #ifdef _DEBUG
 	fn=filter_path(
-		"D:/ML/dataset-20250416-raw/P1000058.RW2"
+		"C:/Projects/datasets/zzz.ppm"
+	//	"D:/ML/dataset-20250416-raw/P1000058.RW2"
 	//	"D:/ML/WhatsApp Stickers/STK-20230621-WA0009.webp"
 	//	"E:/Share Box/20230102 dslr/NEF/DSC_0403.NEF"
 	//	"D:/ML/20250320_005230.dng"

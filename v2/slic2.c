@@ -855,7 +855,7 @@ void* slic2_decode(const unsigned char *src, long long len, int *ret_iw, int *re
 	int iw=slic2_header.iw, ih=slic2_header.ih, nch=slic2_header.nch, depth=slic2_header.depth, res=iw*ih;
 	if(memcmp(slic2_header.tag, "SLI2", 4)||(unsigned)nch-1>4-1||(unsigned)depth-1>16-1)
 	{
-		ERROR("Invalid file");
+	//	ERROR("Invalid file");
 		return 0;
 	}
 	unsigned char truedepth[4];
