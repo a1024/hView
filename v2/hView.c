@@ -338,8 +338,7 @@ int io_init(int argc, char **argv)//return false to abort
 {
 #ifdef _DEBUG
 	fn=filter_path(
-		"C:/Projects/datasets/zzz.ppm"
-	//	"D:/ML/dataset-20250416-raw/P1000058.RW2"
+		"D:/ML/dataset-20250416-raw/P1000058.RW2"
 	//	"D:/ML/WhatsApp Stickers/STK-20230621-WA0009.webp"
 	//	"E:/Share Box/20230102 dslr/NEF/DSC_0403.NEF"
 	//	"D:/ML/20250320_005230.dng"
@@ -930,11 +929,12 @@ int io_keydn(IOKey key, char c)
 				image_free(&image);
 				image_free(&impreview);
 				image=image_alloc16(0, im2->iw, im2->ih, 4, 4, 256, 8);
-				for(ptrdiff_t k=0, res=(ptrdiff_t)im2->iw*im2->ih;k<res;++k)
+				for(ptrdiff_t k=0, res=(ptrdiff_t)4*im2->iw*im2->ih;k<res;++k)
 					image->data[k]=im2->data[k];
 			//	image=image_construct(im2->iw, im2->ih, 16, im2->data, im2->iw, im2->ih, im2->xcap-im2->iw, im2->depth);
 				impreview=im2;
 				imagetype=IM_RGBA;
+				imagedepth=im2->srcdepth;
 				if(imagecentered)
 					center_image();
 				return 1;
