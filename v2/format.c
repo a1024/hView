@@ -1072,7 +1072,7 @@ static int gr_save(const char *dstfn, const short *image, int iw, int ih, int nl
 		FILE *fdst=fopen(dstfn, "wb");
 		if(!fdst)
 		{
-			LOG_ERROR("Cannot open \"%s\" for writing", dstfn);
+			LOG_WARNING("Cannot open \"%s\" for writing", dstfn);
 			return 1;
 		}
 		fprintf(fdst, "GR %d %d %d %c%c%c%c\n",
@@ -1094,14 +1094,14 @@ static short* gr_load(const char *srcfn, int *ret_iw, int *ret_ih, int *ret_nlev
 	ptrdiff_t srcsize=get_filesize(srcfn);
 	if(srcsize<1)
 	{
-		LOG_ERROR("Cannot open \"%s\"", srcfn);
+		LOG_WARNING("Cannot open \"%s\"", srcfn);
 		return 0;
 	}
 	{
 		FILE *fsrc=fopen(srcfn, "rb");
 		if(!fsrc)
 		{
-			LOG_ERROR("Cannot open \"%s\"", srcfn);
+			LOG_WARNING("Cannot open \"%s\"", srcfn);
 			return 0;
 		}
 		srcbuf=(unsigned char*)malloc(srcsize+16);
@@ -1118,7 +1118,7 @@ static short* gr_load(const char *srcfn, int *ret_iw, int *ret_ih, int *ret_nlev
 	{
 		if(memcmp(srcptr, "GR ", 3))
 		{
-			LOG_ERROR("Invalid file");
+			LOG_WARNING("Invalid file");
 			free(srcbuf);
 			return 0;
 		}
@@ -1127,7 +1127,7 @@ static short* gr_load(const char *srcfn, int *ret_iw, int *ret_ih, int *ret_nlev
 			iw=10*iw+*srcptr++-'0';
 		if(*srcptr++!=' ')
 		{
-			LOG_ERROR("Invalid file");
+			LOG_WARNING("Invalid file");
 			free(srcbuf);
 			return 0;
 		}
@@ -1135,7 +1135,7 @@ static short* gr_load(const char *srcfn, int *ret_iw, int *ret_ih, int *ret_nlev
 			ih=10*ih+*srcptr++-'0';
 		if(*srcptr++!=' ')
 		{
-			LOG_ERROR("Invalid file");
+			LOG_WARNING("Invalid file");
 			free(srcbuf);
 			return 0;
 		}
@@ -1143,7 +1143,7 @@ static short* gr_load(const char *srcfn, int *ret_iw, int *ret_ih, int *ret_nlev
 			nlevels=10*nlevels+*srcptr++-'0';
 		if(*srcptr++!=' ')
 		{
-			LOG_ERROR("Invalid file");
+			LOG_WARNING("Invalid file");
 			free(srcbuf);
 			return 0;
 		}
@@ -1152,7 +1152,7 @@ static short* gr_load(const char *srcfn, int *ret_iw, int *ret_ih, int *ret_nlev
 		srcptr+=4;
 		if(*srcptr++!='\n')
 		{
-			LOG_ERROR("Invalid file");
+			LOG_WARNING("Invalid file");
 			free(srcbuf);
 			return 0;
 		}
@@ -1268,6 +1268,10 @@ static short* gr_load(const char *srcfn, int *ret_iw, int *ret_ih, int *ret_nlev
 	return image;
 }
 
+//GR2
+int gr2_save(const char *dstfn, short *image, int iw, int ih, int nlevels, char *bayermatrix);
+short* gr2_load(const char *srcfn, int *ret_iw, int *ret_ih, int *ret_nlevels, char *ret_bayermatrix);
+
 
 #if 1
 #define APILIST_AVFORMAT\
@@ -1337,6 +1341,9 @@ static void *handle_avcodec=0;
 	APIFUNC(av_frame_get_buffer, int (__stdcall* av_frame_get_buffer)(AVFrame *frame, int align))\
 	APIFUNC(av_pix_fmt_desc_get, const AVPixFmtDescriptor *(__stdcall* av_pix_fmt_desc_get)(enum AVPixelFormat pix_fmt))\
 	APIFUNC(av_dict_set, int (__stdcall* av_dict_set)(AVDictionary **pm, const char *key, const char *value, int flags))\
+	APIFUNC(av_opt_set, int (__stdcall* av_opt_set)(void *obj, const char *name, const char *val, int search_flags))\
+	APIFUNC(av_opt_show2, int (__stdcall* av_opt_show2)(void *obj, void *av_log_obj, int req_flags, int rej_flags))\
+	APIFUNC(av_log_default_callback, void (__stdcall* av_log_default_callback)(void *avcl, int level, const char *fmt, va_list vl))\
 	APIFUNC(av_image_fill_arrays, int (__stdcall* av_image_fill_arrays)(uint8_t *dst_data[4], int dst_linesize[4], const uint8_t *src, enum AVPixelFormat pix_fmt, int width, int height, int align))
 static const char *symnames_avutil[]=
 {
@@ -1493,12 +1500,15 @@ int load_media(const char *filename, Image16 **image, int erroronfail)
 #endif
 
 	if(
-		!_stricmp(filename+len-3, ".GR")
+		!_stricmp(filename+len-3, ".GR")||
+		!_stricmp(filename+len-3, ".GR2")
 	)
 	{
 		int iw=0, ih=0, nlevels=0;
 		char bayermatrix[4]={0};
-		short *buf=gr_load(filename, &iw, &ih, &nlevels, bayermatrix);
+		short *buf=gr2_load(filename, &iw, &ih, &nlevels, bayermatrix);
+		if(!buf)
+			buf=gr_load(filename, &iw, &ih, &nlevels, bayermatrix);
 
 		iw<<=1;//it's a planar Bayer stack
 		ih>>=1;
@@ -1692,8 +1702,19 @@ int load_media(const char *filename, Image16 **image, int erroronfail)
 			LOG_WARNING("Allocation error");
 		return -1;
 	}
+
+	console_start();//
+	//typedef struct MyStruct
+	//{
+	//	AVClass *ptr;
+	//} MyStruct;
+	//MyStruct s={0};
+	//avutil.av_log_default_callback(&s, AV_LOG_WARNING, "This is a warning\n", 0);
+	//error=avutil.av_opt_show2(codecContext->priv_data, 0, 0, 0);	CHECK_AV(error);//
+	//error=avutil.av_opt_set(codecContext->priv_data, "dither_method", "none", 0);	CHECK_AV(error);//
+
 	error=avcodec.avcodec_parameters_to_context(codecContext, codecParameters);	CHECK_AV(error);
-	error=avcodec.avcodec_open2(codecContext, codec, NULL);	CHECK_AV(error);
+	error=avcodec.avcodec_open2(codecContext, codec, 0);	CHECK_AV(error);
 	AVFrame *frame=avutil.av_frame_alloc();
 	AVPacket *packet=avcodec.av_packet_alloc();
 	if(!frame||!packet)
@@ -1909,7 +1930,15 @@ int save_media(const char *fn, Image8 *image, int erroronfail)
 
 	//TODO set codec options (which depend on the codec)
 	AVDictionary *opt=0;
-	avutil.av_dict_set(&opt, "slow", 0, 0);
+	switch(codecid)
+	{
+	case AV_CODEC_ID_JPEGXL:
+		avutil.av_dict_set(&opt, "-d", "0", 0);
+		break;
+	case AV_CODEC_ID_MJPEG:
+		avutil.av_dict_set(&opt, "-q:v", "3", 0);
+		break;
+	}
 
 	error=avcodec.avcodec_open2(cc, codec, &opt);	CHECK_AV(error);//-22: Invalid Argument
 	AVFrame *frame=avutil.av_frame_alloc();
@@ -1966,28 +1995,37 @@ int save_media_as(Image16 *image, Image8 *impreview, const char *initialname, in
 {
 	Filter filters[]=
 	{
-		{"\'Png is Not Gnu, which in turn is not Unix\' File (*.PNG)", ".PNG"},//1
+		{"Portable Network Graphics (*.PNG)", ".PNG"},//1
+	//	{"\'Png is Not Gnu, which in turn is not Unix\' File (*.PNG)", ".PNG"},//1
 		{"JPEG XL File (*.JXL)", ".JXL"},			//2
 		{"Simple Lossless Image Codec (*.SLI)", ".SLI"},	//3
-	//	{"WebP File (*.WEBP)", ".WEBP"},//error
-	//	{"JPEG File (*.JPG)", ".JPG"},//error
-	//	{"GIF File (*.GIF)", ".GIF"},//error
-	//	{"JPEG2000 File (*.JP2)", ".JP2"},//error
-	//	{"BMP File (*.BMP)", ".BMP"},//error
-		{"TIFF File (*.TIF)", ".TIF"},		//4
-		{"Quite OK Image (*.QOI)", ".QOI"},	//5
-	//	{"Lossless JPEG (*.LJPG)", ".LJPG"},//error
-	//	{"JPEG-LS (*.JLS)", ".JLS"},//error
-	//	{"LOCO File (*.LOCO)", ".LOCO"},//error
-		{"PPM File (*.PPM)", ".PPM"},//error	//6
-	//	{"PBM File (*.PBM)", ".PBM"},//error
-		{"PGM File (*.PGM)", ".PGM"},//error	//7
-	//	{"PAM File (*.PAM)", ".PAM"},//error
-		{"Golomb-RAW File (*.GR)", ".GR"},	//8
+	//	{"WebP File (*.WEBP)", ".WEBP"},	//error
+	//	{"GIF File (*.GIF)", ".GIF"},		//error
+	//	{"JPEG2000 File (*.JP2)", ".JP2"},	//error
+	//	{"BMP File (*.BMP)", ".BMP"},		//error
+		{"TIFF File (*.TIF)", ".TIF"},			//4
+		{"Quite OK Image (*.QOI)", ".QOI"},		//5
+	//	{"Lossless JPEG (*.LJPG)", ".LJPG"},	//error
+	//	{"JPEG-LS (*.JLS)", ".JLS"},		//error
+	//	{"LOCO File (*.LOCO)", ".LOCO"},	//error
+		{"PPM File (*.PPM)", ".PPM"},		//error	//6
+	//	{"PBM File (*.PBM)", ".PBM"},		//error
+		{"PGM File (*.PGM)", ".PGM"},		//error	//7
+	//	{"PAM File (*.PAM)", ".PAM"},		//error
+		{"Golomb-RAW File (*.GR)", ".GR"},		//8
+		{"Golomb-RAW-2 File (*.GR2)", ".GR2"},		//9
+		{"JPEG File (*.JPG)", ".JPG"},		//error	//10
 	};
 	ArrayHandle name;
 	STR_COPY(name, initialname, namelen);
-	STR_APPEND(name, "PNG", 4, 1);
+	STR_APPEND(name, ".PNG", 4, 1);
+	//int kpoint;
+	//for(kpoint=(int)name->count-1;kpoint>=0;--kpoint)
+	//{
+	//	if(name->data[kpoint]=='.')
+	//		break;
+	//}
+	//array_insert(&name, kpoint+1, "PNG", 4, 1, 1);
 	int ext_selection=0, ret=-1;
 	char *fn=dialog_save_file(filters, _countof(filters), (char*)name->data, &ext_selection, 0, 0);
 	array_free(&name);
@@ -2061,10 +2099,10 @@ int save_media_as(Image16 *image, Image8 *impreview, const char *initialname, in
 			free(dstbuf);
 			ret=0;
 		}
-		else if(ext_selection==8)//PGM
+		else if(ext_selection==8)//GR
 		{
 			if(imagetype!=IM_BAYERv2)
-			LOG_WARNING("Unrecognized extension \".GR\"");
+				LOG_WARNING("RAW image required");
 			else
 			{
 				const char bayerlabels[]="RGB";
@@ -2082,6 +2120,27 @@ int save_media_as(Image16 *image, Image8 *impreview, const char *initialname, in
 					image->data[k]^=0x8000;
 			}
 		}
+		else if(ext_selection==9)//GR2
+		{
+			if(imagetype!=IM_BAYERv2)
+				LOG_WARNING("RAW image required");
+			else
+			{
+				const char bayerlabels[]="RGB";
+				char bayermatrix[]=
+				{
+					bayerlabels[(int)bayer[0]],
+					bayerlabels[(int)bayer[1]],
+					bayerlabels[(int)bayer[2]],
+					bayerlabels[(int)bayer[3]],
+				};
+				for(ptrdiff_t k=0, res=(ptrdiff_t)image->iw*image->ih;k<res;++k)
+					image->data[k]^=0x8000;
+				gr2_save(fn, (short*)image->data, image->iw, image->ih, image->nlevels0, bayermatrix);
+				for(ptrdiff_t k=0, res=(ptrdiff_t)image->iw*image->ih;k<res;++k)
+					image->data[k]^=0x8000;
+			}
+		}
 		else
 			ret=save_media(fn, impreview, erroronfail);
 		free(fn);
@@ -2094,7 +2153,7 @@ static void print_version(char **dst, const char *end, const char *libname, int 
 	if(*dst>=end)
 		LOG_WARNING("Buffer overflow");
 	*dst+=snprintf(*dst, end-*dst,
-		"%-10s %u.%u.%u .%s\n",
+		"%-10s\t%u.%u.%u .%s\n",
 		libname,
 		major, minor, patch,
 		isdll?"dll":"h"

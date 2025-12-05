@@ -3,6 +3,7 @@
 SRC =\
  console.c\
  format.c\
+ gr2.c\
  graphics.c\
  hView.c\
  image.c\

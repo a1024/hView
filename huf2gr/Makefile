@@ -5,4 +5,4 @@ LIBS += -lm
 endif
 
 huf2gr:
-	gcc -O3 -Wall -mavx2 -mbmi -mlzcnt  huf2gr.c util.c  -o huf2gr $(LIBS)
+	clang -O3 -Wall -mavx2 -mbmi -mlzcnt -s huf2gr.c util.c -o huf2gr $(LIBS)
