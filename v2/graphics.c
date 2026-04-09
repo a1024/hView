@@ -1305,7 +1305,7 @@ void display_texture_i(int x1, int x2, int y1, int y2, int *rgb, int txw, int tx
 		if(!tx_id)//generate texture id once
 		{
 			glGenTextures(1, &tx_id);
-			GL_CHECK(error);
+			//GL_CHECK(error);
 		}
 		send_texture_pot(tx_id, rgb2, w2, h2, linear, antialiased);
 		//glBindTexture(GL_TEXTURE_2D, tx_id);								GL_CHECK(error);

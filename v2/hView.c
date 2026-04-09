@@ -1,4 +1,5 @@
 #include"hView.h"
+#include<stdint.h>
 #include<stdio.h>
 #include<stdlib.h>
 #include<string.h>
@@ -56,6 +57,15 @@ int bitmode=0,//0: off, 1: monochrome bitplanes, 2: colorful bitplanes
 int pixelpreview=1;
 int brightness=0;//impreview = CLAMP(image<<brightness)
 
+uint32_t image_txid=0;
+
+static void impreview2gpu(void)
+{
+	if(!image_txid)
+		glGenTextures(1, &image_txid);
+	if(image_txid)
+		send_texture_pot(image_txid, (int*)impreview->data, impreview->iw, impreview->ih, 0, 1);
+}
 static void center_image()
 {
 	if(!impreview)
@@ -179,6 +189,7 @@ static void equalize(void)
 		break;
 	}
 	free(hist);
+	impreview2gpu();
 }
 static void update_image(int settitle, int render)
 {
@@ -291,6 +302,7 @@ static void update_image(int settitle, int render)
 		calc_hist();
 	if(imagecentered)
 		center_image();
+	impreview2gpu();
 	if(render)
 		io_render();
 }
@@ -369,7 +381,10 @@ int io_init(int argc, char **argv)//return false to abort
 		fn=filter_path(argv[0], -1, 0);
 		load_media((char*)fn->data, &image, 1);
 		if(image)
+		{
 			update_image(1, 0);
+			center_image();//
+		}
 		else
 			array_free(&fn);
 	}
@@ -1344,10 +1359,12 @@ void io_render()
 		int
 			sx1=image2screen_x_int(0), sx2=image2screen_x_int(impreview->iw),
 			sy1=image2screen_y_int(0), sy2=image2screen_y_int(impreview->ih);
-		display_texture_i(sx1, sx2, sy1, sy2, (int*)impreview->data, impreview->iw, impreview->ih, 0, 1, 0, 1, 1, 0, 1);
 		int
 			imx=screen2image_x_int(mx),
 			imy=screen2image_y_int(my);
+
+		display_texture(sx1, sx2, sy1, sy2, image_txid, 1, 0, 1, 0, 1);
+	//	display_texture_i(sx1, sx2, sy1, sy2, (int*)impreview->data, impreview->iw, impreview->ih, 0, 1, 0, 1, 1, 0, 1);
 		if(zoom>=ZOOM_LIMIT_LABEL)
 		{
 			int tight=zoom<ZOOM_LIMIT_LABEL*2;
