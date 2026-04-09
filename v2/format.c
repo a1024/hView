@@ -1444,6 +1444,49 @@ int load_media(const char *filename, Image16 **image, int erroronfail)
 {
 	static int callctr=0;
 	load_ffmpeg();
+#if 1
+	{
+		struct stat info={0};
+		stat(filename, &info);
+		if(info.st_size>1024*1024*1024)
+		{
+			if(erroronfail)
+				LOG_WARNING("\"%s\" is too large", filename);
+			return -1;
+		}
+	}
+	{
+		uint8_t buf[128]={0};
+		FILE *f=fopen(filename, "rb");
+		if(!f)
+		{
+			if(erroronfail)
+				LOG_WARNING("Cannot open \"%s\"", filename);
+			return -1;
+		}
+		fread(buf, 1, 128, f);
+		fclose(f);
+		if(0
+		||	!memcmp(buf, "\x37\x7A\xBC\xAF\x27\x1C", 6)	//7Z
+		||	!memcmp(buf, "\x7F""ELF", 4)			//ELF
+		||	!memcmp(buf, "MZ", 2)				//EXE
+		||	!memcmp(buf, "PK\x03\x04", 4)			//ZIP JAR DOCX APK
+		||	!memcmp(buf, "Rar!", 4)				//RAR
+	//	||	!memcmp(buf, "ftyp", 4)				//MP4
+		||	!memcmp(buf, "%PDF", 4)				//PDF
+		||	!memcmp(buf, "\x28\xB5\x2F\xFD", 4)		//ZST
+		||	!memcmp(buf, "\xFD""7zXZ\x00", 4)		//XZ
+		||	!memcmp(buf, "BZh", 3)				//BZip2
+		||	!memcmp(buf, "ID3", 3)				//MP3
+		||	!memcmp(buf, "CD001", 5)			//ISO
+		)
+		{
+			if(erroronfail)
+				LOG_WARNING("\"%s\" is not an image", filename);
+			return -1;
+		}
+	}
+#endif
 	if(ffmpeg_ready!=2)//fallback
 	{
 		if(erroronfail&&!(callctr++))
@@ -1703,7 +1746,7 @@ int load_media(const char *filename, Image16 **image, int erroronfail)
 		return -1;
 	}
 
-	console_start();//
+	//console_start();//
 	//typedef struct MyStruct
 	//{
 	//	AVClass *ptr;
@@ -1937,6 +1980,8 @@ int save_media(const char *fn, Image8 *image, int erroronfail)
 		break;
 	case AV_CODEC_ID_MJPEG:
 		avutil.av_dict_set(&opt, "-q:v", "3", 0);
+		break;
+	default:
 		break;
 	}
 
