@@ -45,14 +45,19 @@
 #define _HUGE	HUGE_VAL
 #endif
 #endif
-#if defined _MSC_VER && defined _WIN32
+#if defined _MSC_VER || defined _WIN32
 #include<process.h>
 #define THREAD_CALL __stdcall
 typedef unsigned THREAD_RET;
+typedef CRITICAL_SECTION mutex_t;
+typedef CONDITION_VARIABLE cond_t;
+typedef HANDLE thread_t;
 #else
 #include<pthread.h>
 #define THREAD_CALL
 typedef void *THREAD_RET;
+typedef pthread_mutex_t mutex_t;
+typedef pthread_cond_t cond_t;
 #endif
 #include<immintrin.h>
 static const char file[]=__FILE__;
@@ -997,7 +1002,7 @@ unsigned long long _umul128(unsigned long long a, unsigned long long b, unsigned
 
 double time_ms(void)
 {
-#ifdef _MSC_VER
+#ifdef _WIN32
 	static long long t0=0;
 	LARGE_INTEGER li;
 	double t;
@@ -1017,7 +1022,7 @@ double time_ms(void)
 }
 double time_sec(void)
 {
-#ifdef _MSC_VER
+#ifdef _WIN32
 	static long long t0=0;
 	LARGE_INTEGER li;
 	double t;
@@ -2999,7 +3004,7 @@ void* mt_exec(void (*func)(void*), void *args, int argbytes, int nthreads)
 		h=(ThreadParam*)array_at(&handles, k);
 		h->func=func;
 		h->args=(char*)args+argbytes*k;
-#ifdef _MSC_VER
+#if defined _MSC_VER || defined _WIN32
 		h->handle=(void*)_beginthreadex(0, 0, thread_caller, h, 0, 0);
 		error=!h->handle;
 #else
@@ -3016,7 +3021,7 @@ void* mt_exec(void (*func)(void*), void *args, int argbytes, int nthreads)
 void mt_finish(void *mt_ctx)
 {
 	ArrayHandle handles=(ArrayHandle)mt_ctx;
-#ifdef _MSC_VER
+#if defined _MSC_VER || defined _WIN32
 	ArrayHandle h2;
 	ARRAY_ALLOC(HANDLE, h2, 0, handles->count, 0, 0);
 	if(!h2)
@@ -3048,6 +3053,96 @@ void mt_finish(void *mt_ctx)
 	}
 #endif
 	array_free(&handles);
+}
+void* mutex_init(void)
+{
+	mutex_t *mutex=(mutex_t*)malloc(sizeof(mutex_t));
+	if(!mutex)
+	{
+		LOG_ERROR("Alloc error");
+		return 0;
+	}
+	memset(mutex, 0, sizeof(mutex_t));
+#ifdef _WIN32
+	InitializeCriticalSection(mutex);
+#else
+	pthread_mutex_init(mutex, 0);
+#endif
+	return mutex;
+}
+void mutex_lock(void *m)
+{
+	mutex_t *mutex=(mutex_t*)m;
+#ifdef _WIN32
+	EnterCriticalSection(mutex);
+#else
+	pthread_mutex_lock(mutex);
+#endif
+}
+void mutex_unlock(void *m)
+{
+	mutex_t *mutex=(mutex_t*)m;
+#ifdef _WIN32
+	LeaveCriticalSection(mutex);
+#else
+	pthread_mutex_unlock(mutex);
+#endif
+}
+void mutex_destroy(void *m)
+{
+	mutex_t *mutex=(mutex_t*)m;
+#ifndef _WIN32
+	pthread_mutex_destroy(mutex);
+#endif
+	free(mutex);
+}
+void* cond_init(void)
+{
+	cond_t *cond=(cond_t*)malloc(sizeof(cond_t));
+	if(!cond)
+	{
+		LOG_ERROR("Alloc error");
+		return 0;
+	}
+	memset(cond, 0, sizeof(cond_t));
+#ifdef _WIN32
+	InitializeConditionVariable(cond);
+#else
+	pthread_cond_init(cond, 0);
+#endif
+	return cond;
+}
+void cond_signal(void *c)
+{
+	cond_t *cond=(cond_t*)c;
+#ifdef _WIN32
+	WakeConditionVariable(cond);
+#else
+	pthread_cond_signal(cond);
+#endif
+}
+void cond_broadcast(void *c)
+{
+	cond_t *cond=(cond_t*)c;
+#ifdef _WIN32
+	WakeAllConditionVariable(cond);
+#else
+	pthread_cond_broadcast(cond);
+#endif
+}
+void cond_wait(void *c, void *m)
+{
+	cond_t *cond=(cond_t*)c;
+	mutex_t *mutex=(mutex_t*)m;
+#ifdef _WIN32
+	SleepConditionVariableCS(cond, mutex, INFINITE);
+#else
+	pthread_cond_wait(cond, mutex);
+#endif
+}
+void cond_destroy(void *c)
+{
+	free(c);
 }
 
 //profiler

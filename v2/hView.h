@@ -4,6 +4,7 @@
 #ifndef INC_PXVIEW3D_H
 #define INC_PXVIEW3D_H
 #include"util.h"
+#include<stdint.h>
 #include<time.h>
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -238,6 +239,7 @@ int copy_bmp_to_clipboard(const unsigned char *rgba, int iw, int ih);
 
 void timer_start(int ms, int id);
 void timer_stop(int id);
+void invalidate(void);
 
 void set_mouse(int x, int y);
 void get_mouse(int *px, int *py);
@@ -720,6 +722,11 @@ typedef enum ProfilePlotModeEnum
 	PROFILE_Y,
 } ProfilePlotMode;
 extern ProfilePlotMode profileplotmode;
+
+void impreview2gpu(uint8_t *data, int iw, int ih);
+void videoplayback_start(const char *fn);
+void videoplayback_pause(int stop);
+void videoplayback_update(void);
 
 
 //tests

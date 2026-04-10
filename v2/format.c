@@ -57,6 +57,22 @@ static char ffmpegerror[AV_ERROR_MAX_STRING_SIZE]={0};
 		}\
 	}while(0)
 
+#define CHECK_AV2(E, F, R)\
+	do\
+	{\
+		if(E<0)\
+		{\
+			if(F)\
+			{\
+				if(!avutil.av_strerror(E, ffmpegerror, AV_ERROR_MAX_STRING_SIZE))\
+					LOG_WARNING("%s", ffmpegerror);\
+				else\
+					LOG_WARNING("FFmpeg %d", E);\
+			}\
+			return R;\
+		}\
+	}while(0)
+
 int   slic2_save(const char *filename, int iw, int ih, int nch, int depth, const void *src);
 void* slic2_load(const char *filename, int *ret_iw, int *ret_ih, int *ret_nch, int *ret_depth, int *ret_dummy_alpha, int force_alpha);
 
@@ -1283,7 +1299,9 @@ short* gr2_load(const char *srcfn, int *ret_iw, int *ret_ih, int *ret_nlevels, c
 	APIFUNC(avformat_alloc_output_context2, int (__stdcall *avformat_alloc_output_context2)(AVFormatContext **ctx, const AVOutputFormat *oformat, const char *format_name, const char *filename))\
 	APIFUNC(avformat_new_stream, AVStream *(__stdcall *avformat_new_stream)(AVFormatContext *s, const AVCodec *c))\
 	APIFUNC(avformat_free_context, void (__stdcall *avformat_free_context)(AVFormatContext *s))\
-	APIFUNC(av_read_frame, int (__stdcall *av_read_frame)(AVFormatContext *s, AVPacket *pkt))
+	APIFUNC(avformat_seek_file, int (__stdcall *avformat_seek_file)(AVFormatContext *s, int stream_index, int64_t min_ts, int64_t ts, int64_t max_ts, int flags))\
+	APIFUNC(av_read_frame, int (__stdcall *av_read_frame)(AVFormatContext *s, AVPacket *pkt))\
+
 static const char *symnames_avformat[]=
 {
 #define APIFUNC(NAME, DECL) #NAME,
@@ -1313,9 +1331,11 @@ static void *handle_avformat=0;
 	APIFUNC(avcodec_send_frame, int (__stdcall *avcodec_send_frame)(AVCodecContext *avctx, const AVFrame *frame))\
 	APIFUNC(avcodec_receive_frame, int (__stdcall *avcodec_receive_frame)(AVCodecContext *avctx, AVFrame *frame))\
 	APIFUNC(avcodec_free_context, void (__stdcall *avcodec_free_context)(AVCodecContext **avctx))\
+	APIFUNC(avcodec_flush_buffers, void (__stdcall* avcodec_flush_buffers)(AVCodecContext *avctx))\
 	APIFUNC(av_packet_alloc, AVPacket *(__stdcall *av_packet_alloc)(void))\
 	APIFUNC(av_packet_free, void (__stdcall* av_packet_free)(AVPacket **pkt))\
-	APIFUNC(av_packet_unref, void (__stdcall* av_packet_unref)(AVPacket *pkt))
+	APIFUNC(av_packet_unref, void (__stdcall* av_packet_unref)(AVPacket *pkt))\
+
 static const char *symnames_avcodec[]=
 {
 #define APIFUNC(NAME, DECL) #NAME,
@@ -1436,6 +1456,380 @@ static void load_ffmpeg()
 		return;
 	}
 	ffmpeg_ready=2;
+}
+
+extern uint32_t animated;
+enum
+{
+	DECODESTATE_FRESH=0,
+	DECODESTATE_READY,
+	DECODESTATE_STOPPED,
+
+	FRAMEQUEUE_CAP=8,
+
+	TIMER_ID_VIDEO=16,
+};
+typedef struct _PlaybackFrame
+{
+	int iw, ih;
+	double pts;
+	uint8_t *data;
+} PlaybackFrame;
+typedef struct _PlaybackQueue
+{
+	PlaybackFrame frames[FRAMEQUEUE_CAP];
+	int read_idx, write_idx, count;
+	void *mutex;
+	void *not_full;
+	void *not_empty;
+	void *not_paused;
+	int buffers_allocated, stopflag;
+} PlaybackQueue;
+static void fq_init(PlaybackQueue *q)
+{
+	memset(q->frames, 0, sizeof(q->frames));
+	q->read_idx=q->write_idx=q->count=0;
+	q->mutex=mutex_init();
+	q->not_full=cond_init();
+	q->not_empty=cond_init();
+	q->not_paused=cond_init();
+	q->buffers_allocated=0;
+	q->stopflag=0;
+}
+static void fq_destroy(PlaybackQueue *q)
+{
+	for(int k=0;k<FRAMEQUEUE_CAP;++k)
+	{
+		PlaybackFrame *f=q->frames+k;
+		f->iw=0;
+		f->ih=0;
+		f->pts=0;
+		free(f->data);
+		f->data=0;
+	}
+	mutex_destroy(q->mutex);
+	cond_destroy(q->not_full);
+	cond_destroy(q->not_paused);
+	cond_destroy(q->not_empty);
+	memset(q, 0, sizeof(*q));
+}
+typedef struct _VideoDecodeArgs
+{
+	void *decode_threadctx;
+//	void *mutex;
+	char fn[4096];
+	int32_t erroronfail;
+	int32_t playing;
+
+	//locals
+	AVFormatContext *formatContext;
+	int32_t video_stream_index;
+	AVCodec const *codec;
+	AVCodecContext *codecContext;
+	AVPacket *packet;
+	AVFrame *frame, *frame2;
+	struct SwsContext *swsctx;
+
+	PlaybackQueue fq;
+} VideoDecodeArgs;
+VideoDecodeArgs *video_decode_args=0;
+uint64_t framenumber=0;
+void videoplayback_update(void)
+{
+	VideoDecodeArgs *args=video_decode_args;
+	extern Image8 *impreview;
+
+	if(!args)
+		return;
+	mutex_lock(args->fq.mutex);
+	while(!args->fq.count&&!args->fq.stopflag)
+		cond_wait(args->fq.not_empty, args->fq.mutex);
+	if(args->fq.stopflag)
+	{
+		mutex_unlock(args->fq.mutex);
+		return;
+	}
+	{
+		PlaybackFrame *frame4=args->fq.frames+args->fq.read_idx;
+		ptrdiff_t usize=(ptrdiff_t)4*frame4->iw*frame4->ih;
+		if(!impreview||impreview->iw!=frame4->iw||impreview->ih!=frame4->ih)
+		{
+			void *ptr=realloc(impreview, sizeof(Image8)+usize);
+			if(!ptr)
+			{
+				LOG_ERROR("Alloc error");
+				return;
+			}
+			impreview=(Image8*)ptr;
+			impreview->iw=frame4->iw;
+			impreview->ih=frame4->ih;
+			impreview->nch=4;
+			impreview->depth=8;
+			impreview->srcdepth=4;
+		}
+		memcpy(impreview->data, frame4->data, usize);
+	}
+	args->fq.read_idx=(args->fq.read_idx+1)%FRAMEQUEUE_CAP;
+	--args->fq.count;
+	cond_signal(args->fq.not_full);
+	mutex_unlock(args->fq.mutex);
+	
+	++framenumber;
+	impreview2gpu(impreview->data, impreview->iw, impreview->ih);
+}
+static void videoplayback_decode(void *p)
+{
+	VideoDecodeArgs *args=(VideoDecodeArgs*)p;
+	int error;
+
+	if(!args)
+		return;
+	{
+		args->formatContext=avformat.avformat_alloc_context();
+		if(!args->formatContext)
+		{
+			LOG_WARNING("Allocation error");
+			return;
+		}
+		error=avformat.avformat_open_input(&args->formatContext, args->fn, 0, 0);
+		CHECK_AV2(error, args->erroronfail,);
+		error=avformat.avformat_find_stream_info(args->formatContext, 0);
+		CHECK_AV2(error, args->erroronfail,);
+
+		AVCodecParameters *codecParameters=0;
+		args->video_stream_index=-1;
+		for(unsigned i=0;i<args->formatContext->nb_streams;++i)
+		{
+			AVStream *stream=args->formatContext->streams[i];
+			AVCodec const *localCodec=avcodec.avcodec_find_decoder(stream->codecpar->codec_id);
+			if(!localCodec)
+			{
+				unsigned version=avcodec.avcodec_version();
+				LOG_WARNING("This codec is not supported on this build of libavcodec %d.%d.%d"
+					, version>>16&0xFF
+					, version>>8&0xFF
+					, version&0xFF
+				);
+				continue;
+			}
+			if(stream->codecpar->codec_type==AVMEDIA_TYPE_VIDEO)
+			{
+				args->video_stream_index=i;
+				args->codec=localCodec;
+				codecParameters=stream->codecpar;
+				break;
+			}
+		}
+		if(args->video_stream_index==-1)//FIXME
+		{
+			if(args->erroronfail)
+				LOG_WARNING("Cannot open \'%s\'", args->fn);
+			return;
+		}
+		args->codecContext=avcodec.avcodec_alloc_context3(args->codec);
+		if(!args->codecContext)
+		{
+			if(args->erroronfail)
+				LOG_WARNING("Allocation error");
+			return;
+		}
+
+		error=avcodec.avcodec_parameters_to_context(args->codecContext, codecParameters);
+		CHECK_AV2(error, args->erroronfail,);
+
+		error=avcodec.avcodec_open2(args->codecContext, args->codec, 0);
+		CHECK_AV2(error, args->erroronfail,);
+
+		args->frame=avutil.av_frame_alloc();
+		args->packet=avcodec.av_packet_alloc();
+		if(!args->frame||!args->packet)
+		{
+			LOG_WARNING("Allocation error");
+			return;
+		}
+	}
+	double pts_scale=av_q2d(args->formatContext->streams[args->video_stream_index]->time_base);
+	for(;;)
+	{
+		while((error=avformat.av_read_frame(args->formatContext, args->packet))>=0)
+		{
+			if(args->packet->stream_index==args->video_stream_index)
+			{
+				error=avcodec.avcodec_send_packet(args->codecContext, args->packet);
+				CHECK_AV2(error, args->erroronfail,);
+				while(error>=0)
+				{
+					error=avcodec.avcodec_receive_frame(args->codecContext, args->frame);
+					if(error==AVERROR(EAGAIN)||error==AVERROR_EOF)
+						break;
+					CHECK_AV2(error, args->erroronfail,);
+			
+					enum AVPixelFormat format=args->frame->format;
+					if(!swscale.sws_isSupportedInput(format))
+					{
+						if(args->erroronfail)
+							LOG_WARNING("Unsupported input pixel format %d", format);
+						return;
+					}
+					if(!swscale.sws_isSupportedOutput(AV_PIX_FMT_RGB32))
+					{
+						if(args->erroronfail)
+							LOG_WARNING("Unsupported output pixel format %d", format);
+						return;
+					}
+					if(!args->frame2)
+					{
+						args->frame2=avutil.av_frame_alloc();
+						if(!args->frame2)
+						{
+							LOG_WARNING("Allocation error");
+							return;
+						}
+						args->frame2->width=args->frame->width;
+						args->frame2->height=args->frame->height;
+						args->frame2->format=AV_PIX_FMT_RGBA;
+					}
+					avutil.av_frame_get_buffer(args->frame2, 8);
+					if(!args->swsctx)
+						args->swsctx=swscale.sws_getContext(
+							args->frame->width,
+							args->frame->height,
+							args->frame->format,
+							args->frame2->width,
+							args->frame2->height,
+							args->frame2->format,
+							0, 0, 0, 0
+						);
+					swscale.sws_scale(
+						args->swsctx,
+						(const uint8_t *const*)args->frame->data,
+						args->frame->linesize,
+						0,
+						args->frame->height,
+						args->frame2->data,
+						args->frame2->linesize
+					);
+					ptrdiff_t usize=(ptrdiff_t)4*args->frame2->width*args->frame2->height;
+
+					mutex_lock(args->fq.mutex);
+					if(args->fq.stopflag)
+					{
+						mutex_unlock(args->fq.mutex);
+						break;
+					}
+					if(args->fq.count>=FRAMEQUEUE_CAP)
+						cond_wait(args->fq.not_full, args->fq.mutex);
+					PlaybackFrame *frame3=args->fq.frames+args->fq.write_idx;
+					if(!frame3->data||frame3->iw!=args->frame2->width||frame3->ih!=args->frame2->height)
+					{
+						void *ptr=realloc(frame3->data, usize);
+						if(!ptr)
+						{
+							LOG_ERROR("Alloc error");
+							return;
+						}
+						frame3->data=(uint8_t*)ptr;
+						frame3->iw=args->frame2->width;
+						frame3->ih=args->frame2->height;
+					}
+					{
+						int padding=abs(args->frame2->linesize[0])/4-args->frame2->width;//divide linesize by pixel size to get padded rowstride
+						if(padding<0)
+							padding=0;
+						if(padding)
+						{
+							const uint8_t *srcptr=args->frame2->data[0];
+							uint8_t *dstptr=frame3->data;
+							int rowstride=4*(frame3->iw+padding);
+							for(int ky=0;ky<frame3->ih;++ky)
+							{
+								const uint8_t *srcptr2=srcptr;
+								for(int kx=0;kx<frame3->iw;++kx)
+								{
+									*(uint32_t*)dstptr=*(uint32_t*)srcptr2;
+									srcptr2+=sizeof(uint32_t);
+									dstptr+=sizeof(uint32_t);
+								}
+								srcptr+=rowstride;
+							}
+						}
+						else
+							memcpy(frame3->data, args->frame2->data[0], usize);
+					}
+					frame3->pts=args->frame->best_effort_timestamp*pts_scale;
+					args->fq.write_idx=(args->fq.write_idx+1)%FRAMEQUEUE_CAP;
+					++args->fq.count;
+					cond_signal(args->fq.not_empty);
+					mutex_unlock(args->fq.mutex);
+				}
+			}
+			avcodec.av_packet_unref(args->packet);
+			if(!args->playing)
+				break;
+		}
+		if(args->fq.stopflag)
+			break;
+		if(!args->playing)
+			break;
+		avcodec.avcodec_flush_buffers(args->codecContext);
+		avformat.avformat_seek_file(args->formatContext, args->video_stream_index, INT64_MIN, 0, INT64_MAX, AVSEEK_FLAG_BACKWARD);
+		framenumber=0;
+	}
+	avformat.avformat_close_input(&video_decode_args->formatContext);
+	avcodec.av_packet_free(&video_decode_args->packet);
+	avutil.av_frame_free(&video_decode_args->frame);
+	avcodec.avcodec_free_context(&video_decode_args->codecContext);
+}
+void videoplayback_start(const char *fn)
+{
+	if(animated)
+		videoplayback_pause(1);
+	animated=1;
+
+	video_decode_args=(VideoDecodeArgs*)malloc(sizeof(VideoDecodeArgs));
+	if(!video_decode_args)
+	{
+		LOG_ERROR("Alloc error");
+		return;
+	}
+	memset(video_decode_args, 0, sizeof(*video_decode_args));
+	strcpy(video_decode_args->fn, fn);
+
+	fq_init(&video_decode_args->fq);
+	video_decode_args->playing=1;
+	video_decode_args->decode_threadctx=mt_exec(videoplayback_decode, video_decode_args, sizeof(*video_decode_args), 1);
+	timer_start(30, TIMER_ID_VIDEO);
+}
+void videoplayback_pause(int stop)
+{
+	if(video_decode_args)
+	{
+		if(stop)
+		{
+			timer_stop(TIMER_ID_VIDEO);
+			animated=0;
+			video_decode_args->playing=0;
+			video_decode_args->fq.stopflag=1;
+			mutex_lock(video_decode_args->fq.mutex);
+			cond_signal(video_decode_args->fq.not_full);
+			mutex_unlock(video_decode_args->fq.mutex);
+
+			mt_finish(video_decode_args->decode_threadctx);
+
+			fq_destroy(&video_decode_args->fq);
+			free(video_decode_args);
+			video_decode_args=0;
+			framenumber=0;
+		}
+		else
+		{
+			video_decode_args->playing=!video_decode_args->playing;
+			if(video_decode_args->playing)
+				timer_start(30, TIMER_ID_VIDEO);
+			else
+				timer_stop(TIMER_ID_VIDEO);
+		}
+	}
 }
 
 //https://github.com/ShootingKing-AM/ffmpeg-pseudocode-tutorial
@@ -1707,7 +2101,8 @@ int load_media(const char *filename, Image16 **image, int erroronfail)
 	}
 	error=avformat.avformat_open_input(&formatContext, filename, 0, 0);
 	CHECK_AV(error);
-	error=avformat.avformat_find_stream_info(formatContext, 0);	CHECK_AV(error);
+	error=avformat.avformat_find_stream_info(formatContext, 0);
+	CHECK_AV(error);
 
 	AVCodec const *codec=0;
 	AVCodecParameters *codecParameters=0;
@@ -1724,12 +2119,13 @@ int load_media(const char *filename, Image16 **image, int erroronfail)
 		}
 		if(stream->codecpar->codec_type==AVMEDIA_TYPE_VIDEO)
 		{
-			if(video_stream_index==-1)
-			{
+			//if(video_stream_index==-1)
+			//{
 				video_stream_index=i;
 				codec=localCodec;
 				codecParameters=stream->codecpar;
-			}
+			//}
+			break;
 		}
 	}
 	if(video_stream_index==-1)//FIXME
@@ -1765,6 +2161,7 @@ int load_media(const char *filename, Image16 **image, int erroronfail)
 		LOG_WARNING("Allocation error");
 		return -1;
 	}
+	int framecount=0;
 	while((error=avformat.av_read_frame(formatContext, packet))>=0)
 	{
 		if(packet->stream_index==video_stream_index)
@@ -1791,6 +2188,9 @@ int load_media(const char *filename, Image16 **image, int erroronfail)
 						LOG_WARNING("Unsupported output pixel format %d", format);
 					return -1;
 				}
+				++framecount;
+				if(framecount>1)
+					break;
 				AVFrame *frame2=avutil.av_frame_alloc();
 				if(!frame2)
 				{
@@ -1805,7 +2205,7 @@ int load_media(const char *filename, Image16 **image, int erroronfail)
 				struct SwsContext *swsctx=swscale.sws_getContext(frame->width, frame->height, frame->format, frame2->width, frame2->height, frame2->format, 0, 0, 0, 0);
 				swscale.sws_scale(swsctx, (const uint8_t *const*)frame->data, frame->linesize, 0, frame->height, frame2->data, frame2->linesize);
 
-				int padding=abs(frame2->linesize[0])/8-frame2->width;//division by 8 is because a single pixel is 64-bit (8 bytes)
+				int padding=abs(frame2->linesize[0])/8-frame2->width;//divide linesize by pixel size to get padded rowstride
 				if(padding<0)
 					padding=0;
 				
@@ -1854,18 +2254,21 @@ int load_media(const char *filename, Image16 **image, int erroronfail)
 
 				swscale.sws_freeContext(swsctx);
 				avutil.av_frame_free(&frame2);
-				break;//get just the first frame
 			}
 		}
 		avcodec.av_packet_unref(packet);
-		if(*image)
-			break;//get one frame
+		//if(*image)
+		//	break;//get one frame
 	}
 	avformat.avformat_close_input(&formatContext);
 	avcodec.av_packet_free(&packet);
 	avutil.av_frame_free(&frame);
 	avcodec.avcodec_free_context(&codecContext);
 	
+	if(framecount>1)
+		videoplayback_start(filename);
+	else
+		videoplayback_pause(1);
 	update_globals(filename, *image);
 	return 0;
 }

@@ -846,6 +846,10 @@ void timer_stop(int id)
 	if(timer)
 		KillTimer(ghWnd, id), timer=0;
 }
+void invalidate(void)
+{
+	InvalidateRect(ghWnd, 0, 0);
+}
 
 void set_mouse(int x, int y)
 {

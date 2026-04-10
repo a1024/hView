@@ -584,6 +584,16 @@ size_t query_mem_usage();
 void* mt_exec(void (*func)(void*), void *args, int argbytes, int nthreads);
 void  mt_finish(void *mt_ctx);
 
+void* mutex_init(void);
+void mutex_destroy(void *m);
+void mutex_lock(void *m);
+void mutex_unlock(void *m);
+void* cond_init(void);
+void cond_destroy(void *c);
+void cond_signal(void *c);
+void cond_broadcast(void *c);
+void cond_wait(void *c, void *m);
+
 //PROFILER  (spawns a thread)		FIXME port to Linux
 #if defined PROFILER && (defined _MSC_VER || defined _WIN32)
 

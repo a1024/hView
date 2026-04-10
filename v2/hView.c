@@ -1,5 +1,4 @@
 #include"hView.h"
-#include<stdint.h>
 #include<stdio.h>
 #include<stdlib.h>
 #include<string.h>
@@ -58,13 +57,15 @@ int pixelpreview=1;
 int brightness=0;//impreview = CLAMP(image<<brightness)
 
 uint32_t image_txid=0;
+uint32_t animated=0;
+extern uint64_t framenumber;
 
-static void impreview2gpu(void)
+void impreview2gpu(uint8_t *data, int iw, int ih)
 {
 	if(!image_txid)
 		glGenTextures(1, &image_txid);
 	if(image_txid)
-		send_texture_pot(image_txid, (int*)impreview->data, impreview->iw, impreview->ih, 0, 1);
+		send_texture_pot(image_txid, (int*)data, iw, ih, 0, 1);
 }
 static void center_image()
 {
@@ -189,7 +190,7 @@ static void equalize(void)
 		break;
 	}
 	free(hist);
-	impreview2gpu();
+	impreview2gpu(impreview->data, impreview->iw, impreview->ih);
 }
 static void update_image(int settitle, int render)
 {
@@ -302,7 +303,7 @@ static void update_image(int settitle, int render)
 		calc_hist();
 	if(imagecentered)
 		center_image();
-	impreview2gpu();
+	impreview2gpu(impreview->data, impreview->iw, impreview->ih);
 	if(render)
 		io_render();
 }
@@ -350,7 +351,8 @@ int io_init(int argc, char **argv)//return false to abort
 {
 #ifdef _DEBUG
 	fn=filter_path(
-		"C:/dataset-20241107-gr/20241107_164228_958.gr"
+		"D:/ML/dataset-Internet/quantum.mp4"
+	//	"C:/dataset-20241107-gr/20241107_164228_958.gr"
 	//	"D:/ML/dataset-20250416-raw/P1000058.RW2"
 	//	"D:/ML/WhatsApp Stickers/STK-20230621-WA0009.webp"
 	//	"E:/Share Box/20230102 dslr/NEF/DSC_0403.NEF"
@@ -717,6 +719,9 @@ int io_keydn(IOKey key, char c)
 				return 1;
 			}
 		}
+		break;
+	case KEY_SPACE:
+		videoplayback_pause(0);
 		break;
 	case 'O':
 		if(GET_KEY_STATE(KEY_CTRL))
@@ -1105,6 +1110,8 @@ void io_timer()
 		wpy+=delta/zoom;
 	if(keyboard['D'])//move window right
 		wpx+=delta/zoom;
+
+	videoplayback_update();
 }
 static void print_pixellabels(int ix1, int ix2, int iy1, int iy2, int xoffset, int yoffset, int component, char label, long long txtcolors, int is_bayer, int tight)
 {
@@ -1539,6 +1546,8 @@ void io_render()
 				break;
 			}
 		}
+		if(animated)
+			GUIPrint_append(0, 0, h-tdy, 1, 0, " F%12lld", framenumber);
 		GUIPrint_append(0, 0, h-tdy, 1, 1, "");
 		//if((unsigned)imx<(unsigned)impreview->iw&&(unsigned)imy<(unsigned)impreview->ih)
 		//{
