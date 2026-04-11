@@ -823,13 +823,13 @@ int io_keydn(IOKey key, char c)
 			{
 				Image16 *im2=0;
 				int error=load_media((wchar_t*)fn2->data, &im2, 1);
-				if(im2&&!error)
+				if((im2||animated)&&!error)
 				{
 					image_free(&image);
 					image=im2;
 					if(fn)
 						array_free(&fn);
-					fn=filter_path((char*)fn2->data, -1, 0);
+					fn=filter_pathw((wchar_t*)fn2->data, -1, 0);
 					update_image(1, 0);
 				}
 				array_free(&fn2);
