@@ -208,10 +208,10 @@ static void equalize(void)
 }
 static void update_image(int settitle, int render)
 {
+	if(settitle&&fn)
+		set_window_title("%s - hView", (char*)fn->data);
 	if(!image)
 		return;
-	if(settitle)
-		set_window_title("%s - hView", (char*)fn->data);
 	if(!impreview||impreview->iw!=image->iw||impreview->ih!=image->ih)
 	{
 		if(impreview)
@@ -396,7 +396,7 @@ int io_init(int argc, char **argv)//return false to abort
 	//	"C:/Projects/datasets/dataset-RAW/6K9A8788.CR3"
 		, -1, 0);
 	load_media((char*)fn->data, &image, 1);
-	if(image)
+	if(image||animated)
 	{
 		update_image(1, 0);
 		center_image();//
@@ -408,7 +408,7 @@ int io_init(int argc, char **argv)//return false to abort
 	{
 		fn=filter_path(argv[0], -1, 0);
 		load_media((char*)fn->data, &image, 1);
-		if(image)
+		if(image||animated)
 		{
 			update_image(1, 0);
 			center_image();//
@@ -417,7 +417,7 @@ int io_init(int argc, char **argv)//return false to abort
 			array_free(&fn);
 	}
 #endif
-	if(!image)
+	if(!image&&!animated)
 		set_window_title("hView");
 	return 1;
 }
@@ -730,7 +730,7 @@ int io_keydn(IOKey key, char c)
 					break;
 				}
 			}
-			ArrayHandle filenames=get_filenames((char*)path->data, 0, 0, 1), *fn2;
+			ArrayHandle filenames=get_filenames((char*)path->data, 0, 0, 1), *fn2=0;
 			if(filenames&&filenames->count)
 			{
 				array_free(&path);
@@ -757,7 +757,7 @@ int io_keydn(IOKey key, char c)
 					if(im2)
 						image_free(&im2);
 				}
-				if(im2)
+				if(im2||animated)
 				{
 					image_free(&image);
 					image=im2;
@@ -1414,6 +1414,51 @@ static void draw_profile_y_preview(int comp, int color)//vertical cross-section 
 		draw_2d_flush(vertices_2d, color, GL_LINE_STRIP);
 	}
 }
+static void print_time(float x, float y, float zoom, double t)
+{
+	if(t<1)
+		GUIPrint(0, x, y, zoom, "%5.3lf", t);
+	else if(t<60)
+		GUIPrint(0, x, y, zoom, "%.0lf", t);
+	else if(t<60*60)
+	{
+		int minutes=(int)(t/60);
+		double seconds=t-minutes*60;
+		GUIPrint(0, x, y, zoom, "%d:%02.0lf", minutes, seconds);
+	}
+	else
+	{
+		double seconds=t;
+		int hours=(int)(seconds/(60*60));
+		seconds-=hours*60*60;
+		int minutes=(int)(t/60);
+		seconds-=minutes*60;
+		GUIPrint(0, x, y, zoom, "%d:%d:%02.0lf", hours, minutes, seconds);
+	}
+}
+static void print_duration(float x, float y, float zoom, double t)
+{
+	//if(t<1)
+	//	GUIPrint(0, x, y, zoom, "%5.3lf", t);
+	//else
+	if(t<60)
+		GUIPrint(0, x, y, zoom, "%5.3lf", t);
+	else if(t<60*60)
+	{
+		int minutes=(int)(t/60);
+		double seconds=t-minutes*60;
+		GUIPrint(0, x, y, zoom, "%d:%06.3lf", minutes, seconds);
+	}
+	else
+	{
+		double seconds=t;
+		int hours=(int)(seconds/(60*60));
+		seconds-=hours*60*60;
+		int minutes=(int)(t/60);
+		seconds-=minutes*60;
+		GUIPrint(0, x, y, zoom, "%d:%d:%06.3lf", hours, minutes, seconds);
+	}
+}
 void io_render()
 {
 	Slider slider={0};
@@ -1439,101 +1484,142 @@ void io_render()
 	}
 	glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
 
-	if(impreview)
+	if(impreview||animated)
 	{
-		int
-			sx1=image2screen_x_int(0), sx2=image2screen_x_int(impreview->iw),
-			sy1=image2screen_y_int(0), sy2=image2screen_y_int(impreview->ih);
+		int imx=0, imy=0;
 
-		display_texture(sx1, sx2, sy1, sy2, image_txid, 1, 0, 1, 0, 1);
-	//	display_texture_i(sx1, sx2, sy1, sy2, (int*)impreview->data, impreview->iw, impreview->ih, 0, 1, 0, 1, 1, 0, 1);
-		if(zoom>=ZOOM_LIMIT_LABEL)
+		if(impreview)
 		{
-			int tight=zoom<ZOOM_LIMIT_LABEL*2;
-			int csx1=sx1, csx2=sx2;
-			int csy1=sy1, csy2=sy2;
-			CLAMP2(csx1, 0, w);
-			CLAMP2(csx2, 0, w);
-			CLAMP2(csy1, 0, h);
-			CLAMP2(csy2, 0, h);
-			int ix1=screen2image_x_int(csx1), ix2=screen2image_x_int(csx2);
-			int iy1=screen2image_y_int(csy1), iy2=screen2image_y_int(csy2);
-			const char labels[]="rgb";
-			uint64_t theme[]=
+			int
+				sx1=image2screen_x_int(0), sx2=image2screen_x_int(impreview->iw),
+				sy1=image2screen_y_int(0), sy2=image2screen_y_int(impreview->ih);
+			
+			imx=screen2image_x_int(mx);
+			imy=screen2image_y_int(my);
+			display_texture(sx1, sx2, sy1, sy2, image_txid, 1, 0, 1, 0, 1);
+		//	display_texture_i(sx1, sx2, sy1, sy2, (int*)impreview->data, impreview->iw, impreview->ih, 0, 1, 0, 1, 1, 0, 1);
+			if(zoom>=ZOOM_LIMIT_LABEL)
 			{
-				0xC00000FF80000000,
-				0xC000FF0080000000,
-				0xC0FF000080FFFFFF,
-				0xC0FFFFFF80000000,
-			};
-			if(pixelpreview)
-			{
-				print_pixellabels_preview(ix1, ix2, iy1, iy2, 0, 0, 0, 'r', theme[0], 0, tight);
-				print_pixellabels_preview(ix1, ix2, iy1, iy2, 0, 0, 1, 'g', theme[1], 0, tight);
-				print_pixellabels_preview(ix1, ix2, iy1, iy2, 0, 0, 2, 'b', theme[2], 0, tight);
-				if(zoom>=ZOOM_LIMIT_ALPHA)
-					print_pixellabels_preview(ix1, ix2, iy1, iy2, 0, 0, 3, 'a', theme[3], 0, tight);
-			}
-			else if(imagetype==IM_GRAYSCALEv2)
-				print_pixellabels(ix1, ix2, iy1, iy2, 0, 0, 0, 'g', theme[3], 0, tight);
-			else if(imagetype==IM_RGBA)
-			{
-				print_pixellabels(ix1, ix2, iy1, iy2, 0, 0, 0, 'r', theme[0], 0, tight);
-				print_pixellabels(ix1, ix2, iy1, iy2, 0, 0, 1, 'g', theme[1], 0, tight);
-				print_pixellabels(ix1, ix2, iy1, iy2, 0, 0, 2, 'b', theme[2], 0, tight);
-				if(zoom>=ZOOM_LIMIT_ALPHA)
-					print_pixellabels(ix1, ix2, iy1, iy2, 0, 0, 3, 'a', theme[3], 0, tight);
-			}
-			else if(imagetype==IM_BAYERv2)
-			{
-				print_pixellabels(ix1, ix2, iy1, iy2, 0, 0, 0, labels[(int)bayer[0]], theme[(int)bayer[0]], 1, tight);
-				print_pixellabels(ix1, ix2, iy1, iy2, 1, 0, 0, labels[(int)bayer[1]], theme[(int)bayer[1]], 1, tight);
-				print_pixellabels(ix1, ix2, iy1, iy2, 0, 1, 0, labels[(int)bayer[2]], theme[(int)bayer[2]], 1, tight);
-				print_pixellabels(ix1, ix2, iy1, iy2, 1, 1, 0, labels[(int)bayer[3]], theme[(int)bayer[3]], 1, tight);
-			}
-		}
-		if(hist_on)
-		{
-			switch(imagetype)
-			{
-			default://make gcc happy
-				break;
-			case IM_GRAYSCALEv2:
-				draw_histogram(histogram, 256, 0x80808080, (int)tdy, (int)(h-tdy));
-				break;
-			case IM_RGBA:
-			case IM_BAYERv2:
+				int tight=zoom<ZOOM_LIMIT_LABEL*2;
+				int csx1=sx1, csx2=sx2;
+				int csy1=sy1, csy2=sy2;
+				CLAMP2(csx1, 0, w);
+				CLAMP2(csx2, 0, w);
+				CLAMP2(csy1, 0, h);
+				CLAMP2(csy2, 0, h);
+				int ix1=screen2image_x_int(csx1), ix2=screen2image_x_int(csx2);
+				int iy1=screen2image_y_int(csy1), iy2=screen2image_y_int(csy2);
+				const char labels[]="rgb";
+				uint64_t theme[]=
 				{
-					int y1=(int)tdy, y2=(int)(h-tdy), dy=(int)(y2-y1);
-					draw_histogram(histogram    , 256, 0x800000FF, y1       , y1+dy/3	);
-					draw_histogram(histogram+256, 256, 0x8000FF00, y1+dy  /3, y1+dy*2/3	);
-					draw_histogram(histogram+512, 256, 0x80FF0000, y1+dy*2/3, y2		);
+					0xC00000FF80000000,
+					0xC000FF0080000000,
+					0xC0FF000080FFFFFF,
+					0xC0FFFFFF80000000,
+				};
+				if(pixelpreview)
+				{
+					print_pixellabels_preview(ix1, ix2, iy1, iy2, 0, 0, 0, 'r', theme[0], 0, tight);
+					print_pixellabels_preview(ix1, ix2, iy1, iy2, 0, 0, 1, 'g', theme[1], 0, tight);
+					print_pixellabels_preview(ix1, ix2, iy1, iy2, 0, 0, 2, 'b', theme[2], 0, tight);
+					if(zoom>=ZOOM_LIMIT_ALPHA)
+						print_pixellabels_preview(ix1, ix2, iy1, iy2, 0, 0, 3, 'a', theme[3], 0, tight);
 				}
-				break;
+				else if(imagetype==IM_GRAYSCALEv2)
+					print_pixellabels(ix1, ix2, iy1, iy2, 0, 0, 0, 'g', theme[3], 0, tight);
+				else if(imagetype==IM_RGBA)
+				{
+					print_pixellabels(ix1, ix2, iy1, iy2, 0, 0, 0, 'r', theme[0], 0, tight);
+					print_pixellabels(ix1, ix2, iy1, iy2, 0, 0, 1, 'g', theme[1], 0, tight);
+					print_pixellabels(ix1, ix2, iy1, iy2, 0, 0, 2, 'b', theme[2], 0, tight);
+					if(zoom>=ZOOM_LIMIT_ALPHA)
+						print_pixellabels(ix1, ix2, iy1, iy2, 0, 0, 3, 'a', theme[3], 0, tight);
+				}
+				else if(imagetype==IM_BAYERv2)
+				{
+					print_pixellabels(ix1, ix2, iy1, iy2, 0, 0, 0, labels[(int)bayer[0]], theme[(int)bayer[0]], 1, tight);
+					print_pixellabels(ix1, ix2, iy1, iy2, 1, 0, 0, labels[(int)bayer[1]], theme[(int)bayer[1]], 1, tight);
+					print_pixellabels(ix1, ix2, iy1, iy2, 0, 1, 0, labels[(int)bayer[2]], theme[(int)bayer[2]], 1, tight);
+					print_pixellabels(ix1, ix2, iy1, iy2, 1, 1, 0, labels[(int)bayer[3]], theme[(int)bayer[3]], 1, tight);
+				}
+			}
+			if(hist_on)
+			{
+				switch(imagetype)
+				{
+				default://make gcc happy
+					break;
+				case IM_GRAYSCALEv2:
+					draw_histogram(histogram, 256, 0x80808080, (int)tdy, (int)(h-tdy));
+					break;
+				case IM_RGBA:
+				case IM_BAYERv2:
+					{
+						int y1=(int)tdy, y2=(int)(h-tdy), dy=(int)(y2-y1);
+						draw_histogram(histogram    , 256, 0x800000FF, y1       , y1+dy/3	);
+						draw_histogram(histogram+256, 256, 0x8000FF00, y1+dy  /3, y1+dy*2/3	);
+						draw_histogram(histogram+512, 256, 0x80FF0000, y1+dy*2/3, y2		);
+					}
+					break;
+				}
 			}
 		}
-	}
-	if(animated&&!slider_hide)
-	{
-		draw_rect(0, (float)(w*slider.timestamp/slider.duration), (float)(h-tdy-SLIDER_HEIGHT), (float)(h-tdy), 0x804080C0);
-		double step=1;
-		while(w*step/slider.duration<32)
-			step*=2;
-		for(double tick=step;tick<slider.duration;tick+=step)
-			GUIPrint(0, (float)(w*tick/slider.duration), (float)(h-tdy-SLIDER_HEIGHT), 1, "%.0lf", tick);
-		if(animation_ctr>0)
+		if(animated&&!slider_hide)
 		{
-			draw_rect((float)(w-SLIDER_HEIGHT), (float)w, (float)(h-h/2.f*g_volume), (float)h, 0x80C08040);
-			if(mute_audio)
-				GUIPrint(0, (float)(w-200), h/2.f, 2, "Muted");
-			else
-				GUIPrint(0, (float)(w-200), h/2.f, 2, "%8.4lf%%", 100.*g_volume);
-			--animation_ctr;
+			enum
+			{
+				UNIT_SECONDS,
+				UNIT_MINUTES,
+				UNIT_HOURS,
+
+				SCALE=100,
+			};
+			draw_rect(0, (float)(w*slider.timestamp/slider.duration), (float)(h-tdy-SLIDER_HEIGHT), (float)(h-tdy), 0x804080C0);
+			double step=SCALE*slider.duration/w;
+			int unit=UNIT_SECONDS;
+			if(step>60)
+				unit=UNIT_MINUTES;
+			if(step>60*60)
+				unit=UNIT_HOURS;
+			switch(unit)
+			{
+			case UNIT_SECONDS:break;
+			case UNIT_MINUTES:step*=1./60;break;
+			case UNIT_HOURS:step*=1./(60*60);break;
+			}
+			int p=floor_log10(step);
+			int msd=(int)(step*_10pow(-p));
+			static const int digits[]=
+			{//	0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+				1, 1, 2, 2, 2, 5, 5, 5, 5, 5,
+			};
+			step=digits[msd]*_10pow(p);
+			switch(unit)
+			{
+			case UNIT_SECONDS:break;
+			case UNIT_MINUTES:step*=60;break;
+			case UNIT_HOURS:step*=60*60;break;
+			}
+		
+			for(double tick=step;tick<slider.duration;tick+=step)
+			{
+				float x=(float)(w*tick/slider.duration);
+				draw_line(x, (float)(h-SLIDER_HEIGHT), x, (float)(h-tdy), 0x80FF0000);
+			}
+			for(double tick=step;tick<slider.duration;tick+=step)
+				print_time((float)(w*tick/slider.duration), (float)(h-tdy-SLIDER_HEIGHT), 1, tick);
+			print_duration((float)(w-200), (float)(h-3*tdy-SLIDER_HEIGHT), 2, slider.duration);
+			if(animation_ctr>0)
+			{
+				draw_rect((float)(w-SLIDER_HEIGHT), (float)w, (float)(h-h/2.f*g_volume), (float)h, 0x80C08040);
+				if(mute_audio)
+					GUIPrint(0, (float)(w-200), h/2.f, 2, "Muted");
+				else
+					GUIPrint(0, (float)(w-200), h/2.f, 2, "%8.4lf%%", 100.*g_volume);
+				--animation_ctr;
+			}
 		}
-	}
-	if(impreview)
-	{
-		if(profileplotmode>PROFILE_OFF)
+		if(impreview&&profileplotmode>PROFILE_OFF)
 		{
 			void (*draw_profile)(int comp, int color);
 			if(pixelpreview)
@@ -1570,87 +1656,93 @@ void io_render()
 			}
 		}
 
-		const char *imtypestr="?";
-		switch(imagetype)
+		if(impreview)
 		{
-		default://make gcc happy
-			break;
-		case IM_UNINITIALIZED:	imtypestr="IM_UNINITIALIZED";	break;
-		case IM_GRAYSCALEv2:	imtypestr="IM_GRAYSCALEv2";	break;
-		case IM_RGBA:		imtypestr="IM_RGBA";		break;
-		case IM_BAYERv2:	imtypestr="IM_BAYERv2";		break;
+			const char *imtypestr="?";
+			switch(imagetype)
+			{
+			default://make gcc happy
+				break;
+			case IM_UNINITIALIZED:	imtypestr="IM_UNINITIALIZED";	break;
+			case IM_GRAYSCALEv2:	imtypestr="IM_GRAYSCALEv2";	break;
+			case IM_RGBA:		imtypestr="IM_RGBA";		break;
+			case IM_BAYERv2:	imtypestr="IM_BAYERv2";		break;
+			}
+			//g_printed=0;
+			GUIPrint_append(0, 0, h-tdy, 1, 0, "%s  XY(%5d, %5d) / WH%5d x%5d  x%lf bright%d  %s  depth %d  %10td bytes %10.6lf:1",
+				strlastmodified,
+				imx, imy, impreview->iw, impreview->ih,
+				zoom,
+				brightness,
+				imtypestr,
+				imagedepth,
+				filesize,
+				(double)image->nch*image->iw*image->ih*log2(image->nlevels0)/(8*filesize)
+			);
+			if(bitmode==2)
+				GUIPrint_append(0, 0, h-tdy, 1, 0, "  Bitplane  %2d", bitplane);
+			else if(bitmode==1)
+				GUIPrint_append(0, 0, h-tdy, 1, 0, "  Bitplane%d:%2d", bitplane/imagedepth, bitplane%imagedepth);
 		}
-		int
-			imx=screen2image_x_int(mx),
-			imy=screen2image_y_int(my);
-		//g_printed=0;
-		GUIPrint_append(0, 0, h-tdy, 1, 0, "%s  XY(%5d, %5d) / WH%5d x%5d  x%lf bright%d  %s  depth %d  %10td bytes %10.6lf:1",
-			strlastmodified,
-			imx, imy, impreview->iw, impreview->ih,
-			zoom,
-			brightness,
-			imtypestr,
-			imagedepth,
-			filesize,
-			(double)image->nch*image->iw*image->ih*log2(image->nlevels0)/(8*filesize)
-		);
-		if(bitmode==2)
-			GUIPrint_append(0, 0, h-tdy, 1, 0, "  Bitplane  %2d", bitplane);
-		else if(bitmode==1)
-			GUIPrint_append(0, 0, h-tdy, 1, 0, "  Bitplane%d:%2d", bitplane/imagedepth, bitplane%imagedepth);
 		if(animated)
 		{
-			GUIPrint_append(0, 0, h-tdy, 1, 0, " F%12lld", framenumber);//FIXME doesn't support seeking
+			if(impreview)
+				GUIPrint_append(0, 0, h-tdy, 1, 0, " F%12lld", framenumber);//FIXME doesn't support seeking
+			else
+				GUIPrint_append(0, 0, h-tdy, 1, 0, " %10.3lf sec", slider.timestamp);
 #ifdef _DEBUG
 			extern double vtime, atime;
 			GUIPrint_append(0, 0, h-tdy, 1, 0, "  V %12.6lf  A %12.6lf", vtime, atime);
 #endif
 		}
-		if((unsigned)imx<(unsigned)impreview->iw&&(unsigned)imy<(unsigned)impreview->ih)
+		if(impreview)
 		{
-			unsigned char *p=impreview->data+((ptrdiff_t)impreview->iw*imy+imx)*impreview->nch;
-			unsigned short *p0=(unsigned short*)image->data+((ptrdiff_t)image->iw*imy+imx)*image->nch;
-			switch(imagetype)
+			if((unsigned)imx<(unsigned)impreview->iw&&(unsigned)imy<(unsigned)impreview->ih)
 			{
-			default://make gcc happy
-				break;
-			case IM_GRAYSCALEv2:
-				if(has_alpha)
-					GUIPrint_append(0, 0, h-tdy, 1, 0, "  GRAY_ALPHA(%3d, %3d)=0x%04X%04X",
-						(unsigned)p[0], (unsigned)p[3],
-						(unsigned)p0[0], (unsigned)p0[3]
-					);
-				else
-					GUIPrint_append(0, 0, h-tdy, 1, 0, "  GRAY(%3d)=0x%04X", (unsigned)p[0], (unsigned)p0[0]);
-				break;
-			case IM_RGBA:
+				unsigned char *p=impreview->data+((ptrdiff_t)impreview->iw*imy+imx)*impreview->nch;
+				unsigned short *p0=(unsigned short*)image->data+((ptrdiff_t)image->iw*imy+imx)*image->nch;
+				switch(imagetype)
 				{
-					long long color;
-					memcpy(&color, p0, sizeof(color));
-					GUIPrint_append(0, 0, h-tdy, 1, 0, "  RGBA(%3d, %3d, %3d, %3d)=0x%016llX",
-						(unsigned)p[0],
-						(unsigned)p[1],
-						(unsigned)p[2],
-						(unsigned)p[3],
-						color
-					);
+				default://make gcc happy
+					break;
+				case IM_GRAYSCALEv2:
+					if(has_alpha)
+						GUIPrint_append(0, 0, h-tdy, 1, 0, "  GRAY_ALPHA(%3d, %3d)=0x%04X%04X",
+							(unsigned)p[0], (unsigned)p[3],
+							(unsigned)p0[0], (unsigned)p0[3]
+						);
+					else
+						GUIPrint_append(0, 0, h-tdy, 1, 0, "  GRAY(%3d)=0x%04X", (unsigned)p[0], (unsigned)p0[0]);
+					break;
+				case IM_RGBA:
+					{
+						long long color;
+						memcpy(&color, p0, sizeof(color));
+						GUIPrint_append(0, 0, h-tdy, 1, 0, "  RGBA(%3d, %3d, %3d, %3d)=0x%016llX",
+							(unsigned)p[0],
+							(unsigned)p[1],
+							(unsigned)p[2],
+							(unsigned)p[3],
+							color
+						);
+					}
+					break;
+				case IM_BAYERv2:
+					{
+						const char labels[]="RGB";
+						int comp=(imy&1)<<1|(imx&1);
+						GUIPrint_append(0, 0, h-tdy, 1, 0, "  %c%c%c%c  %c(%5d/%5d)=0x%04X",
+							labels[(int)bayer[0]],
+							labels[(int)bayer[1]],
+							labels[(int)bayer[2]],
+							labels[(int)bayer[3]],
+							labels[(int)bayer[comp]],
+							(unsigned)p0[(int)bayer[comp]], image->nlevels0,
+							(unsigned)p0[(int)bayer[comp]]
+						);
+					}
+					break;
 				}
-				break;
-			case IM_BAYERv2:
-				{
-					const char labels[]="RGB";
-					int comp=(imy&1)<<1|(imx&1);
-					GUIPrint_append(0, 0, h-tdy, 1, 0, "  %c%c%c%c  %c(%5d/%5d)=0x%04X",
-						labels[(int)bayer[0]],
-						labels[(int)bayer[1]],
-						labels[(int)bayer[2]],
-						labels[(int)bayer[3]],
-						labels[(int)bayer[comp]],
-						(unsigned)p0[(int)bayer[comp]], image->nlevels0,
-						(unsigned)p0[(int)bayer[comp]]
-					);
-				}
-				break;
 			}
 		}
 		GUIPrint_append(0, 0, h-tdy, 1, 1, "");

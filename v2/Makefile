@@ -21,6 +21,13 @@ INCLUDE =\
  -I "E:/C/a/libheif-1.12.0"\
 
 
+ifeq ($(OS), Windows_NT)
+DEL = del
+else
+DEL = rm
+endif
+
 hview:
 	g++ -Wall -O3 -c audio.cpp -o audio.o
-	gcc -Wall -O3 -s -mavx2 -mlzcnt -mbmi $(INCLUDE) $(SRC) audio.o -ohview -lopengl32 -lgdi32 -lole32 -lcomdlg32 -luuid -static
+	gcc -Wall -O3 -s -mavx2 -mlzcnt -mbmi $(INCLUDE) $(SRC) audio.o -ohview-gcc -lopengl32 -lgdi32 -lole32 -lcomdlg32 -luuid -static
+	$(DEL) audio.o

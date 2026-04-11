@@ -2847,9 +2847,8 @@ int load_media(const char *filename, Image16 **image, int erroronfail)
 				}
 			}
 			avcodec.av_packet_unref(packet);
-			//if(*image)
 			if(framecount>1)
-				break;//need one frame here
+				break;
 		}
 		avformat.avformat_close_input(&formatContext);
 		avcodec.av_packet_free(&packet);
@@ -2859,9 +2858,15 @@ int load_media(const char *filename, Image16 **image, int erroronfail)
 	if(audio_stream_index!=-1&&video_stream_index==-1)
 		imagetype=IM_NONE;
 	if(framecount>1||audio_stream_index!=-1)
+	{
+		animated=1;
 		videoplayback_start(filename, video_stream_index!=-1, audio_stream_index!=-1);
+	}
 	else
+	{
+		animated=0;
 		videoplayback_pause(1);
+	}
 	update_globals(filename, *image);
 	return 0;
 }
