@@ -724,9 +724,22 @@ typedef enum ProfilePlotModeEnum
 extern ProfilePlotMode profileplotmode;
 
 void impreview2gpu(uint8_t *data, int iw, int ih);
-void videoplayback_start(const char *fn);
+void videoplayback_start(const char *fn, int has_video, int has_audio);
 void videoplayback_pause(int stop);
-void videoplayback_update(void);
+int videoplayback_update(void);
+int audioplayback_dequeue(float *out, int nsamples);
+int audioplayback_start(void);
+int audioplayback_pause(int stop);//clear audio circular buffer on stop
+double time_sec_audioclock(void);
+
+typedef struct _Slider
+{
+	double timestamp, duration, timescale;
+	int32_t playing;
+} Slider;
+int slider_get(Slider *slider);
+int slider_set(double ratio, int fast);
+int slider_changespeed(double ratio);
 
 
 //tests

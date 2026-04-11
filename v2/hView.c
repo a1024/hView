@@ -18,14 +18,18 @@ typedef enum DragEnum
 	DRAG_NONE,
 	DRAG_IMAGE,
 	DRAG_IMAGE_PERSISTENT,
+	DRAG_SEEK,
 } Drag;
 int drag=DRAG_NONE,
 	start_mx=0, start_my=0;//initial drag mouse coords
 
 int imagecentered=0;
 double zoom=1;//image pixel size in screen pixels
-#define ZOOM_LIMIT_LABEL 48
-#define ZOOM_LIMIT_ALPHA 96
+enum
+{
+	ZOOM_LIMIT_LABEL=48,
+	ZOOM_LIMIT_ALPHA=96,
+};
 double mousewheel_zoom=2;//mouse wheel factor
 double wpx=0, wpy=0;//window position (top-left corner) in image coordinates
 
@@ -56,9 +60,19 @@ int bitmode=0,//0: off, 1: monochrome bitplanes, 2: colorful bitplanes
 int pixelpreview=1;
 int brightness=0;//impreview = CLAMP(image<<brightness)
 
+extern uint64_t framenumber;
 uint32_t image_txid=0;
 uint32_t animated=0;
-extern uint64_t framenumber;
+int slider_hide=0;
+enum
+{
+	SLIDER_HEIGHT=64,
+
+	VOLUME_ANIMATION_NFRAMES=32,
+};
+int mute_audio=0;
+float g_volume=1;
+static int animation_ctr=0;
 
 void impreview2gpu(uint8_t *data, int iw, int ih)
 {
@@ -351,7 +365,13 @@ int io_init(int argc, char **argv)//return false to abort
 {
 #ifdef _DEBUG
 	fn=filter_path(
-		"D:/ML/dataset-Internet/quantum.mp4"
+	//	"D:/ML/dataset-Internet/quantum.mp4"
+		"D:/ML/dataset-Internet/birds.webm"
+	//	"D:/ML/dataset-Internet/star_wars.webm"
+	//	"D:/ML/dataset-Internet/accident.webm"	//silent
+	//	"D:/ML/dataset-Internet/revolver.webm"
+	//	"D:/ML/dataset-Internet/briefcase.webm"
+	//	"D:/ML/dataset-Internet/sharks.webm"
 	//	"C:/dataset-20241107-gr/20241107_164228_958.gr"
 	//	"D:/ML/dataset-20250416-raw/P1000058.RW2"
 	//	"D:/ML/WhatsApp Stickers/STK-20230621-WA0009.webp"
@@ -374,7 +394,10 @@ int io_init(int argc, char **argv)//return false to abort
 		, -1, 0);
 	load_media((char*)fn->data, &image, 1);
 	if(image)
+	{
 		update_image(1, 0);
+		center_image();//
+	}
 	else
 		array_free(&fn);
 #else
@@ -411,15 +434,30 @@ int io_mousemove()//return true to redraw
 		set_mouse(w>>1, h>>1);
 		//return !timer;
 	}
+	else if(drag==DRAG_SEEK)
+		slider_set((double)mx/w, 1);
 	return !timer;//
 }
 int io_mousewheel(int forward)
 {
 	int mw_fwd=forward>0;
-	if(GET_KEY_STATE(KEY_CTRL))
+	if(animated&&!slider_hide&&(uint32_t)(my-(h-tdy-SLIDER_HEIGHT))<SLIDER_HEIGHT)//change animation timescale
+		slider_changespeed(mw_fwd?1.1:1./1.1);
+	else if(GET_KEY_STATE(KEY_CTRL))
 	{
-		brightness+=2*mw_fwd-1;
-		update_image(0, 0);
+		if(animated)
+		{
+			mute_audio=0;
+			g_volume*=mw_fwd?2:0.5f;
+			if(mw_fwd&&!g_volume)
+				g_volume=1.f/128;
+			animation_ctr=VOLUME_ANIMATION_NFRAMES;
+		}
+		else
+		{
+			brightness+=2*mw_fwd-1;
+			update_image(0, 0);
+		}
 	}
 	else
 		zoom_at(mx, my, mw_fwd?mousewheel_zoom:1/mousewheel_zoom);//fwd zooms in
@@ -480,6 +518,7 @@ int io_keydn(IOKey key, char c)
 				"E: Reset view to topleft corner at 1:1\n"
 				"C: Fit image to window\n"
 				"+/-: Change HDR brightness\n"
+				"F: Hide video slider\n"
 				"Q: Equalize histogram\n"
 				"G: Reinterpret Bayer image as grayscale and vice versa\n"
 				"Left/Right: Prev/next image\n"
@@ -634,7 +673,13 @@ int io_keydn(IOKey key, char c)
 		break;
 	case KEY_ESC:
 	case KEY_LBUTTON:
-		if(drag==DRAG_NONE)//start dragging
+		if(animated&&!slider_hide&&key==KEY_LBUTTON&&(uint32_t)(my-(h-tdy-SLIDER_HEIGHT))<SLIDER_HEIGHT)
+		{
+			drag=DRAG_SEEK;
+			slider_set((double)mx/w, 0);
+			mouse_capture();
+		}
+		else if(drag==DRAG_NONE)//start dragging
 		{
 			drag=GET_KEY_STATE(KEY_CTRL)?DRAG_IMAGE_PERSISTENT:DRAG_IMAGE;//ctrl LBUTTON: persistent drag
 			start_mx=mx, start_my=my;
@@ -687,7 +732,7 @@ int io_keydn(IOKey key, char c)
 				int currentidx=-1;
 				for(int k=0;k<(int)filenames->count;++k)
 				{
-					fn2=array_at(&filenames, k);
+					fn2=(ArrayHandle*)array_at(&filenames, k);
 					if(!strcmp((char*)fn2[0]->data, (char*)fn->data))
 					{
 						currentidx=k;
@@ -698,7 +743,7 @@ int io_keydn(IOKey key, char c)
 				int step=key==KEY_RIGHT?1:-1;
 				for(int k=currentidx+step;MODVAR(k, k, (int)filenames->count), k!=currentidx;k+=step)
 				{
-					fn2=array_at(&filenames, k);
+					fn2=(ArrayHandle*)array_at(&filenames, k);
 					if(!load_media((char*)fn2[0]->data, &im2, 0))
 					{
 						currentidx=k;
@@ -744,6 +789,14 @@ int io_keydn(IOKey key, char c)
 				return image!=0;
 			}
 		}
+		break;
+	case 'F':
+		if(animated)
+			slider_hide=1-slider_hide;
+		break;
+	case 'M':
+		mute_audio=1-mute_audio;
+		animation_ctr=VOLUME_ANIMATION_NFRAMES;
 		break;
 	case 'Q'://equalization
 		if(GET_KEY_STATE(KEY_CTRL))
@@ -1078,7 +1131,13 @@ int io_keyup(IOKey key, char c)
 	default://make gcc happy
 		break;
 	case KEY_LBUTTON:
-		if(drag==DRAG_IMAGE)//stop dragging
+		if(drag==DRAG_SEEK)
+		{
+			drag=DRAG_NONE;
+			slider_set((double)mx/w, 0);
+			mouse_release();
+		}
+		else if(drag==DRAG_IMAGE)//stop dragging
 		{
 			drag=DRAG_NONE;
 			mouse_release();
@@ -1111,9 +1170,9 @@ void io_timer()
 	if(keyboard['D'])//move window right
 		wpx+=delta/zoom;
 
-	videoplayback_update();
+	invalidate();
 }
-static void print_pixellabels(int ix1, int ix2, int iy1, int iy2, int xoffset, int yoffset, int component, char label, long long txtcolors, int is_bayer, int tight)
+static void print_pixellabels(int ix1, int ix2, int iy1, int iy2, int xoffset, int yoffset, int component, char label, uint64_t txtcolors, int is_bayer, int tight)
 {
 	unsigned short *ptr=image->data+(((ptrdiff_t)image->iw*yoffset+xoffset)<<(imagetype==IM_RGBA?2:0));
 	const char *format;
@@ -1166,7 +1225,7 @@ static void print_pixellabels(int ix1, int ix2, int iy1, int iy2, int xoffset, i
 	print_line_flush(vertices_text, fontsize);
 	txtcolors=set_text_colors(txtcolors);
 }
-static void print_pixellabels_preview(int ix1, int ix2, int iy1, int iy2, int xoffset, int yoffset, int component, char label, long long txtcolors, int is_bayer, int tight)
+static void print_pixellabels_preview(int ix1, int ix2, int iy1, int iy2, int xoffset, int yoffset, int component, char label, uint64_t txtcolors, int is_bayer, int tight)
 {
 	unsigned char *ptr=impreview->data+(((ptrdiff_t)impreview->iw*yoffset+xoffset)<<2);
 	const char *format;
@@ -1352,8 +1411,22 @@ static void draw_profile_y_preview(int comp, int color)//vertical cross-section 
 }
 void io_render()
 {
+	Slider slider={0};
+
 	if(h<=0)
 		return;
+	if(impreview&&animated)
+	{
+		slider_get(&slider);
+		if(slider.playing)
+		{
+			if(!videoplayback_update())
+			{
+				if(hist_on)
+					calc_hist();
+			}
+		}
+	}
 	if(!background[3])
 	{
 		background[3]=255;
@@ -1384,7 +1457,7 @@ void io_render()
 			int ix1=screen2image_x_int(csx1), ix2=screen2image_x_int(csx2);
 			int iy1=screen2image_y_int(csy1), iy2=screen2image_y_int(csy2);
 			const char labels[]="rgb";
-			long long theme[]=
+			uint64_t theme[]=
 			{
 				0xC00000FF80000000,
 				0xC000FF0080000000,
@@ -1430,11 +1503,28 @@ void io_render()
 			case IM_BAYERv2:
 				{
 					int y1=(int)tdy, y2=(int)(h-tdy), dy=(int)(y2-y1);
-					draw_histogram(histogram    , 256, 0x800000FF, y1       , y1+dy/3);
-					draw_histogram(histogram+256, 256, 0x8000FF00, y1+dy  /3, y1+dy*2/3);
-					draw_histogram(histogram+512, 256, 0x80FF0000, y1+dy*2/3, y2);
+					draw_histogram(histogram    , 256, 0x800000FF, y1       , y1+dy/3	);
+					draw_histogram(histogram+256, 256, 0x8000FF00, y1+dy  /3, y1+dy*2/3	);
+					draw_histogram(histogram+512, 256, 0x80FF0000, y1+dy*2/3, y2		);
 				}
 				break;
+			}
+		}
+		if(animated&&!slider_hide)
+		{
+			draw_rect(0, (float)(w*slider.timestamp/slider.duration), (float)(h-tdy-SLIDER_HEIGHT), (float)(h-tdy), 0x804080C0);
+			double step=1;
+			while(w*step/slider.duration<32)
+				step*=2;
+			for(double tick=step;tick<slider.duration;tick+=step)
+				GUIPrint(0, (float)(w*tick/slider.duration), (float)(h-tdy-SLIDER_HEIGHT), 1, "%.0lf", tick);
+			if(animation_ctr>0)
+			{
+				if(mute_audio)
+					GUIPrint(0, (float)(w-200), h/2.f, 2, "Muted");
+				else
+					GUIPrint(0, (float)(w-200), h/2.f, 2, "%8.4lf%%", 100.*g_volume);
+				--animation_ctr;
 			}
 		}
 		if(profileplotmode>PROFILE_OFF)
@@ -1473,7 +1563,7 @@ void io_render()
 				}
 			}
 		}
-		
+
 		const char *imtypestr="?";
 		switch(imagetype)
 		{
@@ -1499,6 +1589,14 @@ void io_render()
 			GUIPrint_append(0, 0, h-tdy, 1, 0, "  Bitplane  %2d", bitplane);
 		else if(bitmode==1)
 			GUIPrint_append(0, 0, h-tdy, 1, 0, "  Bitplane%d:%2d", bitplane/imagedepth, bitplane%imagedepth);
+		if(animated)
+		{
+			GUIPrint_append(0, 0, h-tdy, 1, 0, " F%12lld", framenumber);//FIXME doesn't support seeking
+#ifdef _DEBUG
+			extern double vtime, atime;
+			GUIPrint_append(0, 0, h-tdy, 1, 0, "  V %12.6lf  A %12.6lf", vtime, atime);
+#endif
+		}
 		if((unsigned)imx<(unsigned)impreview->iw&&(unsigned)imy<(unsigned)impreview->ih)
 		{
 			unsigned char *p=impreview->data+((ptrdiff_t)impreview->iw*imy+imx)*impreview->nch;
@@ -1546,8 +1644,6 @@ void io_render()
 				break;
 			}
 		}
-		if(animated)
-			GUIPrint_append(0, 0, h-tdy, 1, 0, " F%12lld", framenumber);
 		GUIPrint_append(0, 0, h-tdy, 1, 1, "");
 		//if((unsigned)imx<(unsigned)impreview->iw&&(unsigned)imy<(unsigned)impreview->ih)
 		//{

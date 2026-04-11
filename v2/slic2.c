@@ -39,6 +39,7 @@ void* slic2_load(const char *filename, int *ret_iw, int *ret_ih, int *ret_nch, i
 #ifdef _MSC_VER
 #define _CRT_SECURE_NO_WARNINGS
 #endif
+#include<stdint.h>
 #include<stdio.h>   //FILE/fopen/fread/fwrite/fclose
 #include<stdlib.h>  //malloc/free		(optional) exit() in slic2_error()
 #include<string.h>  //memset/memcpy
@@ -635,14 +636,14 @@ unsigned char* slic2_encode(int iw, int ih, int nch, int depth, const void *src,
 	slic2_header.ih=ih;
 	slic2_header.nch=nch;
 	slic2_header.depth=depth;
-	unsigned char truedepth[]={depth, depth, depth, depth};
+	uint8_t truedepth[]={(uint8_t)depth, (uint8_t)depth, (uint8_t)depth, (uint8_t)depth};
 	if(depth<=8)
 	{
 		const unsigned char *src0=(const unsigned char*)src;
 		memset(slic2_header.palettesizes, 0, sizeof(slic2_header.palettesizes));
 		for(int kc=0;kc<nch;++kc)
 		{
-			for(int k=0;k<res;++k)
+			for(int k=0;(ptrdiff_t)k<(ptrdiff_t)res;++k)
 				buf[res*kc+k]=(src0[nch*k+kc]<<8)-0x8000;
 		}
 	}
@@ -662,7 +663,7 @@ unsigned char* slic2_encode(int iw, int ih, int nch, int depth, const void *src,
 		{
 #ifndef DISABLE_PALETTE
 			memset(hist, 0, histlen*sizeof(int));
-			for(int k=0;k<res;++k)
+			for(int k=0;(ptrdiff_t)k<(ptrdiff_t)res;++k)
 			{
 				unsigned short val=src0[nch*k+kc]>>(16-depth);
 				++hist[val];
@@ -690,7 +691,7 @@ unsigned char* slic2_encode(int iw, int ih, int nch, int depth, const void *src,
 						++idx;
 					}
 				}
-				for(int k=0;k<res;++k)
+				for(int k=0;(ptrdiff_t)k<(ptrdiff_t)res;++k)
 				{
 					unsigned short val=src0[nch*k+kc];
 					int idx=0;
@@ -711,7 +712,7 @@ unsigned char* slic2_encode(int iw, int ih, int nch, int depth, const void *src,
 			else
 #endif
 			{
-				for(int k=0;k<res;++k)
+				for(int k=0;(ptrdiff_t)k<(ptrdiff_t)res;++k)
 					buf[res*kc+k]=src0[nch*k+kc]-0x8000;
 			}
 		}
@@ -725,7 +726,7 @@ unsigned char* slic2_encode(int iw, int ih, int nch, int depth, const void *src,
 	{
 		pixels=buf+res*(nch-1LL);//last channel
 		short alpha=pixels[0];
-		for(int k=1;k<res;++k)
+		for(int k=1;(ptrdiff_t)k<(ptrdiff_t)res;++k)
 		{
 			if(pixels[k]!=alpha)
 			{
@@ -846,7 +847,7 @@ unsigned char* slic2_encode(int iw, int ih, int nch, int depth, const void *src,
 }
 void* slic2_decode(const unsigned char *src, long long len, int *ret_iw, int *ret_ih, int *ret_nch, int *ret_depth, int *ret_dummy_alpha, int force_alpha)
 {
-	if(!src||len<sizeof(SLI2Header)||!ret_iw||!ret_ih||!ret_nch||!ret_depth)
+	if(!src||(int64_t)len<(int64_t)sizeof(SLI2Header)||!ret_iw||!ret_ih||!ret_nch||!ret_depth)
 	{
 		ERROR("Invalid file/args");
 		return 0;
@@ -1042,7 +1043,7 @@ int slic2_save(const char *filename, int iw, int ih, int nch, int depth, const v
 	FILE *f=fopen(filename, "wb");
 	size_t byteswritten=fwrite(ret, 1, ret_size, f);
 
-	if(byteswritten!=ret_size)//OPTIONAL CHECK
+	if((int64_t)byteswritten!=(int64_t)ret_size)//OPTIONAL CHECK
 		printf("Error saving \'%s\'\n", filename);
 	
 	fclose(f);
@@ -1063,7 +1064,7 @@ void* slic2_load(const char *filename, int *ret_iw, int *ret_ih, int *ret_nch, i
 	}
 	size_t bytesread=fread(cdata, 1, size, f);
 
-	if(bytesread!=size)//OPTIONAL CHECK
+	if((ptrdiff_t)bytesread!=size)//OPTIONAL CHECK
 		printf("Error reading \'%s\'\n", filename);
 
 	void *udata=slic2_decode(cdata, bytesread, ret_iw, ret_ih, ret_nch, ret_depth, ret_dummy_alpha, force_alpha);

@@ -489,44 +489,54 @@ static void set_texture_params(int linear, int antialiased)
 {
 	if(linear)
 	{
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);		GL_CHECK(error);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		GL_CHECK(error);
 	}
 	else
 	{
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);		GL_CHECK(error);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		GL_CHECK(error);
 	}
 	if(antialiased)
 	{
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);		GL_CHECK(error);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		GL_CHECK(error);
 	}
 	else
 	{
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);		GL_CHECK(error);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		GL_CHECK(error);
 	}
 }
 void send_texture_pot(unsigned gl_texture, int *rgba, int txw, int txh, int linear, int antialiased)
 {
-	glBindTexture(GL_TEXTURE_2D, gl_texture);		GL_CHECK(error);
+	glBindTexture(GL_TEXTURE_2D, gl_texture);
+	GL_CHECK(error);
 	set_texture_params(linear, antialiased);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, txw, txh, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);		GL_CHECK(error);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, txw, txh, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+	GL_CHECK(error);
 }
 void send_texture_pot_int16x1(unsigned gl_texture, unsigned *texture, int txw, int txh, int linear, int antialiased)
 {
-	glBindTexture(GL_TEXTURE_2D, gl_texture);		GL_CHECK(error);
+	glBindTexture(GL_TEXTURE_2D, gl_texture);
+	GL_CHECK(error);
 	set_texture_params(linear, antialiased);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, txw, txh, 0, GL_RED, GL_UNSIGNED_INT, texture);		GL_CHECK(error);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, txw, txh, 0, GL_RED, GL_UNSIGNED_INT, texture);
+	GL_CHECK(error);
 }
 void send_texture_pot_grey(unsigned gl_texture, unsigned char *bmp, int txw, int txh, int linear, int antialiased)
 {
-	glBindTexture(GL_TEXTURE_2D, gl_texture);		GL_CHECK(error);
+	glBindTexture(GL_TEXTURE_2D, gl_texture);
+	GL_CHECK(error);
 	set_texture_params(linear, antialiased);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, txw, txh, 0, GL_RED, GL_UNSIGNED_BYTE, bmp);		GL_CHECK(error);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, txw, txh, 0, GL_RED, GL_UNSIGNED_BYTE, bmp);
+	GL_CHECK(error);
 }
 void select_texture(unsigned tx_id, int u_location)
 {
-	glActiveTexture(GL_TEXTURE0);			GL_CHECK(error);
+	glActiveTexture(GL_TEXTURE0);		GL_CHECK(error);
 	glBindTexture(GL_TEXTURE_2D, tx_id);	GL_CHECK(error);//select texture
-	glUniform1i(u_location, 0);				GL_CHECK(error);
+	glUniform1i(u_location, 0);		GL_CHECK(error);
 }
 
 void gl_init()
@@ -797,7 +807,7 @@ void vrtx_resize(int vcount, int floatspervertex)
 	int nfloats=vcount*floatspervertex;
 	if(!vrtx)
 		ARRAY_ALLOC(float, vrtx, 0, nfloats, 0, 0);
-	else if(nfloats>vrtx->count)
+	else if((ptrdiff_t)nfloats>(ptrdiff_t)vrtx->count)
 		ARRAY_APPEND(vrtx, 0, nfloats-vrtx->count, 1, 0);
 }
 #if 0
@@ -1258,16 +1268,16 @@ void display_texture(int x1, int x2, int y1, int y2, unsigned txid, float alpha,
 	glUniform1f(u_texture_alpha, alpha);	GL_CHECK(error);
 
 	select_texture(txid, u_texture_texture);
-	glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);				GL_CHECK(error);
+	glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);			GL_CHECK(error);
 	glBufferData(GL_ARRAY_BUFFER, 16<<2, vrtx, GL_STATIC_DRAW);	GL_CHECK(error);//send vertices & texcoords
 
-	glVertexAttribPointer(a_texture_coords, 4, GL_FLOAT, GL_FALSE, 4<<2, (void*)0);		GL_CHECK(error);//select vertices & texcoord
+	glVertexAttribPointer(a_texture_coords, 4, GL_FLOAT, GL_FALSE, 4<<2, (void*)0);	GL_CHECK(error);//select vertices & texcoord
 
 #ifndef NO_3D
 	glDisable(GL_DEPTH_TEST);
 #endif
 	glEnableVertexAttribArray(a_texture_coords);	GL_CHECK(error);
-	glDrawArrays(GL_QUADS, 0, 4);					GL_CHECK(error);//draw the quad
+	glDrawArrays(GL_QUADS, 0, 4);			GL_CHECK(error);//draw the quad
 	glDisableVertexAttribArray(a_texture_coords);	GL_CHECK(error);
 #ifndef NO_3D
 	glEnable(GL_DEPTH_TEST);

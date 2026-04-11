@@ -3695,7 +3695,7 @@ void exec_process(char *cmd, const char *currdir, int loud, double *elapsed, lon
 	}
 	double t=time_sec();
 	int suspendcount=ResumeThread(pi.hThread);
-	if(suspendcount==(DWORD)-1)
+	if(suspendcount==-1)
 	{
 		SYSTEMERROR("CreateProcessA");
 		return;

@@ -22,4 +22,5 @@ INCLUDE =\
 
 
 hview:
-	gcc -Wall -O3 -s -mavx2 -mlzcnt -mbmi $(INCLUDE) $(SRC) -ohview -lopengl32 -lgdi32 -lole32 -lcomdlg32 -luuid -static
+	g++ -Wall -O3 -c audio.cpp -o audio.o
+	gcc -Wall -O3 -s -mavx2 -mlzcnt -mbmi $(INCLUDE) $(SRC) audio.o -ohview -lopengl32 -lgdi32 -lole32 -lcomdlg32 -luuid -static

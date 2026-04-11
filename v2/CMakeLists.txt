@@ -21,6 +21,7 @@
 #	"E:/C/hView-cpp/hView"
 #)
 add_executable(hView2 WIN32
+	audio.cpp
 	console.c
 	format.c
 	gr2.c

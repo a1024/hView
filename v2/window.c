@@ -426,6 +426,7 @@ int messagebox(MessageBoxType type, const char *title, const char *format, ...)/
 //	free(*str);
 //	*str=0;
 //}
+#if 1
 ArrayHandle dialog_open_folder()
 {
 	ArrayHandle arr=0;
@@ -467,7 +468,8 @@ ArrayHandle dialog_open_folder()
 	OleUninitialize();
 	return arr;
 }
-static ArrayHandle	prep_filters(Filter *filters, int nfilters)
+#endif
+static ArrayHandle prep_filters(Filter *filters, int nfilters)
 {
 	ArrayHandle winfilts=0;
 	WSTR_ALLOC(winfilts, 0);
@@ -534,7 +536,7 @@ ArrayHandle dialog_open_file(Filter *filters, int nfilters, int multiple)//TODO:
 
 	return result;
 }
-//const wchar_t		initialname[]=L"Untitled.txt";
+//const wchar_t initialname[]=L"Untitled.txt";
 char* dialog_save_file(Filter *filters, int nfilters, const char *initialname, int *ret_ext_idx, unsigned short *userext, int userextlen)
 {
 	ArrayHandle winfilts=prep_filters(filters, nfilters);
@@ -553,14 +555,14 @@ char* dialog_save_file(Filter *filters, int nfilters, const char *initialname, i
 		
 		&WSTR_AT(winfilts, 0),	//<- filter
 		
-		userext, userextlen,//custom filter & count
+		(LPWSTR)userext, (DWORD)userextlen,//custom filter & count
 		1,				//<- initial filter index
 		g_wbuf, G_BUF_SIZE,		//<- output filename
 		0, 0,//initial filename
 		0,
 		0,//dialog title
 		OFN_NOTESTFILECREATE|OFN_PATHMUSTEXIST|OFN_EXTENSIONDIFFERENT|OFN_OVERWRITEPROMPT|OFN_NOCHANGEDIR,
-		0, ext_offset,			//<- file offset & extension offset
+		0, (WORD)ext_offset,		//<- file offset & extension offset
 		def_ext,			//<- default extension (if user didn't type one)
 		0, 0,//data & hook
 		0,//template name
@@ -652,7 +654,7 @@ int copy_bmp_to_clipboard(const unsigned char *rgba, int iw, int ih)
 		LOG_ERROR("Allocation error");
 		return 0;
 	}
-	BITMAPINFO bmi={{sizeof(BITMAPINFOHEADER), iw, -ih, 1, 32, BI_RGB, res<<2, 0, 0, 0, 0}};
+	BITMAPINFO bmi={{sizeof(BITMAPINFOHEADER), iw, -ih, 1, 32, BI_RGB, (DWORD)(res<<2), 0, 0, 0, 0}};
 	memcpy(clipboard, &bmi, sizeof(BITMAPINFOHEADER));
 	memcpy(clipboard+sizeof(BITMAPINFOHEADER), rgba, (size_t)res<<2);
 	int success=OpenClipboard(ghWnd);
@@ -899,7 +901,7 @@ static LRESULT __stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPA
 	case WM_TIMER:
 		//g_repaint=0;
 		io_timer();
-		io_render();
+		//io_render();
 		//prof_print();
 		//SwapBuffers(ghDC);
 		break;
@@ -987,13 +989,13 @@ static LRESULT __stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPA
 				SetWindowPos(hWnd, HWND_TOP, oldWindowSize.left, oldWindowSize.top, oldWindowSize.right-oldWindowSize.left, oldWindowSize.bottom-oldWindowSize.top, SWP_SHOWWINDOW);
 			}
 		}
-		else if(io_keydn(wParam, 0))
+		else if(io_keydn((IOKey)wParam, 0))
 			InvalidateRect(hWnd, 0, 0);
 		keyboard[wParam]=GET_KEY_STATE((int)wParam);
 		break;
 	case WM_KEYUP:
 	case WM_SYSKEYUP:
-		if(io_keyup(wParam, 0))
+		if(io_keyup((IOKey)wParam, 0))
 			InvalidateRect(hWnd, 0, 0);
 		keyboard[wParam]=0;
 		update_main_key_states();
