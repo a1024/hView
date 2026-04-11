@@ -24,7 +24,7 @@ enum
 	NPREDS=PREDLIST,
 #undef  PRED
 };
-int gr2_save(const char *dstfn, short *image, int iw, int ih, int nlevels, char *bayermatrix)
+int gr2_save(const wchar_t *dstfn, short *image, int iw, int ih, int nlevels, char *bayermatrix)
 {
 	const int half=0;
 //	int half=nlevels>>1;
@@ -137,7 +137,7 @@ int gr2_save(const char *dstfn, short *image, int iw, int ih, int nlevels, char 
 	free(pixels);
 	{
 		int streamsize=(int)(dstptr-dstbuf);
-		FILE *fdst=fopen(dstfn, "wb");
+		FILE *fdst=_wfopen(dstfn, L"wb");
 		if(!fdst)
 		{
 			LOG_ERROR("Cannot open \"%s\" for writing", dstfn);
@@ -156,17 +156,17 @@ int gr2_save(const char *dstfn, short *image, int iw, int ih, int nlevels, char 
 	free(dstbuf);
 	return 0;
 }
-short* gr2_load(const char *srcfn, int *ret_iw, int *ret_ih, int *ret_nlevels, char *ret_bayermatrix)
+short* gr2_load(const wchar_t *srcfn, int *ret_iw, int *ret_ih, int *ret_nlevels, char *ret_bayermatrix)
 {
 	unsigned char *srcbuf=0;
-	ptrdiff_t srcsize=get_filesize(srcfn);
+	ptrdiff_t srcsize=get_filesizew(srcfn);
 	if(srcsize<1)
 	{
 		//LOG_WARNING("Cannot open \"%s\"", srcfn);
 		return 0;
 	}
 	{
-		FILE *fsrc=fopen(srcfn, "rb");
+		FILE *fsrc=_wfopen(srcfn, L"rb");
 		if(!fsrc)
 		{
 			//LOG_WARNING("Cannot open \"%s\"", srcfn);

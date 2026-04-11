@@ -271,25 +271,24 @@ int print_bin32(unsigned x);
 int print_binn(unsigned long long x, int nbits);
 void print_nan(double x, int total, int decimal);
 int print_memsize(char *buf, ptrdiff_t bufsize, long long memsize, int totaldigits);
+int print_memsizew(wchar_t *buf, ptrdiff_t bufsize, long long memsize, int totaldigits);
 
 double convert_size(double bytesize, int *log1024);
 int print_size(double bytesize, int ndigits, int pdigits, char *str, int len);
 
 //error handling
-int log_error(const char *file, int line, int quit, const char *format, ...);//doesn't stop execution
+int log_error(const char *file, int line, int quit, const char *format, ...);
 #define LOG_ERROR(format, ...)   log_error(file, __LINE__, 1, format, ##__VA_ARGS__)
 #define LOG_ERROR2(format, ...)  log_error(__FILE__, __LINE__, 1, format, ##__VA_ARGS__)
-#define LOG_WARNING(format, ...) log_error(file, __LINE__, 0, format, ##__VA_ARGS__)
+#define LOG_WARNING(format, ...) log_error(file, __LINE__, 0, format, ##__VA_ARGS__)//doesn't stop execution
 #define ASSERT_MSG(SUCCESS, MSG, ...) ((SUCCESS)!=0||log_error(file, __LINE__, 1, MSG, ##__VA_ARGS__))
-//int valid(const void *p);
+int log_errorw(const char *file, int line, int quit, const wchar_t *format, ...);
+#define LOG_ERRORW(format, ...)   log_errorw(__FILE__, __LINE__, 1, format, ##__VA_ARGS__)
+#define LOG_WARNINGW(format, ...) log_errorw(__FILE__, __LINE__, 0, format, ##__VA_ARGS__)//doesn't stop execution
 int pause(void);
-//#ifdef _MSC_VER
-//int pause1(void);
-//#endif
 int pause_abort(const char *file, int lineno, const char *extraInfo);
 #define PANIC() pause_abort(file, __LINE__, 0)
 #define ASSERT(SUCCESS) ((SUCCESS)!=0||pause_abort(file, __LINE__, #SUCCESS))
-//#define ASSERT_P(POINTER) (void)(valid(POINTER)||pause_abort(file, __LINE__, #POINTER " == 0"))
 
 
 //ARRAY
@@ -565,12 +564,15 @@ void pqueue_print_heap(PQueueHandle *pq, void (*printer)(const void*));
 
 
 ptrdiff_t get_filesize(const char *filename);//-1 not found,  0: folder (probably),  ...: regular file size
+ptrdiff_t get_filesizew(const wchar_t *filename);
 
 int acme_stricmp(const char *a, const char *b);//case insensitive strcmp
 ptrdiff_t acme_strrchr(const char *str, ptrdiff_t len, char c);//find last occurrence, with known length for backward search
 ArrayHandle filter_path(const char *path, int len, int slash);//replaces back slashes with slashes, adds trailing slash if missing, as ArrayHandle
+ArrayHandle filter_pathw(const wchar_t *path, int len, int slash);
 void get_filetitle(const char *fn, int len, int *idx_start, int *idx_end);//pass -1 for len if unknown
 ArrayHandle get_filenames(const char *path, const char **extensions, int extCount, int fullyqualified);//returns array of strings, extensions without period '.'
+ArrayHandle get_filenamesw(const wchar_t *path, const wchar_t **extensions, int extCount, int fullyqualified);
 
 ArrayHandle load_file(const char *filename, int bin, int pad, int erroronfail);
 int save_file(const char *filename, const unsigned char *src, size_t srcsize, int is_bin);

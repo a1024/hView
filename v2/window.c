@@ -1,19 +1,22 @@
-﻿#include<stdio.h>
+﻿#ifdef _MSC_VER
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+#include<stdio.h>
 #include<stdlib.h>
-#include<Windowsx.h>//for GET_X_LPARAM
+#include<Windowsx.h>		//for GET_X_LPARAM
 
 #define STRICT_TYPED_ITEMIDS
 #include<shlobj.h>
-#include<objbase.h>		// For COM headers
-#include<shobjidl.h>	// for IFileDialogEvents and IFileDialogControlEvents
+#include<objbase.h>		//for COM headers
+#include<shobjidl.h>		//for IFileDialogEvents and IFileDialogControlEvents
 #include<shlwapi.h>
-#include<knownfolders.h>// for KnownFolder APIs/datatypes/function headers
-#include<propvarutil.h>	// for PROPVAR-related functions
-#include<propkey.h>		// for the Property key APIs/datatypes
-#include<propidl.h>		// for the Property System APIs
-#include<strsafe.h>		// for StringCchPrintfW
-#include<shtypes.h>		// for COMDLG_FILTERSPEC
-#include<combaseapi.h>	// for IID_PPV_ARGS
+#include<knownfolders.h>	//for KnownFolder APIs/datatypes/function headers
+#include<propvarutil.h>		//for PROPVAR-related functions
+#include<propkey.h>		//for the Property key APIs/datatypes
+#include<propidl.h>		//for the Property System APIs
+#include<strsafe.h>		//for StringCchPrintfW
+#include<shtypes.h>		//for COMDLG_FILTERSPEC
+#include<combaseapi.h>		//for IID_PPV_ARGS
 
 #include"hView.h"
 static const char file[]=__FILE__;
@@ -24,7 +27,6 @@ HWND ghWnd=0;
 HDC ghDC=0;
 HGLRC hRC=0;
 char keyboard[256]={0}, timer=0;
-//int g_repaint=0;
 RECT R={0};
 wchar_t g_wbuf[G_BUF_SIZE]={0};
 ArrayHandle exedir=0;
@@ -381,7 +383,7 @@ static int format_utf8_message(const char *title, const char *format, char *args
 	g_wbuf[len+len2]='\0';
 	return len;
 }
-int messagebox(MessageBoxType type, const char *title, const char *format, ...)//returns index of pressed button
+int messageboxa(MessageBoxType type, const char *title, const char *format, ...)//uses g_wbuf, returns index of pressed button
 {
 	va_list args;
 	va_start(args, format);
@@ -419,13 +421,44 @@ int messagebox(MessageBoxType type, const char *title, const char *format, ...)/
 	}
 	return result;
 }
+int messageboxw(MessageBoxType type, const wchar_t *title, const wchar_t *format, ...)//uses g_wbuf, returns index of pressed button
+{
+	va_list args;
+	va_start(args, format);
+	_vsnwprintf_s(g_wbuf, G_BUF_SIZE, G_BUF_SIZE, format, args);
+	va_end(args);
+	int wintypes[]={MB_OK, MB_OKCANCEL, MB_YESNOCANCEL};
+	int result=MessageBoxW(ghWnd, g_wbuf, title, wintypes[type]);
+	switch(type)
+	{
+	case MBOX_OK:
+		result=0;
+		break;
+	case MBOX_OKCANCEL:
+		switch(result)
+		{
+		case IDOK:
+			result=0;
+			break;
+		case IDCANCEL:
+		default:
+			result=1;
+			break;
+		}
+		break;
+	case MBOX_YESNOCANCEL:
+		switch(result)
+		{
+		case IDYES:	result=0;break;
+		case IDNO:	result=1;break;
+		default:
+		case IDCANCEL:	result=2;break;
+		}
+		break;
+	}
+	return result;
+}
 
-//static void free_pchar(void *data)
-//{
-//	char **str=(char**)data;
-//	free(*str);
-//	*str=0;
-//}
 #if 1
 ArrayHandle dialog_open_folder()
 {
@@ -490,6 +523,18 @@ static ArrayHandle prep_filters(Filter *filters, int nfilters)
 	STR_APPEND(winfilts, 0, 2, 1);
 	return winfilts;
 }
+static ArrayHandle prep_filtersw(FilterW *filters, int nfilters)
+{
+	ArrayHandle winfilts=0;
+	WSTR_ALLOC(winfilts, 0);
+	for(int k=0;k<nfilters;++k)
+	{
+		STR_APPEND(winfilts, filters[k].comment, (int)wcslen(filters[k].comment)+1, 1);
+		STR_APPEND(winfilts, filters[k].ext, (int)wcslen(filters[k].ext)+1, 1);
+	}
+	STR_APPEND(winfilts, 0, 2, 1);
+	return winfilts;
+}
 ArrayHandle dialog_open_file(Filter *filters, int nfilters, int multiple)//TODO: multiple
 {
 	ArrayHandle winfilts=prep_filters(filters, nfilters), result=0;
@@ -533,6 +578,52 @@ ArrayHandle dialog_open_file(Filter *filters, int nfilters, int multiple)//TODO:
 	int len=0;
 	WCHAR_TO_UTF8(ofn.lpstrFile, wlen, g_buf, G_BUF_SIZE, len);
 	STR_COPY(result, g_buf, len);
+
+	return result;
+}
+ArrayHandle dialog_open_filew(FilterW *filters, int nfilters, int multiple)//TODO: multiple
+{
+	ArrayHandle winfilts=prep_filtersw(filters, nfilters), result=0;
+
+	g_wbuf[0]=0;
+	OPENFILENAMEW ofn=
+	{
+		sizeof(OPENFILENAMEW), ghWnd, 0,
+		&WSTR_AT(winfilts, 0), 0, 0, 1,
+		g_wbuf, G_BUF_SIZE,
+		0, 0,//initial filename
+		0,
+		0,//dialog title
+		OFN_CREATEPROMPT|OFN_PATHMUSTEXIST|OFN_NOCHANGEDIR,//flags		OFN_NOCHANGEDIR is ineffective for GetOpenFileName
+		0,//file offset
+		0,//extension offset
+		L"txt",//default extension
+		0, 0,//data & hook
+		0,//template name
+		0,//reserved
+		0,//reserved
+		0,//flags ex
+	};
+	//if(multiple)//CRASHES
+	//	ofn.Flags|=OFN_ALLOWMULTISELECT;
+	int success=GetOpenFileNameW(&ofn);
+	array_free(&winfilts);
+	if(!success)
+		return 0;
+
+	int wlen=0;
+	if(multiple)
+	{
+		for(;wlen<G_BUF_SIZE;++wlen)
+		{
+			if(ofn.lpstrFile[wlen]=='\0'&&ofn.lpstrFile[wlen]=='\0')
+				break;
+		}
+	}
+	else
+		wlen=(int)wcslen(ofn.lpstrFile);
+
+	WSTR_COPY(result, ofn.lpstrFile, wlen);
 
 	return result;
 }
@@ -591,6 +682,56 @@ char* dialog_save_file(Filter *filters, int nfilters, const char *initialname, i
 	//g_buf[len]='\0';
 	//return g_buf;
 }
+wchar_t* dialog_save_filew(FilterW *filters, int nfilters, const wchar_t *initialname, int *ret_ext_idx, unsigned short *userext, int userextlen)
+{
+	ArrayHandle winfilts=prep_filtersw(filters, nfilters);
+	
+	int len0=(int)wcslen(initialname), ext_offset=0;
+	wchar_t def_ext[MAX_PATH]={0};//default extension
+	for(ext_offset=len0-1;ext_offset>=0&&initialname[ext_offset]!='.';--ext_offset);
+	memcpy(def_ext, initialname+ext_offset, ((ptrdiff_t)len0+1-ext_offset)*sizeof(wchar_t));
+
+	OPENFILENAMEW ofn=
+	{
+		sizeof(OPENFILENAMEW), ghWnd, 0,
+		
+		&WSTR_AT(winfilts, 0),			//<- filter
+		
+		(LPWSTR)userext, (DWORD)userextlen,	//custom filter & count
+		1,					//<- initial filter index
+		g_wbuf, G_BUF_SIZE,			//<- output filename
+		0, 0,//initial filename
+		0,
+		0,//dialog title
+		OFN_NOTESTFILECREATE|OFN_PATHMUSTEXIST|OFN_EXTENSIONDIFFERENT|OFN_OVERWRITEPROMPT|OFN_NOCHANGEDIR,
+		0, (WORD)ext_offset,			//<- file offset & extension offset
+		def_ext,				//<- default extension (if user didn't type one)
+		0, 0,//data & hook
+		0,//template name
+		0, 0,//reserved
+		0,//flags ex
+	};
+	int success=GetSaveFileNameW(&ofn);
+	array_free(&winfilts);
+	if(!success)
+		return 0;
+
+	int retlen=(int)wcslen(ofn.lpstrFile)+1;
+	wchar_t *ret=(wchar_t*)malloc((size_t)retlen+16);
+	if(!ret)
+	{
+		LOG_ERROR("Alloc error");
+		return 0;
+	}
+#ifdef _MSC_VER
+	wcscpy_s(ret, (ptrdiff_t)retlen+1, ofn.lpstrFile);
+#else
+	wcscpy(ret, ofn.lpstrFile);
+#endif
+	if(ret_ext_idx)
+		*ret_ext_idx=ofn.nFilterIndex;
+	return ret;
+}
 
 void get_window_title(char *buf, int len)
 {
@@ -606,32 +747,67 @@ void set_window_title(const char *format, ...)
 	if(!success)
 		LOG_ERROR("Error setting window title");
 }
+void get_window_titlew(wchar_t *buf, int len)
+{
+	GetWindowTextW(ghWnd, buf, len);
+}
+void set_window_titlew(const wchar_t *format, ...)
+{
+	va_list args;
+	va_start(args, format);
+	_vsnwprintf_s(g_wbuf, G_BUF_SIZE, G_BUF_SIZE, format, args);
+	va_end(args);
+	int success=SetWindowTextW(ghWnd, g_wbuf);
+	if(!success)
+		LOG_ERROR("Error setting window title");
+}
 
 int copy_to_clipboard(const char *a, int size)
 {
-	char *clipboard=(char*)LocalAlloc(LMEM_FIXED, (size+1)*sizeof(char));
+	char *clipboard=(char*)LocalAlloc(LMEM_FIXED, ((ptrdiff_t)size+1)*sizeof(char));
 	if(!clipboard)
 		return 0;
 	//	LOG_ERROR("copy_to_clipboard(): LocalAlloc() error");
 
-	memcpy(clipboard, a, (size+1)*sizeof(char));
+	memcpy(clipboard, a, ((ptrdiff_t)size+1)*sizeof(char));
 	clipboard[size]='\0';
 
 	OpenClipboard(ghWnd);
 	EmptyClipboard();
-	SetClipboardData(CF_OEMTEXT, (void*)clipboard);
+	SetClipboardData(CF_OEMTEXT, clipboard);
+	CloseClipboard();
+	return 1;
+}
+int copy_to_clipboardw(const wchar_t *a, int count)
+{
+	ptrdiff_t size=((ptrdiff_t)count+1)*sizeof(wchar_t);
+	HGLOBAL *hMem=GlobalAlloc(GMEM_MOVEABLE, size);
+	if(!hMem)
+		return 0;
+
+	wchar_t *dst=(wchar_t*)GlobalLock(hMem);
+	if(!dst)
+		return 0;
+	memcpy(dst, a, size-sizeof(wchar_t));
+	dst[count]=L'\0';
+	GlobalUnlock(hMem);
+
+	OpenClipboard(ghWnd);
+	EmptyClipboard();
+	SetClipboardData(CF_UNICODETEXT, hMem);
 	CloseClipboard();
 	return 1;
 }
 ArrayHandle paste_from_clipboard(int loud)
 {
-	OpenClipboard(ghWnd);
+	if(!OpenClipboard(ghWnd))
+		return 0;
 	char *a=(char*)GetClipboardData(CF_OEMTEXT);
 	if(!a)
 	{
 		CloseClipboard();
 		if(loud)
-			messagebox(MBOX_OK, "Error", "Failed to paste from clipboard");
+			messageboxa(MBOX_OK, "Error", "Failed to paste from clipboard");
 		return 0;
 	}
 	int len0=(int)strlen(a);
@@ -641,6 +817,32 @@ ArrayHandle paste_from_clipboard(int loud)
 
 	CloseClipboard();
 
+	return ret;
+}
+ArrayHandle paste_from_clipboardw(int loud)
+{
+	HANDLE *hData=0;
+	wchar_t *src=0;
+	int len=0;
+	ArrayHandle ret=0;
+
+	if(!OpenClipboard(ghWnd))
+		return 0;
+	hData=(HANDLE*)GetClipboardData(CF_UNICODETEXT);
+	if(!hData)
+	{
+	error:
+		CloseClipboard();
+		if(loud)
+			messageboxa(MBOX_OK, "Error", "Failed to paste from clipboard");
+		return 0;
+	}
+	src=(wchar_t*)GlobalLock(hData);
+	if(!src)
+		goto error;
+	len=(int)wcslen(src);
+	WSTR_COPY(ret, src, len);
+	CloseClipboard();
 	return ret;
 }
 
@@ -844,7 +1046,6 @@ void timer_start(int ms, int id)
 }
 void timer_stop(int id)
 {
-	//if(timer&&!g_repaint)
 	if(timer)
 		KillTimer(ghWnd, id), timer=0;
 }
@@ -891,6 +1092,15 @@ static LRESULT __stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPA
 {
 	switch(message)
 	{
+	case WM_DROPFILES:
+		{
+			wchar_t path[4096];
+			HDROP hDrop=(HDROP)wParam;
+			DragQueryFileW(hDrop, 0, path, 4096);
+			DragFinish(hDrop);
+			io_dropfile(path);
+		}
+		break;
 	case WM_SIZE:
 		GetClientRect(ghWnd, &R);
 		w=R.right-R.left, h=R.bottom-R.top;
@@ -899,14 +1109,12 @@ static LRESULT __stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPA
 		io_resize();
 		break;
 	case WM_TIMER:
-		//g_repaint=0;
 		io_timer();
 		//io_render();
 		//prof_print();
 		//SwapBuffers(ghDC);
 		break;
 	case WM_PAINT:
-		//g_repaint=0;
 		io_render();
 		//prof_print();
 		//SwapBuffers(ghDC);
@@ -1015,16 +1223,19 @@ int __stdcall WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrev, _In_ c
 	{
 		sizeof(WNDCLASSEXA), CS_HREDRAW|CS_VREDRAW|CS_DBLCLKS,
 		WndProc, 0, 0, hInstance,
-		LoadIconA(0, (char*)0x00007F00),
-		LoadCursorA(0, (char*)0x00007F00),
+		LoadIconA(0, IDI_APPLICATION),
+		LoadCursorA(0, IDC_ARROW),
 
 		0,
 	//	(HBRUSH)(COLOR_WINDOW+1),
 
-		0, "New format", 0
+		0, "MainWindowClass", 0
 	};
 	MSG msg;
 
+	LPWSTR cmd=GetCommandLineW();
+	int argc=0;
+	LPWSTR *argv=CommandLineToArgvW(cmd, &argc);
 	int len=GetModuleFileNameW(0, g_wbuf, G_BUF_SIZE);
 	int len2=WideCharToMultiByte(CP_UTF8, 0, g_wbuf, len, g_buf, G_BUF_SIZE, 0, 0);
 	STR_COPY(exedir, g_buf, len2);
@@ -1038,20 +1249,31 @@ int __stdcall WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrev, _In_ c
 		}
 	}
 
-	int success=RegisterClassExA(&wndClassEx);	SYS_ASSERT(success);
-	ghWnd=CreateWindowExA(WS_EX_ACCEPTFILES, wndClassEx.lpszClassName, "", WS_CAPTION|WS_SYSMENU|WS_THICKFRAME|WS_MINIMIZEBOX|WS_MAXIMIZEBOX|WS_CLIPCHILDREN, CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, 0, 0, hInstance, 0);	SYS_ASSERT(ghWnd);//2023-04-11
+	{
+		HRESULT ret2=OleInitialize(0);
+		(void)ret2;
+	}
+	int success=RegisterClassExA(&wndClassEx);
+	SYS_ASSERT(success);
+	ghWnd=CreateWindowExA(WS_EX_ACCEPTFILES, wndClassEx.lpszClassName, "",
+		WS_CAPTION|WS_SYSMENU|WS_THICKFRAME|WS_MINIMIZEBOX|WS_MAXIMIZEBOX|WS_CLIPCHILDREN,
+		CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, 0, 0, hInstance, 0
+	);
+	SYS_ASSERT(ghWnd);//2023-04-11
 	if(!ghWnd)
 	{
 		LOG_ERROR("Cannot create window");
 		return 0;
 	}
+	//LONG style=GetWindowLongA(ghWnd, GWL_STYLE);//0x06cf0000
 
 	GetClientRect(ghWnd, &R);
-	w=R.right-R.left, h=R.bottom-R.top;
+	w=R.right-R.left;
+	h=R.bottom-R.top;
 	ghDC=GetDC(ghWnd);
 	gl_init();
 	glClearColor(1, 1, 1, 1);
-	if(!io_init(__argc-1, __argv+1))
+	if(!io_init(argc, argv))
 	{
 		LOG_ERROR("Program initialization failed");
 		return EXIT_FAILURE;
@@ -1066,7 +1288,7 @@ int __stdcall WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrev, _In_ c
 	int ret;
 	for(;;)
 	{
-		ret=GetMessageA(&msg, ghWnd, 0, 0);
+		ret=GetMessageA(&msg, 0, 0, 0);
 		if(!ret||ret==-1)//GetMessageA returns 0 at WM_QUIT, and -1 when ghWnd was closed
 			break;
 		TranslateMessage(&msg);
@@ -1076,6 +1298,7 @@ int __stdcall WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrev, _In_ c
 		//finish
 		io_cleanup();
 		ReleaseDC(ghWnd, ghDC);
+		OleUninitialize();
 
 	return (int)msg.wParam;
 }

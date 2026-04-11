@@ -36,6 +36,18 @@ void console_log(const char *format, ...)
 		WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), g_buf2, printed, &printed, 0);
 	}
 }
+void console_logw(const wchar_t *format, ...)
+{
+	if(format)
+	{
+		wchar_t wbuf2[4096]={0};
+		va_list args;
+		va_start(args, format);
+		unsigned long printed=vswprintf_s(wbuf2, 4096, format, args);
+		va_end(args);
+		WriteConsoleW(GetStdHandle(STD_OUTPUT_HANDLE), wbuf2, printed, &printed, 0);
+	}
+}
 void console_start()//https://stackoverflow.com/questions/191842/how-do-i-get-console-output-in-c-with-a-windows-program
 {
 	if(!consoleactive)

@@ -88,10 +88,10 @@ typedef enum MessageBoxTypeEnum
 	MBOX_OKCANCEL,
 	MBOX_YESNOCANCEL,
 } MessageBoxType;
-extern "C" int messagebox(MessageBoxType type, const char *title, const char *format, ...);
+extern "C" int messageboxa(MessageBoxType type, const char *title, const char *format, ...);
 static int audioplayback_error(int line, int e)
 {
-	messagebox(MBOX_OK, "Error", "audio.cpp(%d): %d", line, e);
+	messageboxa(MBOX_OK, "Error", "audio.cpp(%d): %d", line, e);
 	return e;
 }
 #define ERROR_A(E) audioplayback_error(__LINE__, E)
@@ -102,7 +102,7 @@ extern "C" int audioplayback_start(void)
 	memset(&audioctx, 0, sizeof(audioctx));
 
 	ret=CoInitializeEx(0, COINIT_MULTITHREADED);
-	if(ret!=S_OK)
+	if(ret!=S_OK&&ret!=RPC_E_CHANGED_MODE)
 	{
 		ERROR_A(ret);
 		return ret;

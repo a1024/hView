@@ -1,6 +1,4 @@
-﻿//TODO mPlay
-
-#pragma once
+﻿#pragma once
 #ifndef INC_PXVIEW3D_H
 #define INC_PXVIEW3D_H
 #include"util.h"
@@ -15,15 +13,18 @@
 extern "C"
 {
 #endif
-//v	copy pixels / as text when zoomed-in
+//	mPlay
+//v	crop-copy pixels/text
 //v	histogram
 //v	cross-section profile
 //v	equalization
 //	contrast
 //v	ctrl S
-//	separate components
+//v	separate components
 //v	bitplanes
-//	animation
+//v	animation
+//v	unicode
+
 
 	#define HVIEW_INCLUDE_LIBHEIF	//https://github.com/strukturag/libheif
 	#define HVIEW_INCLUDE_LIBRAW	//https://www.libraw.org/download#stable
@@ -184,10 +185,12 @@ IOKEY(0xFF, 0x90, NUMLOCK)
 
 #undef	IOKEY
 } IOKey;
+const char* wm2str(int message);
 
 
 //callbacks - implement these in your application:
-int io_init(int argc, char **argv);//return false to abort
+int io_init(int argc, wchar_t **argv);//return false to abort
+void io_dropfile(const wchar_t *filename);
 void io_resize();
 int io_mousemove();//return true to redraw
 int io_mousewheel(int forward);
@@ -199,14 +202,15 @@ int io_quit_request();//return 1 to exit
 void io_cleanup();//cleanup
 
 
-void   console_start();
-void   console_end();
-void   console_buffer_size(short x, short y);
-void   console_log(const char *format, ...);
-void   console_pause();
-int    console_scan(char *buf, int len);
-int    console_scan_int();
-double console_scan_float();
+void	console_start();
+void	console_end();
+void	console_buffer_size(short x, short y);
+void	console_log(const char *format, ...);
+void	console_logw(const wchar_t *format, ...);
+void	console_pause();
+int	console_scan(char *buf, int len);
+int	console_scan_int();
+double	console_scan_float();
 
 int sys_check(const char *file, int line, const char *info);
 #define SYS_ASSERT(SUCCESS) ((void)((SUCCESS)!=0||sys_check(file, __LINE__, 0)))
@@ -217,21 +221,32 @@ typedef enum MessageBoxTypeEnum
 	MBOX_OKCANCEL,
 	MBOX_YESNOCANCEL,
 } MessageBoxType;
-int messagebox(MessageBoxType type, const char *title, const char *format, ...);//returns index of pressed button
+int messageboxa(MessageBoxType type, const char *title, const char *format, ...);//returns index of pressed button
+int messageboxw(MessageBoxType type, const wchar_t *title, const wchar_t *format, ...);
 
 typedef struct FilterStruct
 {
 	const char *comment, *ext;
 } Filter;
+typedef struct _FilterW
+{
+	const wchar_t *comment, *ext;
+} FilterW;
 ArrayHandle dialog_open_folder();
 ArrayHandle dialog_open_file(Filter *filters, int nfilters, int multiple);
+ArrayHandle dialog_open_filew(FilterW *filters, int nfilters, int multiple);
 char* dialog_save_file(Filter *filters, int nfilters, const char *initialname, int *ret_ext_idx, unsigned short *userext, int userextlen);
+wchar_t* dialog_save_filew(FilterW *filters, int nfilters, const wchar_t *initialname, int *ret_ext_idx, unsigned short *userext, int userextlen);
 
 void get_window_title(char *buf, int len);
 void set_window_title(const char *format, ...);
+void get_window_titlew(wchar_t *buf, int len);
+void set_window_titlew(const wchar_t *format, ...);
 
 int copy_to_clipboard(const char *a, int size);
+int copy_to_clipboardw(const wchar_t *a, int size);
 ArrayHandle paste_from_clipboard(int loud);
+ArrayHandle paste_from_clipboardw(int loud);
 
 int copy_bmp_to_clipboard(const unsigned char *rgba, int iw, int ih);
 
@@ -668,9 +683,9 @@ void image_transpose(Image16 **src, char *bayer);
 //void image_resize(ImageHandle *image, int w, int h);
 
 //the following 3 functions return: a negative value on failure; 0 on success
-int load_media(const char *filename, Image16 **image, int erroronfail);
-int save_media(const char *fn, Image8 *image, int erroronfail);
-int save_media_as(Image16 *image, Image8 *impreview, const char *initialname, int namelen, int erroronfail);
+int load_media(const wchar_t *filename, Image16 **image, int erroronfail);
+int save_media(const wchar_t *filename, Image8 *image, int erroronfail);
+int save_media_as(Image16 *image, Image8 *impreview, const wchar_t *initialname, int namelen, int erroronfail);
 
 char* get_codecinfo(void);//don't forget to free(mem)
 

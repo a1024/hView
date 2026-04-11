@@ -75,14 +75,14 @@ static char ffmpegerror[AV_ERROR_MAX_STRING_SIZE]={0};
 		}\
 	}while(0)
 
-int   slic2_save(const char *filename, int iw, int ih, int nch, int depth, const void *src);
-void* slic2_load(const char *filename, int *ret_iw, int *ret_ih, int *ret_nch, int *ret_depth, int *ret_dummy_alpha, int force_alpha);
+int   slic2_save(const wchar_t *filename, int iw, int ih, int nch, int depth, const void *src);
+void* slic2_load(const wchar_t *filename, int *ret_iw, int *ret_ih, int *ret_nch, int *ret_depth, int *ret_dummy_alpha, int force_alpha);
 
 
-static void update_globals(const char *fn, Image16 *image)//accesses globals
+static void update_globals(const wchar_t *fn, Image16 *image)//accesses globals
 {
-	struct stat info={0};
-	int e2=stat(fn, &info);
+	struct _stat64 info={0};
+	int e2=_wstat64(fn, &info);
 //	filesize=get_filesize(fn);
 	if(!e2)
 	{
@@ -242,6 +242,7 @@ static void api_load(void **phandle, const char *libname, void *api, const char 
 	APIFUNC(heif_get_version_number, uint32_t (__stdcall *heif_get_version_number)(void))\
 	APIFUNC(heif_context_alloc, struct heif_context* (__stdcall *heif_context_alloc)(void))\
 	APIFUNC(heif_context_read_from_file, struct heif_error (__stdcall *heif_context_read_from_file)(struct heif_context*, const char* filename, const struct heif_reading_options*))\
+	APIFUNC(heif_context_read_from_memory, struct heif_error (__stdcall *heif_context_read_from_memory)(struct heif_context*, const void* mem, size_t size, const struct heif_reading_options*))\
 	APIFUNC(heif_context_free, void (__stdcall *heif_context_free)(struct heif_context*))\
 	APIFUNC(heif_context_get_primary_image_handle, struct heif_error (__stdcall *heif_context_get_primary_image_handle)(struct heif_context* ctx, struct heif_image_handle**))\
 	APIFUNC(heif_image_handle_get_width, int (__stdcall *heif_image_handle_get_width)(const struct heif_image_handle* handle))\
@@ -278,36 +279,62 @@ static void apiload_libheif(void)
 		&libheif, symnames_libheif, _countof(symnames_libheif)
 	);
 }
-static int load_heic(const char *filename, Image16 **image, int erroronfail)
+static int load_heic(const wchar_t *filename, Image16 **image, int erroronfail)
 {
 	apiload_libheif();
 	if(handle_libheif==(void*)-1)//missing/incompatible
 		return -1;
 
+	struct heif_error error={0};
 	struct heif_context *ctx=libheif.heif_context_alloc();
 #ifdef BENCHMARK
 	long long t1=__rdtsc();
 #endif
-	struct heif_error error=libheif.heif_context_read_from_file(ctx, g_buf, 0);	CHECK_LIBHEIF(error);//TODO: file may not exist
+	int64_t csize=0;
+	struct _stat64 info={0};
+	_wstat64(filename, &info);
+	csize=info.st_size;
+	FILE *f=_wfopen(filename, L"rb");
+	if(!f)
+	{
+		if(erroronfail)
+			LOG_WARNING("%s", error.message);
+		return -1;
+	}
+	uint8_t *buf=(uint8_t*)malloc(csize+16);
+	if(!buf)
+	{
+		LOG_ERROR("Alloc error");
+		return -1;
+	}
+	fread(buf, 1, csize, f);
+	fclose(f);
+	error=libheif.heif_context_read_from_memory(ctx, buf, csize, 0);
+	//struct heif_error error=libheif.heif_context_read_from_file(ctx, filename, 0);
+	CHECK_LIBHEIF(error);//TODO: file may not exist
 	if(error.code)
 	{
 		if(erroronfail)
 			LOG_WARNING("%s", error.message);
 		libheif.heif_context_free(ctx);
+		free(buf);
 		return -1;
 	}
 
 	struct heif_image_handle *handle=0;
-	error=libheif.heif_context_get_primary_image_handle(ctx, &handle);	CHECK_LIBHEIF(error);//get a handle to the primary image
+	error=libheif.heif_context_get_primary_image_handle(ctx, &handle);
+	CHECK_LIBHEIF(error);//get a handle to the primary image
 
 	libheif.heif_context_free(ctx);
+	free(buf);
 
 	int
 		iw2=libheif.heif_image_handle_get_width(handle),
 		ih2=libheif.heif_image_handle_get_height(handle);
 
 	struct heif_image *img=0;
-	error=libheif.heif_decode_image(handle, &img, heif_colorspace_RGB, heif_chroma_interleaved_RGBA, 0);	CHECK_LIBHEIF(error);
+	error=libheif.heif_decode_image(handle, &img, heif_colorspace_RGB, heif_chroma_interleaved_RGBA, 0);
+	CHECK_LIBHEIF(error);
 	if(!img)
 	{
 		if(erroronfail)
@@ -316,7 +343,8 @@ static int load_heic(const char *filename, Image16 **image, int erroronfail)
 	}
 
 	int stride=4;
-	const uint8_t *data=libheif.heif_image_get_plane_readonly(img, heif_channel_interleaved, &stride);	CHECK_LIBHEIF(error);
+	const uint8_t *data=libheif.heif_image_get_plane_readonly(img, heif_channel_interleaved, &stride);
+	CHECK_LIBHEIF(error);
 	int colorspace=libheif.heif_image_get_colorspace(img);
 	has_alpha=libheif.heif_image_handle_has_alpha_channel(handle);
 	int srcnch=3;
@@ -391,7 +419,7 @@ static void apiload_libraw(void)
 		&libraw, symnames_libraw, _countof(symnames_libraw)
 	);
 }
-static int load_raw(const char *filename, Image16 **image, int erroronfail)
+static int load_raw(const wchar_t *filename, Image16 **image, int erroronfail)
 {
 	apiload_libraw();
 	if(handle_libraw==(void*)-1)//missing/incompatible
@@ -403,8 +431,8 @@ static int load_raw(const char *filename, Image16 **image, int erroronfail)
 		LOG_WARNING("Failed to initialize libraw decoder");
 		return -1;
 	}
-	//int error=libraw.libraw_open_wfile(decoder, filename);
-	int error=libraw.libraw_open_file(decoder, filename);
+	int error=libraw.libraw_open_wfile(decoder, filename);
+	//int error=libraw.libraw_open_file(decoder, filename);
 	if(error)
 	{
 		if(erroronfail)
@@ -671,19 +699,19 @@ static void huf_freetable(HuffDecodeCell *table)
 			free(table);
 	}
 }
-static int huf_load(const char *filename, Image16 **image, int erroronfail)
+static int huf_load(const wchar_t *filename, Image16 **image, int erroronfail)
 {
 	unsigned char *srcbuf=0;
 	ptrdiff_t srcsize=0;
 	{
-		srcsize=get_filesize(filename);
+		srcsize=get_filesizew(filename);
 		if(srcsize<1)
 		{
 			if(erroronfail)
 				LOG_WARNING("Cannot open %s", filename);
 			return -1;
 		}
-		FILE *fsrc=fopen(filename, "rb");
+		FILE *fsrc=_wfopen(filename, L"rb");
 		if(!fsrc)
 		{
 			if(erroronfail)
@@ -992,7 +1020,7 @@ static int huf_load(const char *filename, Image16 **image, int erroronfail)
 
 
 //GR
-static int gr_save(const char *dstfn, const short *image, int iw, int ih, int nlevels, const char *bayermatrix)
+static int gr_save(const wchar_t *dstfn, const short *image, int iw, int ih, int nlevels, const char *bayermatrix)
 {
 	int psize=(iw+16)*(int)sizeof(short[2*2]);//2 padded rows * 1 channel * {pixels, errors}
 	short *pixels=(short*)malloc(psize);
@@ -1087,7 +1115,7 @@ static int gr_save(const char *dstfn, const short *image, int iw, int ih, int nl
 	free(pixels);
 	{
 		int streamsize=(int)(dstptr-dstbuf);
-		FILE *fdst=fopen(dstfn, "wb");
+		FILE *fdst=_wfopen(dstfn, L"wb");
 		if(!fdst)
 		{
 			LOG_WARNING("Cannot open \"%s\" for writing", dstfn);
@@ -1106,17 +1134,17 @@ static int gr_save(const char *dstfn, const short *image, int iw, int ih, int nl
 	free(dstbuf);
 	return 0;
 }
-static short* gr_load(const char *srcfn, int *ret_iw, int *ret_ih, int *ret_nlevels, char *ret_bayermatrix)
+static short* gr_load(const wchar_t *srcfn, int *ret_iw, int *ret_ih, int *ret_nlevels, char *ret_bayermatrix)
 {
 	unsigned char *srcbuf=0;
-	ptrdiff_t srcsize=get_filesize(srcfn);
+	ptrdiff_t srcsize=get_filesizew(srcfn);
 	if(srcsize<1)
 	{
 		LOG_WARNING("Cannot open \"%s\"", srcfn);
 		return 0;
 	}
 	{
-		FILE *fsrc=fopen(srcfn, "rb");
+		FILE *fsrc=_wfopen(srcfn, L"rb");
 		if(!fsrc)
 		{
 			LOG_WARNING("Cannot open \"%s\"", srcfn);
@@ -1287,8 +1315,8 @@ static short* gr_load(const char *srcfn, int *ret_iw, int *ret_ih, int *ret_nlev
 }
 
 //GR2
-int gr2_save(const char *dstfn, short *image, int iw, int ih, int nlevels, char *bayermatrix);
-short* gr2_load(const char *srcfn, int *ret_iw, int *ret_ih, int *ret_nlevels, char *ret_bayermatrix);
+int gr2_save(const wchar_t *dstfn, short *image, int iw, int ih, int nlevels, char *bayermatrix);
+short* gr2_load(const wchar_t *srcfn, int *ret_iw, int *ret_ih, int *ret_nlevels, char *ret_bayermatrix);
 
 
 #if 1
@@ -1580,7 +1608,6 @@ static void aq_destroy(AudioQueue *aq)
 typedef struct _VideoDecodeArgs
 {
 	void *decode_threadctx;
-//	void *frametimer_thread;
 	char fn[4096];
 	int32_t erroronfail;
 	int32_t playing, stopflag;
@@ -1619,6 +1646,8 @@ typedef struct _VideoDecodeArgs
 VideoDecodeArgs *video_decode_args=0;
 uint64_t framenumber=0;
 double vtime=0, atime=0;
+int g_buffering=0;
+double seek_error=0;
 int slider_get(Slider *slider)
 {
 	if(!video_decode_args)
@@ -1632,6 +1661,7 @@ int slider_get(Slider *slider)
 static void videoseek()
 {
 	VideoDecodeArgs *args=video_decode_args;
+	int streamindex=-1;
 	int64_t ts;
 	int error=0;
 	
@@ -1640,10 +1670,17 @@ static void videoseek()
 	{
 		AVRational r={1, AV_TIME_BASE};
 		ts=avutil.av_rescale_q((int64_t)(args->seektarget*AV_TIME_BASE), r, args->timebase);
+		streamindex=args->video_stream_index;
 	}
 	else
+	{
 		ts=(int64_t)(args->seektarget*args->audioCodecContext->sample_rate);
-	error=avformat.av_seek_frame(args->formatContext, -1, ts, AVSEEK_FLAG_BACKWARD);
+		streamindex=args->audio_stream_index;
+	}
+	int seekcond=fabs(args->seektarget-(args->videotimestamp-args->loopoffset))>100;
+	error=avformat.av_seek_frame(args->formatContext, streamindex, ts,
+		seekcond?AVSEEK_FLAG_ANY:AVSEEK_FLAG_BACKWARD
+	);
 
 	if(error<0)
 		return;
@@ -1694,43 +1731,6 @@ int slider_set(double ratio, int fast)
 	args->seektarget=ratio*args->duration;
 	args->seekrequest=1;
 	args->fastseek=fast;
-#if 0
-	videoplayback_pause(0);
-	
-//	args->seektarget=args->loopoffset+args->videotimestamp+ratio*args->duration;
-	args->seektarget=ratio*args->duration;
-	args->videotimestamp=ratio*args->duration;
-	args->loopoffset=0;
-	AVRational r={1, AV_TIME_BASE};
-	int64_t ts=avutil.av_rescale_q((int64_t)(args->videotimestamp*AV_TIME_BASE), r, args->timebase);
-//	int64_t ts=(args->videotimestamp-args->loopoffset)/args->timescale;
-//	avformat.avformat_seek_file(args->formatContext, -1, INT64_MIN, ts, INT64_MAX, 0);
-	avformat.av_seek_frame(args->formatContext, -1, ts, AVSEEK_FLAG_BACKWARD);
-	
-	avcodec.avcodec_flush_buffers(args->videoCodecContext);
-	if(args->has_audio)
-		avcodec.avcodec_flush_buffers(args->audioCodecContext);
-
-	//clear queues
-	mutex_lock(args->fq.mutex);
-	args->fq.write_idx=args->fq.read_idx;
-	args->fq.count=0;
-	cond_signal(args->fq.not_full);
-	mutex_unlock(args->fq.mutex);
-	
-	if(args->has_audio)
-	{
-		mutex_lock(args->aq.mutex);
-		args->aq.write_idx=args->aq.read_idx;
-		args->aq.count=0;
-		memset(args->aq.buf, 0, sizeof(args->aq.buf));
-		cond_signal(args->aq.not_full);
-		mutex_unlock(args->aq.mutex);
-	}
-	args->seekflag=1;
-
-	videoplayback_pause(0);
-#endif
 	return 0;
 }
 int slider_changespeed(double ratio)
@@ -1793,43 +1793,6 @@ int audioplayback_dequeue(float *out, int nsamples)
 	}
 	return i;
 }
-#if 0
-static void videoplayback_frametimer(void *p)
-{
-	VideoDecodeArgs *args=video_decode_args;
-	double next=time_sec();
-	while(!args->stopflag)
-	{
-		double t=time_sec();
-		if(t>=next)
-		{
-			if(args->playing)
-				invalidate();
-			next+=1./60;
-		}
-		Sleep(1);
-	}
-}
-double gettargettime(void)
-{
-	VideoDecodeArgs *args=video_decode_args;
-	double target;
-	if(args->has_audio)
-	{
-		double audio_time=time_sec_audioclock();
-		double delta=(audio_time-atime)*args->timescale;
-		atime=audio_time;
-		target=args->videotimestamp;
-		args->videotimestamp+=delta;
-	}
-	else
-	{
-		target=args->videotimestamp;
-		args->videotimestamp+=args->framedelta;
-	}
-	return target;
-}
-#endif
 int videoplayback_update(void)
 {
 	VideoDecodeArgs *args=video_decode_args;
@@ -1846,8 +1809,6 @@ int videoplayback_update(void)
 	if(args->has_audio)
 	{
 		double delta=(audio_time-atime)*args->timescale;
-		//if(!args->has_video&&args->seekflag)
-		//	delta+=args->seektarget-args->seekfrom;
 		atime=audio_time;
 		target=args->videotimestamp;
 		args->videotimestamp+=delta;
@@ -2024,7 +1985,6 @@ static void videoplayback_decode(void *p)
 	{
 		args->timebase=args->formatContext->streams[args->audio_stream_index]->time_base;
 		args->ftimebase=av_q2d(args->timebase);
-	//	args->ftimebase=1./50;
 		args->framedelta=50;
 		args->coarsedelta=50;
 	}
@@ -2066,7 +2026,15 @@ static void videoplayback_decode(void *p)
 					{
 						double t=args->frame->best_effort_timestamp*args->ftimebase;
 						if(t<args->seektarget)
+						{
+							g_buffering=1;
+							seek_error=args->seektarget-t;
+							{
+								if(seek_error>1000)
+									break;
+							}
 							continue;
+						}
 						args->seekflag=0;
 					}
 
@@ -2209,12 +2177,12 @@ static void videoplayback_decode(void *p)
 						error=swresample.swr_alloc_set_opts2(
 							&args->swrctx,
 
-							// output (WASAPI)
+							//Output (WASAPI)
 							&layout,
 							AV_SAMPLE_FMT_FLT,
 							(int)(48000/args->timescale),
 
-							// input (from decoder)
+							//Input (from decoder)
 							&args->frame->ch_layout,
 							(enum AVSampleFormat)args->frame->format,
 							args->frame->sample_rate,
@@ -2352,8 +2320,6 @@ void videoplayback_start(const char *fn, int has_video, int has_audio)
 		audioplayback_start();
 	video_decode_args->playing=1;
 	video_decode_args->decode_threadctx=mt_exec(videoplayback_decode, video_decode_args, sizeof(*video_decode_args), 1);
-	//if(has_audio)
-	//	video_decode_args->frametimer_thread=mt_exec(videoplayback_frametimer, video_decode_args, sizeof(*video_decode_args), 1);
 }
 void videoplayback_pause(int stop)
 {
@@ -2361,8 +2327,7 @@ void videoplayback_pause(int stop)
 		return;
 	if(stop)
 	{
-		//if(!video_decode_args->has_audio)
-			timer_stop(TIMER_ID_VIDEO);
+		timer_stop(TIMER_ID_VIDEO);
 		animated=0;
 		video_decode_args->playing=0;
 		video_decode_args->stopflag=1;
@@ -2380,7 +2345,6 @@ void videoplayback_pause(int stop)
 			cond_signal(video_decode_args->aq.not_full);
 			mutex_unlock(video_decode_args->aq.mutex);
 			audioplayback_pause(1);
-			//mt_finish(video_decode_args->frametimer_thread);
 		}
 
 		mt_finish(video_decode_args->decode_threadctx);
@@ -2398,27 +2362,31 @@ void videoplayback_pause(int stop)
 		video_decode_args->playing=!video_decode_args->playing;
 		if(video_decode_args->has_audio)
 			audioplayback_pause(0);
-		//if(!video_decode_args->has_audio)
-		{
-			if(video_decode_args->playing)
-				timer_start(video_decode_args->coarsedelta, TIMER_ID_VIDEO);
-			else
-				timer_stop(TIMER_ID_VIDEO);
-		}
+		if(video_decode_args->playing)
+			timer_start(video_decode_args->coarsedelta, TIMER_ID_VIDEO);
+		else
+			timer_stop(TIMER_ID_VIDEO);
 	}
 }
 
+#ifdef _WIN32
+#define WSTRICMP(A, B) (CompareStringOrdinal(A, -1, B, -1, TRUE)!=CSTR_EQUAL)
+#else
+#define WSTRICMP(A, B) _wcsicmp(A, B)
+#endif
+
 //https://github.com/ShootingKing-AM/ffmpeg-pseudocode-tutorial
 //https://github.com/leandromoreira/ffmpeg-libav-tutorial/blob/master/README.md
-int load_media(const char *filename, Image16 **image, int erroronfail)
+int load_media(const wchar_t *filename, Image16 **image, int erroronfail)
 {
 	static int callctr=0;
+
 	load_ffmpeg();
 #if 1
 	{
-		struct stat info={0};
-		stat(filename, &info);
-		if(info.st_size>1024*1024*1024)
+		struct _stat64 info={0};
+		_wstat64(filename, &info);
+		if(info.st_size>(int64_t)1024*1024*1024)
 		{
 			if(erroronfail)
 				LOG_WARNING("\"%s\" is too large", filename);
@@ -2427,7 +2395,7 @@ int load_media(const char *filename, Image16 **image, int erroronfail)
 	}
 	{
 		uint8_t buf[128]={0};
-		FILE *f=fopen(filename, "rb");
+		FILE *f=_wfopen(filename, L"rb");
 		if(!f)
 		{
 			if(erroronfail)
@@ -2465,7 +2433,9 @@ int load_media(const char *filename, Image16 **image, int erroronfail)
 		unsigned short *stbi_load_16(char const *filename, int *x, int *y, int *channels_in_file, int desired_channels);
 		unsigned char* stbi_load(const char *filename, int *x, int *y, int *channels_in_file, int desired_channels);
 		int iw=0, ih=0, nch=0;
-		unsigned char *im2=stbi_load(filename, &iw, &ih, &nch, 4);
+		char fn_utf8[4096]={0};
+		WideCharToMultiByte(CP_UTF8, 0, filename, -1, fn_utf8, 4096, 0, 0);
+		unsigned char *im2=stbi_load(fn_utf8, &iw, &ih, &nch, 4);
 		if(!im2)
 		{
 			if(erroronfail)
@@ -2488,33 +2458,33 @@ int load_media(const char *filename, Image16 **image, int erroronfail)
 		update_globals(filename, *image);
 		return 0;
 	}
-	int len=(int)strlen(filename);
+	int len=(int)wcslen(filename);
 #ifdef HVIEW_INCLUDE_LIBHEIF
 	if(
-		!_stricmp(filename+len-5, ".AVIF")||//libheif opens avif too (NEED LIBAVIF)
-		!_stricmp(filename+len-5, ".HEIC")
+		!WSTRICMP(filename+len-5, L".AVIF")||//libheif opens avif too (NEED LIBAVIF)
+		!WSTRICMP(filename+len-5, L".HEIC")
 	)
 		return load_heic(filename, image, erroronfail);
 #endif
 #ifdef HVIEW_INCLUDE_LIBRAW
 	if(
-		!_stricmp(filename+len-4, ".CR2")||
-		!_stricmp(filename+len-4, ".CR3")||
-		!_stricmp(filename+len-4, ".CRW")||
-		!_stricmp(filename+len-4, ".DCR")||
-		!_stricmp(filename+len-4, ".DNG")||
-		!_stricmp(filename+len-4, ".KDC")||
-		!_stricmp(filename+len-4, ".MOS")||
-		!_stricmp(filename+len-4, ".NEF")||
-		!_stricmp(filename+len-4, ".REF")||
-		!_stricmp(filename+len-4, ".RW2")
+		!WSTRICMP(filename+len-4, L".CR2")||
+		!WSTRICMP(filename+len-4, L".CR3")||
+		!WSTRICMP(filename+len-4, L".CRW")||
+		!WSTRICMP(filename+len-4, L".DCR")||
+		!WSTRICMP(filename+len-4, L".DNG")||
+		!WSTRICMP(filename+len-4, L".KDC")||
+		!WSTRICMP(filename+len-4, L".MOS")||
+		!WSTRICMP(filename+len-4, L".NEF")||
+		!WSTRICMP(filename+len-4, L".REF")||
+		!WSTRICMP(filename+len-4, L".RW2")
 	)
 		return load_raw(filename, image, erroronfail);
 #endif
 
 	if(
-		!_stricmp(filename+len-3, ".GR")||
-		!_stricmp(filename+len-3, ".GR2")
+		!WSTRICMP(filename+len-3, L".GR")||
+		!WSTRICMP(filename+len-3, L".GR2")
 	)
 	{
 		int iw=0, ih=0, nlevels=0;
@@ -2583,7 +2553,7 @@ int load_media(const char *filename, Image16 **image, int erroronfail)
 	}
 
 	if(
-		!_stricmp(filename+len-4, ".SLI")
+		!WSTRICMP(filename+len-4, L".SLI")
 	)
 	{
 		int iw=0, ih=0, nch=0, dummy_alpha=0;
@@ -2649,24 +2619,27 @@ int load_media(const char *filename, Image16 **image, int erroronfail)
 	}
 
 	if(
-		!_stricmp(filename+len-4, ".HUF")
+		!WSTRICMP(filename+len-4, L".HUF")
 	)
 		return huf_load(filename, image, erroronfail);
 
 	if(
-		!_stricmp(filename+len-4, ".DOC")||
-		!_stricmp(filename+len-5, ".DOCX")||
-		!_stricmp(filename+len-4, ".ODF")||
-		!_stricmp(filename+len-4, ".ODS")||
-		!_stricmp(filename+len-4, ".PPT")||
-		!_stricmp(filename+len-5, ".PPTX")||
-		!_stricmp(filename+len-4, ".XLS")||
-		!_stricmp(filename+len-5, ".XLSX")||
-		!_stricmp(filename+len-4, ".PDF")||
-		!_stricmp(filename+len-4, ".TXT")||
-		!_stricmp(filename+len-4, ".SVG")
+		!WSTRICMP(filename+len-4, L".DOC")||
+		!WSTRICMP(filename+len-5, L".DOCX")||
+		!WSTRICMP(filename+len-4, L".ODF")||
+		!WSTRICMP(filename+len-4, L".ODS")||
+		!WSTRICMP(filename+len-4, L".PPT")||
+		!WSTRICMP(filename+len-5, L".PPTX")||
+		!WSTRICMP(filename+len-4, L".XLS")||
+		!WSTRICMP(filename+len-5, L".XLSX")||
+		!WSTRICMP(filename+len-4, L".PDF")||
+		!WSTRICMP(filename+len-4, L".TXT")||
+		!WSTRICMP(filename+len-4, L".SVG")
 	)
 		return -2;
+	
+	char fn_utf8[4096];
+	WideCharToMultiByte(CP_UTF8, 0, filename, -1, fn_utf8, 4096, 0, 0);
 
 	int error;
 	AVFormatContext *formatContext=avformat.avformat_alloc_context();
@@ -2675,7 +2648,7 @@ int load_media(const char *filename, Image16 **image, int erroronfail)
 		LOG_WARNING("Allocation error");
 		return -1;
 	}
-	error=avformat.avformat_open_input(&formatContext, filename, 0, 0);
+	error=avformat.avformat_open_input(&formatContext, fn_utf8, 0, 0);
 	CHECK_AV(error);
 	error=avformat.avformat_find_stream_info(formatContext, 0);
 	CHECK_AV(error);
@@ -2736,8 +2709,10 @@ int load_media(const char *filename, Image16 **image, int erroronfail)
 		//error=avutil.av_opt_show2(codecContext->priv_data, 0, 0, 0);	CHECK_AV(error);//
 		//error=avutil.av_opt_set(codecContext->priv_data, "dither_method", "none", 0);	CHECK_AV(error);//
 
-		error=avcodec.avcodec_parameters_to_context(codecContext, codecParameters);	CHECK_AV(error);
-		error=avcodec.avcodec_open2(codecContext, videocodec, 0);	CHECK_AV(error);
+		error=avcodec.avcodec_parameters_to_context(codecContext, codecParameters);
+		CHECK_AV(error);
+		error=avcodec.avcodec_open2(codecContext, videocodec, 0);
+		CHECK_AV(error);
 		AVFrame *frame=avutil.av_frame_alloc();
 		AVPacket *packet=avcodec.av_packet_alloc();
 		if(!frame||!packet)
@@ -2750,7 +2725,8 @@ int load_media(const char *filename, Image16 **image, int erroronfail)
 			if(packet->stream_index==video_stream_index)
 			{
 				//int result=decode_packet(packet, codecContext, frame);
-				error=avcodec.avcodec_send_packet(codecContext, packet);	CHECK_AV(error);
+				error=avcodec.avcodec_send_packet(codecContext, packet);
+				CHECK_AV(error);
 				while(error>=0)
 				{
 					error=avcodec.avcodec_receive_frame(codecContext, frame);
@@ -2860,7 +2836,7 @@ int load_media(const char *filename, Image16 **image, int erroronfail)
 	if(framecount>1||audio_stream_index!=-1)
 	{
 		animated=1;
-		videoplayback_start(filename, video_stream_index!=-1, audio_stream_index!=-1);
+		videoplayback_start(fn_utf8, video_stream_index!=-1, audio_stream_index!=-1);
 	}
 	else
 	{
@@ -2872,7 +2848,7 @@ int load_media(const char *filename, Image16 **image, int erroronfail)
 }
 
 
-int save_media(const char *fn, Image8 *image, int erroronfail)
+int save_media(const wchar_t *filename, Image8 *image, int erroronfail)
 {
 	load_ffmpeg();
 	if(ffmpeg_ready!=2)
@@ -2881,11 +2857,13 @@ int save_media(const char *fn, Image8 *image, int erroronfail)
 			LOG_WARNING("FFmpeg not found");
 		return -1;
 	}
-
 	enum AVPixelFormat srcfmt=image->depth==16?AV_PIX_FMT_RGBA64LE:AV_PIX_FMT_RGBA;
 	int error=0;
 	AVFormatContext *oc=0;
-	error=avformat.avformat_alloc_output_context2(&oc, 0, 0, fn);	CHECK_AV(error);
+	char fn_utf8[4096]={0};
+	WideCharToMultiByte(CP_UTF8, 0, filename, -1, fn_utf8, 4096, 0, 0);
+	error=avformat.avformat_alloc_output_context2(&oc, 0, 0, fn_utf8);
+	CHECK_AV(error);
 	if(!oc&&erroronfail)
 	{
 		LOG_WARNING("Allocation error");
@@ -2898,35 +2876,35 @@ int save_media(const char *fn, Image8 *image, int erroronfail)
 		return -1;
 	}
 	
-	int len=(int)strlen(fn);//get short name
+	int len=(int)wcslen(filename);//get short name
 	int k=len-1;
-	for(;k>=0&&fn[k]!='.';--k);
+	for(;k>=0&&filename[k]!=L'.';--k);
 	k+=k!=0;//skip '.'
 	k=len-k;
-	char ext[MAX_PATH]={0};
-	for(int k2=0;k2<k+1;++k2)
-		ext[k2]=tolower(fn[len-k+k2]);
+	wchar_t ext[MAX_PATH]={0};
+	for(int k2=k;k2<len;++k2)
+		ext[k2-k]=filename[k2];
 
 	enum AVCodecID codecid=AV_CODEC_ID_NONE;
-	     if(!strcmp(ext, "png"))	codecid=AV_CODEC_ID_PNG;
-	else if(!strcmp(ext, "jxl"))    codecid=AV_CODEC_ID_JPEGXL;
-	else if(!strcmp(ext, "webp"))   codecid=AV_CODEC_ID_WEBP;
-	else if(!strcmp(ext, "jpg"))    codecid=AV_CODEC_ID_MJPEG;
-	else if(!strcmp(ext, "gif"))    codecid=AV_CODEC_ID_GIF;
-	else if(!strcmp(ext, "jp2"))    codecid=AV_CODEC_ID_JPEG2000;
-	else if(!strcmp(ext, "bmp"))    codecid=AV_CODEC_ID_BMP;
-	else if(!strcmp(ext, "tif"))    codecid=AV_CODEC_ID_TIFF;
-	else if(!strcmp(ext, "qoi"))    codecid=AV_CODEC_ID_QOI;
-	else if(!strcmp(ext, "ljpg"))   codecid=AV_CODEC_ID_LJPEG;
-	else if(!strcmp(ext, "jls"))    codecid=AV_CODEC_ID_JPEGLS;
-	else if(!strcmp(ext, "loco"))   codecid=AV_CODEC_ID_LOCO;
-	else if(!strcmp(ext, "ppm"))    codecid=AV_CODEC_ID_PPM;
-	else if(!strcmp(ext, "pbm"))    codecid=AV_CODEC_ID_PBM;
-	else if(!strcmp(ext, "pgm"))    codecid=AV_CODEC_ID_PGM;
-	else if(!strcmp(ext, "pam"))    codecid=AV_CODEC_ID_PAM;
+	     if(!WSTRICMP(ext, L"png"))		codecid=AV_CODEC_ID_PNG;
+	else if(!WSTRICMP(ext, L"jxl"))		codecid=AV_CODEC_ID_JPEGXL;
+	else if(!WSTRICMP(ext, L"webp"))	codecid=AV_CODEC_ID_WEBP;
+	else if(!WSTRICMP(ext, L"jpg"))		codecid=AV_CODEC_ID_MJPEG;
+	else if(!WSTRICMP(ext, L"gif"))		codecid=AV_CODEC_ID_GIF;
+	else if(!WSTRICMP(ext, L"jp2"))		codecid=AV_CODEC_ID_JPEG2000;
+	else if(!WSTRICMP(ext, L"bmp"))		codecid=AV_CODEC_ID_BMP;
+	else if(!WSTRICMP(ext, L"tif"))		codecid=AV_CODEC_ID_TIFF;
+	else if(!WSTRICMP(ext, L"qoi"))		codecid=AV_CODEC_ID_QOI;
+	else if(!WSTRICMP(ext, L"ljpg"))	codecid=AV_CODEC_ID_LJPEG;
+	else if(!WSTRICMP(ext, L"jls"))		codecid=AV_CODEC_ID_JPEGLS;
+	else if(!WSTRICMP(ext, L"loco"))	codecid=AV_CODEC_ID_LOCO;
+	else if(!WSTRICMP(ext, L"ppm"))		codecid=AV_CODEC_ID_PPM;
+	else if(!WSTRICMP(ext, L"pbm"))		codecid=AV_CODEC_ID_PBM;
+	else if(!WSTRICMP(ext, L"pgm"))		codecid=AV_CODEC_ID_PGM;
+	else if(!WSTRICMP(ext, L"pam"))		codecid=AV_CODEC_ID_PAM;
 	if(codecid==AV_CODEC_ID_NONE)
 	{
-		LOG_WARNING("Cannot save as \'%s\'", fn);
+		LOG_WARNINGW(L"Cannot save as \'%s\'", filename);
 		return -1;
 	}
 
@@ -2939,7 +2917,7 @@ int save_media(const char *fn, Image8 *image, int erroronfail)
 	AVCodec const *codec=avcodec.avcodec_find_encoder(codecid);
 	if(!codec)
 	{
-		LOG_WARNING("Cannot save \'%s\'", fn);
+		LOG_WARNINGW(L"Cannot save \'%s\'", filename);
 		return -1;
 	}
 
@@ -3000,9 +2978,9 @@ int save_media(const char *fn, Image8 *image, int erroronfail)
 	//packet.size=0;
 
 	//save file
-	FILE *f=fopen(fn, "wb");
+	FILE *f=_wfopen(filename, L"wb");
 	if(!f)
-		LOG_WARNING("Cannot save \'%s\'", fn);
+		LOG_WARNINGW(L"Cannot save \'%s\'", filename);
 	else
 	{
 		error=avcodec.avcodec_send_frame(cc, frame);	CHECK_AV(error);
@@ -3037,34 +3015,34 @@ int save_media(const char *fn, Image8 *image, int erroronfail)
 	avformat.avformat_free_context(oc);
 	return 0;
 }
-int save_media_as(Image16 *image, Image8 *impreview, const char *initialname, int namelen, int erroronfail)
+int save_media_as(Image16 *image, Image8 *impreview, const wchar_t *initialname, int namelen, int erroronfail)
 {
-	Filter filters[]=
+	FilterW filters[]=
 	{
-		{"Portable Network Graphics (*.PNG)", ".PNG"},//1
-	//	{"\'Png is Not Gnu, which in turn is not Unix\' File (*.PNG)", ".PNG"},//1
-		{"JPEG XL File (*.JXL)", ".JXL"},			//2
-		{"Simple Lossless Image Codec (*.SLI)", ".SLI"},	//3
-	//	{"WebP File (*.WEBP)", ".WEBP"},	//error
-	//	{"GIF File (*.GIF)", ".GIF"},		//error
-	//	{"JPEG2000 File (*.JP2)", ".JP2"},	//error
-	//	{"BMP File (*.BMP)", ".BMP"},		//error
-		{"TIFF File (*.TIF)", ".TIF"},			//4
-		{"Quite OK Image (*.QOI)", ".QOI"},		//5
-	//	{"Lossless JPEG (*.LJPG)", ".LJPG"},	//error
-	//	{"JPEG-LS (*.JLS)", ".JLS"},		//error
-	//	{"LOCO File (*.LOCO)", ".LOCO"},	//error
-		{"PPM File (*.PPM)", ".PPM"},		//error	//6
-	//	{"PBM File (*.PBM)", ".PBM"},		//error
-		{"PGM File (*.PGM)", ".PGM"},		//error	//7
-	//	{"PAM File (*.PAM)", ".PAM"},		//error
-		{"Golomb-RAW File (*.GR)", ".GR"},		//8
-		{"Golomb-RAW-2 File (*.GR2)", ".GR2"},		//9
-		{"JPEG File (*.JPG)", ".JPG"},		//error	//10
+		{L"Portable Network Graphics (*.PNG)", L".PNG"},	//1
+	//	{L"\'Png is Not Gnu, which in turn is not Unix\' File (*.PNG)", L".PNG"},//1
+		{L"JPEG XL File (*.JXL)", L".JXL"},			//2
+		{L"Simple Lossless Image Codec (*.SLI)", L".SLI"},	//3
+	//	{L"WebP File (*.WEBP)", L".WEBP"},	//error
+	//	{L"GIF File (*.GIF)", L".GIF"},		//error
+	//	{L"JPEG2000 File (*.JP2)", L".JP2"},	//error
+	//	{L"BMP File (*.BMP)", L".BMP"},		//error
+		{L"TIFF File (*.TIF)", L".TIF"},			//4
+		{L"Quite OK Image (*.QOI)", L".QOI"},			//5
+	//	{L"Lossless JPEG (*.LJPG)", L".LJPG"},	//error
+	//	{L"JPEG-LS (*.JLS)", L".JLS"},		//error
+	//	{L"LOCO File (*.LOCO)", L".LOCO"},	//error
+		{L"PPM File (*.PPM)", L".PPM"},		//error		//6
+	//	{L"PBM File (*.PBM)", L".PBM"},		//error
+		{L"PGM File (*.PGM)", L".PGM"},		//error		//7
+	//	{L"PAM File (*.PAM)", L".PAM"},		//error
+		{L"Golomb-RAW File (*.GR)", L".GR"},			//8
+		{L"Golomb-RAW-2 File (*.GR2)", L".GR2"},		//9
+		{L"JPEG File (*.JPG)", L".JPG"},	//error		//10
 	};
 	ArrayHandle name;
-	STR_COPY(name, initialname, namelen);
-	STR_APPEND(name, ".PNG", 4, 1);
+	WSTR_COPY(name, initialname, namelen);
+	STR_APPEND(name, L".PNG", 4, 1);
 	//int kpoint;
 	//for(kpoint=(int)name->count-1;kpoint>=0;--kpoint)
 	//{
@@ -3073,9 +3051,9 @@ int save_media_as(Image16 *image, Image8 *impreview, const char *initialname, in
 	//}
 	//array_insert(&name, kpoint+1, "PNG", 4, 1, 1);
 	int ext_selection=0, ret=-1;
-	char *fn=dialog_save_file(filters, _countof(filters), (char*)name->data, &ext_selection, 0, 0);
+	wchar_t *filename=dialog_save_filew(filters, _countof(filters), (wchar_t*)name->data, &ext_selection, 0, 0);
 	array_free(&name);
-	if(!fn)
+	if(!filename)
 		ret=-2;
 	else
 	{
@@ -3083,10 +3061,11 @@ int save_media_as(Image16 *image, Image8 *impreview, const char *initialname, in
 			LOG_WARNING("Unrecognized extension");
 		else if(ext_selection==3)//.SLI
 		{
-			ret=slic2_save(fn, impreview->iw, impreview->ih, 4, impreview->depth, impreview->data);
+			ret=slic2_save(filename, impreview->iw, impreview->ih, 4, impreview->depth, impreview->data);
 			if(!ret)
 			{
-				LOG_WARNING("Failed to save \'%s\'", fn);
+				LOG_WARNINGW(L"Failed to save \'%s\'", filename);
+				free(filename);
 				ret=-1;
 			}
 		}
@@ -3105,10 +3084,11 @@ int save_media_as(Image16 *image, Image8 *impreview, const char *initialname, in
 				dstbuf[kd+1]=impreview->data[ks+1];
 				dstbuf[kd+2]=impreview->data[ks+2];
 			}
-			FILE *fdst=fopen(fn, "wb");
+			FILE *fdst=_wfopen(filename, L"wb");
 			if(!fdst)
 			{
-				LOG_WARNING("Cannot open \"%s\" for writing", fn);
+				LOG_WARNINGW(L"Cannot open \"%s\" for writing", filename);
+				free(filename);
 				return -1;
 			}
 			fprintf(fdst, "P6\n%d %d\n255\n", impreview->iw, impreview->ih);
@@ -3124,6 +3104,7 @@ int save_media_as(Image16 *image, Image8 *impreview, const char *initialname, in
 			if(!dstbuf)
 			{
 				LOG_ERROR("Alloc error");
+			//	free(filename);
 				return -1;
 			}
 			for(int k=0, ks=0;(ptrdiff_t)k<(ptrdiff_t)res;++k, ks+=4)
@@ -3133,10 +3114,10 @@ int save_media_as(Image16 *image, Image8 *impreview, const char *initialname, in
 					+(int)(0.0722*0x1000+0.5)*impreview->data[ks+2]
 					+0x800
 				)>>12;
-			FILE *fdst=fopen(fn, "wb");
+			FILE *fdst=_wfopen(filename, L"wb");
 			if(!fdst)
 			{
-				LOG_WARNING("Cannot open \"%s\" for writing", fn);
+				LOG_WARNINGW(L"Cannot open \"%s\" for writing", filename);
 				return -1;
 			}
 			fprintf(fdst, "P5\n%d %d\n255\n", impreview->iw, impreview->ih);
@@ -3161,7 +3142,7 @@ int save_media_as(Image16 *image, Image8 *impreview, const char *initialname, in
 				};
 				for(ptrdiff_t k=0, res=(ptrdiff_t)image->iw*image->ih;k<res;++k)
 					image->data[k]^=0x8000;
-				gr_save(fn, (short*)image->data, image->iw, image->ih, image->nlevels0, bayermatrix);
+				gr_save(filename, (short*)image->data, image->iw, image->ih, image->nlevels0, bayermatrix);
 				for(ptrdiff_t k=0, res=(ptrdiff_t)image->iw*image->ih;k<res;++k)
 					image->data[k]^=0x8000;
 			}
@@ -3182,14 +3163,14 @@ int save_media_as(Image16 *image, Image8 *impreview, const char *initialname, in
 				};
 				for(ptrdiff_t k=0, res=(ptrdiff_t)image->iw*image->ih;k<res;++k)
 					image->data[k]^=0x8000;
-				gr2_save(fn, (short*)image->data, image->iw, image->ih, image->nlevels0, bayermatrix);
+				gr2_save(filename, (short*)image->data, image->iw, image->ih, image->nlevels0, bayermatrix);
 				for(ptrdiff_t k=0, res=(ptrdiff_t)image->iw*image->ih;k<res;++k)
 					image->data[k]^=0x8000;
 			}
 		}
 		else
-			ret=save_media(fn, impreview, erroronfail);
-		free(fn);
+			ret=save_media(filename, impreview, erroronfail);
+		free(filename);
 	}
 	return ret;
 }

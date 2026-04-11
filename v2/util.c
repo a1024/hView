@@ -1141,6 +1141,17 @@ int print_memsize(char *buf, ptrdiff_t bufsize, long long memsize, int totaldigi
 		return snprintf(buf, bufsize, "%*.2lf KB", totaldigits, (double)memsize/1024);
 	return snprintf(buf, bufsize, "%*td  B", totaldigits, memsize);
 }
+int print_memsizew(wchar_t *buf, ptrdiff_t bufsize, long long memsize, int totaldigits)
+{
+	long long usize=llabs(memsize);
+	if(usize>1024LL*1024*1024)
+		return _snwprintf_s(buf, bufsize, bufsize, L"%*.2lf GB", totaldigits, (double)memsize/(1024*1024*1024));
+	if(usize>1024LL*1024)
+		return _snwprintf_s(buf, bufsize, bufsize, L"%*.2lf MB", totaldigits, (double)memsize/(1024*1024));
+	if(usize>1024LL)
+		return _snwprintf_s(buf, bufsize, bufsize, L"%*.2lf KB", totaldigits, (double)memsize/1024);
+	return _snwprintf_s(buf, bufsize, bufsize, L"%*td  B", totaldigits, memsize);
+}
 double convert_size(double bytesize, int *log1024)
 {
 	int k=0;
@@ -1188,7 +1199,7 @@ int log_error(const char *fn, int line, int quit, const char *format, ...)
 		memcpy(first_error_msg, latest_error_msg, printed+1LL);
 
 	//fprintf(stderr, "%s\n", latest_error_msg);
-	messagebox(MBOX_OK, "Error", latest_error_msg);
+	messageboxa(MBOX_OK, "Error", "%s", latest_error_msg);
 
 	if(quit)
 	{
@@ -1196,6 +1207,35 @@ int log_error(const char *fn, int line, int quit, const char *format, ...)
 		exit(0);
 	}
 	return firsttime;
+}
+wchar_t error_msg[G_BUF_SIZE]={0};
+int log_errorw(const char *fn, int line, int quit, const wchar_t *format, ...)
+{
+	wchar_t wf[MAX_PATH];
+	int len=(int)strlen(fn), start=len-1;
+	for(;start>=0&&fn[start]!='/'&&fn[start]!='\\';--start);
+	start+=start==-1||fn[start]=='/'||fn[start]=='\\';
+	len-=start;
+	fn+=start;
+	MultiByteToWideChar(CP_UTF8, 0, fn, -1, wf, MAX_PATH);
+
+	int printed=_snwprintf_s(error_msg, G_BUF_SIZE, G_BUF_SIZE-1, L"\n%s(%d): ", wf, line);
+	{
+		va_list args;
+		va_start(args, format);
+		printed+=_vsnwprintf_s(error_msg+printed, G_BUF_SIZE-printed, G_BUF_SIZE-1-printed, format, args);
+		va_end(args);
+	}
+
+	//fwprintf(stderr, "%s\n", latest_error_msg);
+	messageboxw(MBOX_OK, L"Error", L"%s", error_msg);
+
+	if(quit)
+	{
+		pause();
+		exit(0);
+	}
+	return 0;
 }
 int pause(void)
 {
@@ -2648,6 +2688,20 @@ ptrdiff_t get_filesize(const char *filename)//-1 not found,  0: not a file,  ...
 		return info.st_size;
 	return 0;
 }
+ptrdiff_t get_filesizew(const wchar_t *filename)//-1 not found,  0: not a file,  ...: regular file size
+{
+	struct _stat64 info={0};
+	int e2=_wstat64(filename, &info);
+	if(e2)
+		return -1;
+#if defined _MSC_VER || defined _WIN32
+	if((info.st_mode&S_IFMT)==S_IFREG)
+#else
+	if(S_ISREG(info.st_mode))
+#endif
+		return info.st_size;
+	return 0;
+}
 
 int acme_stricmp(const char *a, const char *b)//case insensitive strcmp
 {
@@ -2693,6 +2747,35 @@ ArrayHandle filter_path(const char *path, int len, int slash)//replaces back sla
 	}
 	return path2;
 }
+ArrayHandle filter_pathw(const wchar_t *path, int len, int slash)//replaces back slashes with slashes, adds trailing slash if missing, as ArrayHandle
+{
+	ArrayHandle path2;
+	wchar_t *str=0;
+
+	if(len<0)
+		len=(int)wcslen(path);
+	WSTR_COPY(path2, path, len);
+	str=(wchar_t*)path2->data;
+	for(ptrdiff_t k=0;k<(ptrdiff_t)path2->count;++k)//replace back slashes
+	{
+		if(str[k]==L'\\')
+			str[k]=L'/';
+	}
+	if(slash)
+	{
+		if(str[path2->count-1]!=L'/')//ensure trailing slash
+			STR_APPEND(path2, L"/", 1, 1);
+	}
+	else
+	{
+		if(str[path2->count-1]==L'/')
+		{
+			str[path2->count-1]=0;
+			--path2->count;
+		}
+	}
+	return path2;
+}
 void get_filetitle(const char *fn, int len, int *idx_start, int *idx_end)//pass -1 for len if unknown
 {
 	int kpoint, kslash;
@@ -2722,6 +2805,17 @@ static const char* get_extension(const char *filename, ptrdiff_t len)//excludes 
 		return "";
 	return dot+1;
 #endif
+}
+static const wchar_t* get_extensionw(const wchar_t *filename, int len)//excludes the dot
+{
+	if(!len)
+		len=(int)wcslen(filename);
+	for(int k=len-1;k>=0;--k)
+	{
+		if(filename[k]=='.')
+			return filename+k+1;
+	}
+	return 0;
 }
 static void free_str(void *p)
 {
@@ -2783,6 +2877,105 @@ ArrayHandle get_filenames(const char *path, const char **extensions, int extCoun
 			if(!extCount||found)
 			{
 				STR_ALLOC(filename, 0);
+				if(fullyqualified)
+					STR_APPEND(filename, searchpath->data, searchpath->count, 1);
+				STR_APPEND(filename, data.cFileName, len, 1);
+				ARRAY_APPEND(filenames, &filename, 1, 1, 0);
+			}
+		}
+	}
+	success=FindClose(hSearch);
+	array_free(&searchpath);
+	return filenames;
+#elif defined __linux__
+	ArrayHandle searchpath, filename, filenames;
+	searchpath=filter_path(path, -1);
+	struct dirent *dir;
+	DIR *d=opendir((char*)searchpath->data);
+	if(!d)
+		return 0;
+	ARRAY_ALLOC(ArrayHandle, filenames, 0, 0, 0, free_str);
+	while((dir=readdir(d)))
+	{
+		if(dir->d_type==DT_REG)//regular file
+		{
+			const char *name=dir->d_name;
+			ptrdiff_t len=strlen(name);
+			const char *extension=get_extension(name, len);
+			int found=0;
+			for(int k=0;k<extCount;++k)
+			{
+				if(!acme_stricmp(extension, extensions[k]))
+				{
+					found=1;
+					break;
+				}
+			}
+			if(found)
+			{
+				STR_ALLOC(filename, 0);
+				if(fullyqualified)
+					STR_APPEND(filename, searchpath->data, searchpath->count, 1);
+				STR_APPEND(filename, name, len, 1);
+				ARRAY_APPEND(filenames, &filename, 1, 1, 0);
+			}
+		}
+	}
+	closedir(d);
+	array_free(&searchpath);
+	qsort(filenames->data, filenames->count, filenames->esize, cmp_str);
+	return filenames;
+#endif
+}
+#ifdef _WIN32
+#define WSTRICMP(A, B) (CompareStringOrdinal(A, -1, B, -1, TRUE)!=CSTR_EQUAL)
+#else
+#define WSTRICMP(A, B) _wcsicmp(A, B)
+#endif
+ArrayHandle get_filenamesw(const wchar_t *path, const wchar_t **extensions, int extCount, int fullyqualified)
+{
+#if defined _MSC_VER || defined _WIN32
+	ArrayHandle searchpath, filename, filenames;
+	WIN32_FIND_DATAW data={0};
+	void *hSearch;
+	int success;
+	const wchar_t *extension;
+	int len;
+	int found;
+	
+	//prepare searchpath
+	searchpath=filter_pathw(path, -1, 1);
+	STR_APPEND(searchpath, "*", 1, 1);
+
+	hSearch=FindFirstFileW((wchar_t*)searchpath->data, &data);//skip .
+	if(hSearch==INVALID_HANDLE_VALUE)
+		return 0;
+	success=FindNextFileW(hSearch, &data);//skip ..
+
+	STR_POPBACK(searchpath, 1);//pop the '*'
+	ARRAY_ALLOC(ArrayHandle, filenames, 0, 0, 0, free_str);
+
+	for(;;)
+	{
+		success=FindNextFileW(hSearch, &data);
+		if(!success)
+			break;
+		len=(int)wcslen(data.cFileName);
+		extension=get_extensionw(data.cFileName, len);
+		if(!(data.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY))
+		{
+			found=0;
+			for(int k=0;k<extCount;++k)
+			{
+				if(!WSTRICMP(extension, extensions[k]))
+				{
+					found=1;
+					break;
+				}
+			}
+			if(!extCount||found)
+			{
+				WSTR_ALLOC(filename, 0);
 				if(fullyqualified)
 					STR_APPEND(filename, searchpath->data, searchpath->count, 1);
 				STR_APPEND(filename, data.cFileName, len, 1);

@@ -7,6 +7,10 @@
 //START OF HEADER
 #ifndef _INC_SLIC_H
 #define _INC_SLIC_H
+#ifdef _MSC_VER
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+#include<wchar.h>
 #ifdef __cplusplus
 extern "C"
 {
@@ -24,8 +28,8 @@ unsigned char* slic2_encode(int iw, int ih, int nch, int depth, const void *src,
 void*          slic2_decode(const unsigned char *data, long long len, int *ret_iw, int *ret_ih, int *ret_nch, int *ret_depth, int *ret_dummy_alpha, int force_alpha);
 
 //I/O wrappers, return FALSE on error
-int   slic2_save(const char *filename, int iw, int ih, int nch, int depth, const void *src);
-void* slic2_load(const char *filename, int *ret_iw, int *ret_ih, int *ret_nch, int *ret_depth, int *ret_dummy_alpha, int force_alpha);
+int   slic2_save(const wchar_t *filename, int iw, int ih, int nch, int depth, const void *src);
+void* slic2_load(const wchar_t *filename, int *ret_iw, int *ret_ih, int *ret_nch, int *ret_depth, int *ret_dummy_alpha, int force_alpha);
 	
 
 #ifdef __cplusplus
@@ -36,9 +40,6 @@ void* slic2_load(const char *filename, int *ret_iw, int *ret_ih, int *ret_nch, i
 
 
 //START OF IMPLEMENTATION
-#ifdef _MSC_VER
-#define _CRT_SECURE_NO_WARNINGS
-#endif
 #include<stdint.h>
 #include<stdio.h>   //FILE/fopen/fread/fwrite/fclose
 #include<stdlib.h>  //malloc/free		(optional) exit() in slic2_error()
@@ -1024,36 +1025,36 @@ void* slic2_decode(const unsigned char *src, long long len, int *ret_iw, int *re
 	return ret;
 }
 
-static ptrdiff_t get_filesize(const char *filename)//-1 not found,  0: not a file,  ...: regular file size
+static ptrdiff_t get_filesizew(const wchar_t *filename)//-1 not found,  0: not a file,  ...: regular file size
 {
-	struct stat info={0};
-	int error=stat(filename, &info);
+	struct _stat64 info={0};
+	int error=_wstat64(filename, &info);
 	if(error)
 		return -1;
 	if((info.st_mode&S_IFMT)==S_IFREG)
 		return info.st_size;
 	return 0;
 }
-int slic2_save(const char *filename, int iw, int ih, int nch, int depth, const void *src)
+int slic2_save(const wchar_t *filename, int iw, int ih, int nch, int depth, const void *src)
 {
 	long long ret_size=0;
 	unsigned char *ret=slic2_encode(iw, ih, 4, depth, src, &ret_size);
 	if(!ret)
 		return 0;
-	FILE *f=fopen(filename, "wb");
+	FILE *f=_wfopen(filename, L"wb");
 	size_t byteswritten=fwrite(ret, 1, ret_size, f);
 
 	if((int64_t)byteswritten!=(int64_t)ret_size)//OPTIONAL CHECK
-		printf("Error saving \'%s\'\n", filename);
+		wprintf(L"Error saving \'%s\'\n", filename);
 	
 	fclose(f);
 	free(ret);
 	return 1;
 }
-void* slic2_load(const char *filename, int *ret_iw, int *ret_ih, int *ret_nch, int *ret_depth, int *ret_dummy_alpha, int force_alpha)
+void* slic2_load(const wchar_t *filename, int *ret_iw, int *ret_ih, int *ret_nch, int *ret_depth, int *ret_dummy_alpha, int force_alpha)
 {
-	ptrdiff_t size=get_filesize(filename);
-	FILE *f=fopen(filename, "rb");
+	ptrdiff_t size=get_filesizew(filename);
+	FILE *f=_wfopen(filename, L"rb");
 	if(!f)
 		return 0;
 	unsigned char *cdata=(unsigned char*)malloc(size);
@@ -1065,7 +1066,7 @@ void* slic2_load(const char *filename, int *ret_iw, int *ret_ih, int *ret_nch, i
 	size_t bytesread=fread(cdata, 1, size, f);
 
 	if((ptrdiff_t)bytesread!=size)//OPTIONAL CHECK
-		printf("Error reading \'%s\'\n", filename);
+		wprintf(L"Error reading \'%s\'\n", filename);
 
 	void *udata=slic2_decode(cdata, bytesread, ret_iw, ret_ih, ret_nch, ret_depth, ret_dummy_alpha, force_alpha);
 	free(cdata);

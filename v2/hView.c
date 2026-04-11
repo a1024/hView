@@ -1,4 +1,4 @@
-#include"hView.h"
+﻿#include"hView.h"
 #include<stdio.h>
 #include<stdlib.h>
 #include<string.h>
@@ -68,7 +68,7 @@ enum
 {
 	SLIDER_HEIGHT=64,
 
-	VOLUME_ANIMATION_NFRAMES=64,
+	VOLUME_ANIMATION_NFRAMES=48,
 };
 int mute_audio=0;
 float g_volume=1;
@@ -209,7 +209,7 @@ static void equalize(void)
 static void update_image(int settitle, int render)
 {
 	if(settitle&&fn)
-		set_window_title("%s - hView", (char*)fn->data);
+		set_window_titlew(L"%s - hView", (wchar_t*)fn->data);
 	if(!image)
 		return;
 	if(!impreview||impreview->iw!=image->iw||impreview->ih!=image->ih)
@@ -361,53 +361,57 @@ static void zoom_at(int xs, int ys, double factor)
 
 	imagecentered=0;
 }
-int io_init(int argc, char **argv)//return false to abort
+int io_init(int argc, wchar_t **argv)//return false to abort
 {
 #ifdef _DEBUG
-	fn=filter_path(
-		"E:/Share Box/Sound & Music/20250411 2.mp3"
-	//	"E:/Share Box/Sound & Music/2024-11-07 at 3.54.45 PM.mp4"
-	//	"E:/Share Box/Sound & Music/145 (Poodles) by Jake Chudnow [DokBeZKKeKI].opus"
-	//	"D:/ML/dataset-Internet/quantum.mp4"
-	//	"D:/ML/dataset-Internet/birds.webm"
-	//	"D:/ML/dataset-Internet/star_wars.webm"
-	//	"D:/ML/dataset-Internet/accident.webm"	//silent
-	//	"D:/ML/dataset-Internet/revolver.webm"
-	//	"D:/ML/dataset-Internet/briefcase.webm"
-	//	"D:/ML/dataset-Internet/sharks.webm"
-	//	"C:/dataset-20241107-gr/20241107_164228_958.gr"
-	//	"D:/ML/dataset-20250416-raw/P1000058.RW2"
-	//	"D:/ML/WhatsApp Stickers/STK-20230621-WA0009.webp"
-	//	"E:/Share Box/20230102 dslr/NEF/DSC_0403.NEF"
-	//	"D:/ML/20250320_005230.dng"
-	//	"D:/ML/dataset-RAW/a0001-jmac_DSC1459.dng"
-	//	"D:/ML/dataset-RAW/a0117-kme_006.dng"
-	//	"D:/ML/dataset-RAW/a0118-20051223_103622__MG_0617.dng"
-	//	"D:/ML/dataset-RAW/a0128-IMG_0793.dng"
-	//	"D:/ML/00-Taschdid.svg.png"
-	//	"D:/ML/mystery.gr"
-	//	"D:/ML/kodim24.ppm"
-	//	"D:/ML/mystery.gr"
-	//	"E:/C/ASCII-Table-wide.svg.png"
-	//	"C:/dataset-20241107-gr/20241107_164228_958.gr"
-	//	"E:/C/huf2gr/huf2gr/plane.gr"
-	//	"E:/Share Box/Scope/20241107/20241107_164651_573.huf"
-	//	"E:/Share Box/Scope/20241107/20241107_164228_958.huf"
-	//	"C:/Projects/datasets/dataset-RAW/6K9A8788.CR3"
-		, -1, 0);
-	load_media((char*)fn->data, &image, 1);
+//#if 0
+	const wchar_t *wfilename=
+
+		L"E:/Share Box/Sound & Music/20250411 2.mp3"
+	//	L"E:/Share Box/Sound & Music/2024-11-07 at 3.54.45 PM.mp4"
+	//	L"E:/Share Box/Sound & Music/145 (Poodles) by Jake Chudnow [DokBeZKKeKI].opus"
+	//	L"D:/ML/dataset-Internet/quantum.mp4"
+	//	L"D:/ML/dataset-Internet/birds.webm"
+	//	L"D:/ML/dataset-Internet/star_wars.webm"
+	//	L"D:/ML/dataset-Internet/accident.webm"	//silent
+	//	L"D:/ML/dataset-Internet/revolver.webm"
+	//	L"D:/ML/dataset-Internet/briefcase.webm"
+	//	L"D:/ML/dataset-Internet/sharks.webm"
+	//	L"C:/dataset-20241107-gr/20241107_164228_958.gr"
+	//	L"D:/ML/dataset-20250416-raw/P1000058.RW2"
+	//	L"D:/ML/WhatsApp Stickers/STK-20230621-WA0009.webp"
+	//	L"E:/Share Box/20230102 dslr/NEF/DSC_0403.NEF"
+	//	L"D:/ML/20250320_005230.dng"
+	//	L"D:/ML/dataset-RAW/a0001-jmac_DSC1459.dng"
+	//	L"D:/ML/dataset-RAW/a0117-kme_006.dng"
+	//	L"D:/ML/dataset-RAW/a0118-20051223_103622__MG_0617.dng"
+	//	L"D:/ML/dataset-RAW/a0128-IMG_0793.dng"
+	//	L"D:/ML/00-Taschdid.svg.png"
+	//	L"D:/ML/mystery.gr"
+	//	L"D:/ML/kodim24.ppm"
+	//	L"D:/ML/mystery.gr"
+	//	L"E:/C/ASCII-Table-wide.svg.png"
+	//	L"C:/dataset-20241107-gr/20241107_164228_958.gr"
+	//	L"E:/C/huf2gr/huf2gr/plane.gr"
+	//	L"E:/Share Box/Scope/20241107/20241107_164651_573.huf"
+	//	L"E:/Share Box/Scope/20241107/20241107_164228_958.huf"
+	//	L"C:/Projects/datasets/dataset-RAW/6K9A8788.CR3"
+
+	;
+	load_media(wfilename, &image, 1);
 	if(image||animated)
 	{
+		fn=filter_pathw(wfilename, -1, 0);
 		update_image(1, 0);
 		center_image();//
 	}
 	else
 		array_free(&fn);
 #else
-	if(argc>0)
+	if(argc>1)
 	{
-		fn=filter_path(argv[0], -1, 0);
-		load_media((char*)fn->data, &image, 1);
+		fn=filter_pathw(argv[1], -1, 0);
+		load_media((wchar_t*)fn->data, &image, 1);
 		if(image||animated)
 		{
 			update_image(1, 0);
@@ -418,8 +422,22 @@ int io_init(int argc, char **argv)//return false to abort
 	}
 #endif
 	if(!image&&!animated)
-		set_window_title("hView");
+		set_window_titlew(L"hView");
 	return 1;
+}
+void io_dropfile(const wchar_t *filename)
+{
+	Image16 *im2=0;
+
+	load_media(filename, &im2, 0);
+	if(im2||animated)
+	{
+		image_free(&image);
+		image=im2;
+		array_free(&fn);
+		fn=filter_pathw(filename, -1, 0);
+		update_image(1, 1);
+	}
 }
 void io_resize()
 {
@@ -489,7 +507,7 @@ int io_keydn(IOKey key, char c)
 		case 'A'://set alpha to one
 			if(imagetype==IM_RGBA)
 			{
-				unsigned short *data=image->data;
+				uint16_t *data=image->data;
 				ptrdiff_t res=image->iw*image->ih;
 				for(ptrdiff_t k=0;k<res;++k)
 					data[k<<2|3]=0xFFFF;
@@ -501,11 +519,12 @@ int io_keydn(IOKey key, char c)
 		case 'S'://save as
 			{
 				int kslash=0, kdot=0;
-				for(kdot=(int)fn->count-1;kdot>=0&&fn->data[kdot]!='.';--kdot);
+				wchar_t *str=(wchar_t*)fn->data;
+				for(kdot=(int)fn->count-1;kdot>=0&&str[kdot]!=L'.';--kdot);
 				kslash=kdot-1;
-				for(kslash=kdot-1;kslash>=0&&fn->data[kslash]!='/'&&fn->data[kslash]!='\\';--kslash);
+				for(kslash=kdot-1;kslash>=0&&str[kslash]!=L'/'&&str[kslash]!=L'\\';--kslash);
 				++kslash;
-				save_media_as(image, impreview, (char*)fn->data+kslash, kdot-kslash, 1);
+				save_media_as(image, impreview, str+kslash, kdot-kslash, 1);
 			}
 			return 1;
 		}
@@ -517,7 +536,7 @@ int io_keydn(IOKey key, char c)
 	case KEY_F1:
 		{
 			char *ver=get_codecinfo();
-			messagebox(MBOX_OK, "Controls",
+			messageboxa(MBOX_OK, "Controls",
 				"Esc/LBUTTON/WASD: Drag image\n"
 				"Enter/Bksp/Wheel: Zoom image\n"
 				"E: Reset view to topleft corner at 1:1\n"
@@ -554,7 +573,7 @@ int io_keydn(IOKey key, char c)
 	case KEY_F2://info
 		if(image&&impreview)
 		{
-			char buf[2048]={0};
+			wchar_t buf[2048]={0};
 			int nprinted=0;
 			ptrdiff_t usize=0;
 			time_t created2=0, lastmodified2=0, lastaccess2=0;
@@ -574,78 +593,77 @@ int io_keydn(IOKey key, char c)
 			int extidx=0;
 			if(fn)
 			{
-				struct stat info={0};
-				int e2=stat((char*)fn->data, &info);
+				struct _stat64 info={0};
+				int e2=_wstat64((wchar_t*)fn->data, &info);
 				if(e2)
-					nprinted+=snprintf(buf+nprinted, sizeof(buf)-1-nprinted,
-						"\"%s\"\n"
-						"INACCESSIBLE\n"
-						, (char*)fn->data
+					nprinted+=_snwprintf_s(buf+nprinted, sizeof(buf)-nprinted, sizeof(buf)-1-nprinted,
+						L"\"%s\"\n"
+						L"INACCESSIBLE\n"
+						, (wchar_t*)fn->data
 					);
 				else
 				{
 					ptrdiff_t csize=info.st_size;
-				//	ptrdiff_t csize=get_filesize((char*)fn->data);
 					created2=info.st_ctime;
 					lastmodified2=info.st_mtime;
 					lastaccess2=info.st_atime;
 					get_filetitle((char*)fn->data, (int)fn->count, 0, &extidx);
-					nprinted+=snprintf(buf+nprinted, sizeof(buf)-1-nprinted,
-						"\"%s\"\n"
-						"%11td bytes ("
-						, (char*)fn->data
+					nprinted+=_snwprintf_s(buf+nprinted, sizeof(buf)-nprinted, sizeof(buf)-1-nprinted,
+						L"\"%s\"\n"
+						L"%11td bytes ("
+						, (wchar_t*)fn->data
 						, usize
 					);
-					nprinted+=print_memsize(buf+nprinted, sizeof(buf)-1-nprinted, usize, 8);
-					nprinted+=snprintf(buf+nprinted, sizeof(buf)-1-nprinted,
-						") bitmap\n"
-						"%11td bytes ("
+					nprinted+=print_memsizew(buf+nprinted, sizeof(buf)-1-nprinted, usize, 8);
+					nprinted+=_snwprintf_s(buf+nprinted, sizeof(buf)-nprinted, sizeof(buf)-1-nprinted,
+						L") bitmap\n"
+						L"%11td bytes ("
 						, csize
 					);
-					nprinted+=print_memsize(buf+nprinted, sizeof(buf)-1-nprinted, csize, 8);
-					nprinted+=snprintf(buf+nprinted, sizeof(buf)-1-nprinted,
-						") %s\n"
-						, (char*)fn->data+extidx
+					nprinted+=print_memsizew(buf+nprinted, sizeof(buf)-1-nprinted, csize, 8);
+					nprinted+=_snwprintf_s(buf+nprinted, sizeof(buf)-nprinted, sizeof(buf)-1-nprinted,
+						L") %s\n"
+						, (wchar_t*)fn->data+extidx
 					);
 				}
 			}
 			else
 			{
-				nprinted+=snprintf(buf+nprinted, sizeof(buf)-1-nprinted,
-					"%10td bytes ("
+				nprinted+=_snwprintf_s(buf+nprinted, sizeof(buf)-nprinted, sizeof(buf)-1-nprinted,
+					L"%10td bytes ("
 					, usize
 				);
-				nprinted+=print_memsize(buf+nprinted, sizeof(buf)-1-nprinted, usize, 8);
-				nprinted+=snprintf(buf+nprinted, sizeof(buf)-1-nprinted, ") bitmap\n");
+				nprinted+=print_memsizew(buf+nprinted, sizeof(buf)-1-nprinted, usize, 8);
+				nprinted+=_snwprintf_s(buf+nprinted, sizeof(buf)-nprinted, sizeof(buf)-1-nprinted, L") bitmap\n");
 			}
-			nprinted+=snprintf(buf+nprinted, sizeof(buf)-1-nprinted, "\n");
+			nprinted+=_snwprintf_s(buf+nprinted, sizeof(buf)-nprinted, sizeof(buf)-1-nprinted, L"\n");
 			switch(imagetype)
 			{
 			default://make gcc happy
 				break;
 			case IM_GRAYSCALEv2:
-				nprinted+=snprintf(buf+nprinted, sizeof(buf)-1-nprinted,
-					"CWH %d*%5d*%5d G\n"
+				nprinted+=_snwprintf_s(buf+nprinted, sizeof(buf)-nprinted, sizeof(buf)-1-nprinted,
+					L"CWH %d*%5d*%5d G\n"
 					, image->nch, image->iw, image->ih
 				);
 				break;
 			case IM_RGBA:
 				if(image->srcnch>=3)
-					nprinted+=snprintf(buf+nprinted, sizeof(buf)-1-nprinted,
-						"CWH %d*%5d*%5d RGB%s\n"
-						, image->nch, image->iw, image->ih, image->srcnch==4?"A":""
+					nprinted+=_snwprintf_s(buf+nprinted, sizeof(buf)-nprinted, sizeof(buf)-1-nprinted,
+						L"CWH %d*%5d*%5d RGB%s\n"
+						, image->nch, image->iw, image->ih, image->srcnch==4?L"A":L""
 					);
 				else
-					nprinted+=snprintf(buf+nprinted, sizeof(buf)-1-nprinted,
-						"CWH %d*%5d*%5d G%s\n"
-						, image->nch, image->iw, image->ih, image->srcnch==2?"A":""
+					nprinted+=_snwprintf_s(buf+nprinted, sizeof(buf)-nprinted, sizeof(buf)-1-nprinted,
+						L"CWH %d*%5d*%5d G%s\n"
+						, image->nch, image->iw, image->ih, image->srcnch==2?L"A":L""
 					);
 				break;
 			case IM_BAYERv2:
 				{
 					char labels[]="RGB";
-					nprinted+=snprintf(buf+nprinted, sizeof(buf)-1-nprinted,
-						" WH   %5d*%5d %c%c%c%c\n"
+					nprinted+=_snwprintf_s(buf+nprinted, sizeof(buf)-nprinted, sizeof(buf)-1-nprinted,
+						L" WH   %5d*%5d %c%c%c%c\n"
 						, image->iw, image->ih
 						, labels[(int)bayer[0]]
 						, labels[(int)bayer[1]]
@@ -655,25 +673,25 @@ int io_keydn(IOKey key, char c)
 				}
 				break;
 			}
-			nprinted+=snprintf(buf+nprinted, sizeof(buf)-1-nprinted,
-				"CWH %d*%5d*%5d preview\n"
+			nprinted+=_snwprintf_s(buf+nprinted, sizeof(buf)-nprinted, sizeof(buf)-1-nprinted,
+				L"CWH %d*%5d*%5d preview\n"
 				, impreview->nch, impreview->iw, impreview->ih
 			);
 			if(created2)
 			{
 				struct tm date={0};
-				nprinted+=snprintf(buf+nprinted, sizeof(buf)-1-nprinted, "\n");
+				nprinted+=_snwprintf_s(buf+nprinted, sizeof(buf)-nprinted, sizeof(buf)-1-nprinted, L"\n");
 				localtime_s(&date, &created2);
-				nprinted+=(int)strftime(buf+nprinted, sizeof(buf)-1-nprinted, "%Y-%m-%d_%H%M%S Created\n", &date);
+				nprinted+=(int)wcsftime(buf+nprinted, sizeof(buf)-1-nprinted, L"%Y-%m-%d_%H%M%S Created\n", &date);
 				localtime_s(&date, &lastmodified2);
-				nprinted+=(int)strftime(buf+nprinted, sizeof(buf)-1-nprinted, "%Y-%m-%d_%H%M%S Modified\n", &date);
+				nprinted+=(int)wcsftime(buf+nprinted, sizeof(buf)-1-nprinted, L"%Y-%m-%d_%H%M%S Modified\n", &date);
 				localtime_s(&date, &lastaccess2);
-				nprinted+=(int)strftime(buf+nprinted, sizeof(buf)-1-nprinted, "%Y-%m-%d_%H%M%S Accessed\n", &date);
+				nprinted+=(int)wcsftime(buf+nprinted, sizeof(buf)-1-nprinted, L"%Y-%m-%d_%H%M%S Accessed\n", &date);
 			}
 
-			int cancel=messagebox(MBOX_OKCANCEL, "Copy to clipboard?", "%s", buf);
+			int cancel=messageboxw(MBOX_OKCANCEL, L"Copy to clipboard?", L"%s", buf);
 			if(!cancel)
-				copy_to_clipboard(buf, nprinted);
+				copy_to_clipboardw(buf, nprinted);
 		}
 		break;
 	case KEY_ESC:
@@ -719,37 +737,57 @@ int io_keydn(IOKey key, char c)
 		if(fn)
 		{
 			ArrayHandle path;
-			STR_COPY(path, fn->data, fn->count);
+			WSTR_COPY(path, fn->data, fn->count);
 			//acme_strrchr((char*)path->data, path->count, '/');//X  what about backslash?
+			wchar_t *str=(wchar_t*)path->data;
 			for(int k=(int)path->count-1;k>=0;--k)
 			{
-				if(path->data[k]=='/'||path->data[k]=='\\')
+				if(str[k]==L'/'||str[k]==L'\\')
 				{
-					path->data[k+1]=0;
+					str[k+1]=0;
 					path->count=k+1;
 					break;
 				}
 			}
-			ArrayHandle filenames=get_filenames((char*)path->data, 0, 0, 1), *fn2=0;
+			ArrayHandle filenames=get_filenamesw(str, 0, 0, 1), *fn2=0;
+			array_free(&path);
 			if(filenames&&filenames->count)
 			{
-				array_free(&path);
 				int currentidx=-1;
 				for(int k=0;k<(int)filenames->count;++k)
 				{
 					fn2=(ArrayHandle*)array_at(&filenames, k);
-					if(!strcmp((char*)fn2[0]->data, (char*)fn->data))
+					if(!wcscmp((wchar_t*)fn2[0]->data, (wchar_t*)fn->data))
 					{
 						currentidx=k;
 						break;
 					}
 				}
+				if(currentidx==-1)
+#ifdef _DEBUG
+				{
+					console_start();
+					for(int k=0;k<(int)filenames->count;++k)
+					{
+						fn2=(ArrayHandle*)array_at(&filenames, k);
+						console_logw(L"%s\n", (wchar_t*)fn2[0]->data);
+					}
+					console_logw(L"\n%s\n", (wchar_t*)fn->data);
+					LOG_WARNING("Navigation error");
+				}
+#else
+				{
+					LOG_WARNING("Navigation error");
+					array_free(&filenames);
+					return 0;
+				}
+#endif
 				Image16 *im2=0;
 				int step=key==KEY_RIGHT?1:-1;
 				for(int k=currentidx+step;MODVAR(k, k, (int)filenames->count), k!=currentidx;k+=step)
 				{
 					fn2=(ArrayHandle*)array_at(&filenames, k);
-					if(!load_media((char*)fn2[0]->data, &im2, 0))
+					if(!load_media((wchar_t*)fn2[0]->data, &im2, 0))
 					{
 						currentidx=k;
 						break;
@@ -762,7 +800,7 @@ int io_keydn(IOKey key, char c)
 					image_free(&image);
 					image=im2;
 					array_free(&fn);
-					fn=filter_path((char*)fn2[0]->data, -1, 0);
+					fn=filter_pathw((wchar_t*)fn2[0]->data, -1, 0);
 					update_image(1, 1);
 				}
 				array_free(&filenames);
@@ -776,11 +814,11 @@ int io_keydn(IOKey key, char c)
 	case 'O':
 		if(GET_KEY_STATE(KEY_CTRL))
 		{
-			ArrayHandle fn2=dialog_open_file(0, 0, 0);
+			ArrayHandle fn2=dialog_open_filew(0, 0, 0);
 			if(fn2)
 			{
 				Image16 *im2=0;
-				int error=load_media((char*)fn2->data, &im2, 1);
+				int error=load_media((wchar_t*)fn2->data, &im2, 1);
 				if(im2&&!error)
 				{
 					image_free(&image);
@@ -1082,7 +1120,7 @@ int io_keydn(IOKey key, char c)
 		else if(fn)
 		{
 			Image16 *im2=0;
-			load_media((char*)fn->data, &im2, 0);
+			load_media((wchar_t*)fn->data, &im2, 0);
 			if(im2)
 			{
 				image_free(&image);
@@ -1416,10 +1454,10 @@ static void draw_profile_y_preview(int comp, int color)//vertical cross-section 
 }
 static void print_time(float x, float y, float zoom, double t)
 {
-	if(t<1)
-		GUIPrint(0, x, y, zoom, "%5.3lf", t);
+	if(t<10)
+		GUIPrint(0, x, y, zoom, "%4.2lf", t);
 	else if(t<60)
-		GUIPrint(0, x, y, zoom, "%.0lf", t);
+		GUIPrint(0, x, y, zoom, "%2.0lf", t);
 	else if(t<60*60)
 	{
 		int minutes=(int)(t/60);
@@ -1431,33 +1469,19 @@ static void print_time(float x, float y, float zoom, double t)
 		double seconds=t;
 		int hours=(int)(seconds/(60*60));
 		seconds-=hours*60*60;
-		int minutes=(int)(t/60);
+		int minutes=(int)(seconds/60);
 		seconds-=minutes*60;
-		GUIPrint(0, x, y, zoom, "%d:%d:%02.0lf", hours, minutes, seconds);
+		GUIPrint(0, x, y, zoom, "%d:%02d:%02.0lf", hours, minutes, seconds);
 	}
 }
 static void print_duration(float x, float y, float zoom, double t)
 {
-	//if(t<1)
-	//	GUIPrint(0, x, y, zoom, "%5.3lf", t);
-	//else
-	if(t<60)
-		GUIPrint(0, x, y, zoom, "%5.3lf", t);
-	else if(t<60*60)
-	{
-		int minutes=(int)(t/60);
-		double seconds=t-minutes*60;
-		GUIPrint(0, x, y, zoom, "%d:%06.3lf", minutes, seconds);
-	}
-	else
-	{
-		double seconds=t;
-		int hours=(int)(seconds/(60*60));
-		seconds-=hours*60*60;
-		int minutes=(int)(t/60);
-		seconds-=minutes*60;
-		GUIPrint(0, x, y, zoom, "%d:%d:%06.3lf", hours, minutes, seconds);
-	}
+	double seconds=t;
+	int hours=(int)(seconds/(60*60));
+	seconds-=hours*60*60;
+	int minutes=(int)(seconds/60);
+	seconds-=minutes*60;
+	GUIPrint(0, x, y, zoom, "%d:%02d:%06.3lf", hours, minutes, seconds);
 }
 void io_render()
 {
@@ -1574,7 +1598,7 @@ void io_render()
 
 				SCALE=100,
 			};
-			draw_rect(0, (float)(w*slider.timestamp/slider.duration), (float)(h-tdy-SLIDER_HEIGHT), (float)(h-tdy), 0x804080C0);
+			draw_rect(0, (float)(w*slider.timestamp/slider.duration), (float)(h-tdy-SLIDER_HEIGHT-1), (float)(h-tdy), 0x804080C0);
 			double step=SCALE*slider.duration/w;
 			int unit=UNIT_SECONDS;
 			if(step>60)
@@ -1600,14 +1624,22 @@ void io_render()
 			case UNIT_MINUTES:step*=60;break;
 			case UNIT_HOURS:step*=60*60;break;
 			}
-		
+			
+			enum
+			{
+				PLAYER_COLOR=0xFFFFC080,
+			};
+			int bk0=set_bk_color(PLAYER_COLOR);
 			for(double tick=step;tick<slider.duration;tick+=step)
 			{
 				float x=(float)(w*tick/slider.duration);
-				draw_line(x, (float)(h-SLIDER_HEIGHT), x, (float)(h-tdy), 0x80FF0000);
+				draw_line(x, (float)(h-SLIDER_HEIGHT), x, (float)(h-tdy), PLAYER_COLOR);
+			//	draw_line(x, (float)(h-SLIDER_HEIGHT), x, (float)(h-tdy), 0xFFABABAB);
+			//	draw_line(x, (float)(h-SLIDER_HEIGHT), x, (float)(h-tdy), 0x80FF0000);
 			}
 			for(double tick=step;tick<slider.duration;tick+=step)
 				print_time((float)(w*tick/slider.duration), (float)(h-tdy-SLIDER_HEIGHT), 1, tick);
+			print_duration(0, (float)(h-3*tdy-SLIDER_HEIGHT), 2, slider.timestamp);
 			print_duration((float)(w-200), (float)(h-3*tdy-SLIDER_HEIGHT), 2, slider.duration);
 			if(animation_ctr>0)
 			{
@@ -1618,6 +1650,7 @@ void io_render()
 					GUIPrint(0, (float)(w-200), h/2.f, 2, "%8.4lf%%", 100.*g_volume);
 				--animation_ctr;
 			}
+			set_bk_color(bk0);
 		}
 		if(impreview&&profileplotmode>PROFILE_OFF)
 		{
@@ -1688,8 +1721,8 @@ void io_render()
 		{
 			if(impreview)
 				GUIPrint_append(0, 0, h-tdy, 1, 0, " F%12lld", framenumber);//FIXME doesn't support seeking
-			else
-				GUIPrint_append(0, 0, h-tdy, 1, 0, " %10.3lf sec", slider.timestamp);
+			//else
+			//	GUIPrint_append(0, 0, h-tdy, 1, 0, " %10.3lf sec", slider.timestamp);
 #ifdef _DEBUG
 			extern double vtime, atime;
 			GUIPrint_append(0, 0, h-tdy, 1, 0, "  V %12.6lf  A %12.6lf", vtime, atime);
