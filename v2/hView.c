@@ -451,6 +451,8 @@ int io_mousewheel(int forward)
 			g_volume*=mw_fwd?2:0.5f;
 			if(mw_fwd&&!g_volume)
 				g_volume=1.f/128;
+			if(g_volume>2)
+				g_volume=2;
 			animation_ctr=VOLUME_ANIMATION_NFRAMES;
 		}
 		else
@@ -1520,6 +1522,7 @@ void io_render()
 				GUIPrint(0, (float)(w*tick/slider.duration), (float)(h-tdy-SLIDER_HEIGHT), 1, "%.0lf", tick);
 			if(animation_ctr>0)
 			{
+				draw_rect((float)(w-SLIDER_HEIGHT), (float)w, (float)(h-h/2.f*g_volume), (float)h, 0x80C08040);
 				if(mute_audio)
 					GUIPrint(0, (float)(w-200), h/2.f, 2, "Muted");
 				else
