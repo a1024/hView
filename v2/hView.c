@@ -81,20 +81,18 @@ void impreview2gpu(uint8_t *data, int iw, int ih)
 	if(image_txid)
 		send_texture_pot(image_txid, (int*)data, iw, ih, 0, 1);
 }
-static void center_image()
+void center_image(int iw, int ih)
 {
-	if(!impreview)
-		return;
 	int wndw=w, wndh=h-17;
-	if((double)wndw/wndh>=(double)impreview->iw/impreview->ih)//window AR > image AR: fit height
+	if((double)wndw/wndh>=(double)iw/ih)//window AR > image AR: fit height
 	{
 		if(wndh>0)
-			zoom=(double)wndh/impreview->ih;
+			zoom=(double)wndh/ih;
 	}
 	else//window AR < image AR: fit width
-		zoom=(double)wndw/impreview->iw;
-	wpx=(impreview->iw-wndw/zoom)*0.5;//center image
-	wpy=(impreview->ih-wndh/zoom)*0.5;
+		zoom=(double)wndw/iw;
+	wpx=(iw-wndw/zoom)*0.5;//center image
+	wpy=(ih-wndh/zoom)*0.5;
 	imagecentered=1;
 }
 static void calc_hist()
@@ -316,7 +314,7 @@ static void update_image(int settitle, int render)
 	if(hist_on)
 		calc_hist();
 	if(imagecentered)
-		center_image();
+		center_image(impreview->iw, impreview->ih);
 	impreview2gpu(impreview->data, impreview->iw, impreview->ih);
 	if(render)
 		io_render();
@@ -403,7 +401,8 @@ int io_init(int argc, wchar_t **argv)//return false to abort
 	{
 		fn=filter_pathw(wfilename, -1, 0);
 		update_image(1, 0);
-		center_image();//
+		if(impreview)
+			center_image(impreview->iw, impreview->ih);//
 	}
 	else
 		array_free(&fn);
@@ -415,7 +414,8 @@ int io_init(int argc, wchar_t **argv)//return false to abort
 		if(image||animated)
 		{
 			update_image(1, 0);
-			center_image();//
+			if(impreview)
+				center_image(impreview->iw, impreview->ih);//
 		}
 		else
 			array_free(&fn);
@@ -442,7 +442,7 @@ void io_dropfile(const wchar_t *filename)
 void io_resize()
 {
 	if(image&&image->iw&&image->ih&&imagecentered)
-		center_image();
+		center_image(impreview->iw, impreview->ih);
 }
 int io_mousemove()//return true to redraw
 {
@@ -798,6 +798,7 @@ int io_keydn(IOKey key, char c)
 				if(im2||animated)
 				{
 					image_free(&image);
+					image_free(&impreview);
 					image=im2;
 					array_free(&fn);
 					fn=filter_pathw((wchar_t*)fn2[0]->data, -1, 0);
@@ -1034,8 +1035,8 @@ int io_keydn(IOKey key, char c)
 				array_free(&str);
 			}
 		}
-		else
-			center_image();
+		else if(impreview)
+			center_image(impreview->iw, impreview->ih);
 		return 1;
 	case 'V':
 		if(GET_KEY_STATE(KEY_CTRL))
@@ -1053,7 +1054,7 @@ int io_keydn(IOKey key, char c)
 				imagetype=IM_RGBA;
 				imagedepth=im2->srcdepth;
 				if(imagecentered)
-					center_image();
+					center_image(image->iw, image->ih);
 				return 1;
 			}
 		}
@@ -1454,10 +1455,12 @@ static void draw_profile_y_preview(int comp, int color)//vertical cross-section 
 }
 static void print_time(float x, float y, float zoom, double t)
 {
-	if(t<10)
-		GUIPrint(0, x, y, zoom, "%4.2lf", t);
-	else if(t<60)
-		GUIPrint(0, x, y, zoom, "%2.0lf", t);
+	if(t<60)
+		GUIPrint(0, x, y, zoom, "%g", t);
+	//if(t<10)
+	//	GUIPrint(0, x, y, zoom, "%4.2lf", t);
+	//else if(t<60)
+	//	GUIPrint(0, x, y, zoom, "%4.1lf", t);
 	else if(t<60*60)
 	{
 		int minutes=(int)(t/60);
@@ -1596,7 +1599,7 @@ void io_render()
 				UNIT_MINUTES,
 				UNIT_HOURS,
 
-				SCALE=100,
+				SCALE=128,
 			};
 			draw_rect(0, (float)(w*slider.timestamp/slider.duration), (float)(h-tdy-SLIDER_HEIGHT-1), (float)(h-tdy), 0x804080C0);
 			double step=SCALE*slider.duration/w;
@@ -1689,7 +1692,7 @@ void io_render()
 			}
 		}
 
-		if(impreview)
+		if(impreview&&image)
 		{
 			const char *imtypestr="?";
 			switch(imagetype)
@@ -1728,7 +1731,7 @@ void io_render()
 			GUIPrint_append(0, 0, h-tdy, 1, 0, "  V %12.6lf  A %12.6lf", vtime, atime);
 #endif
 		}
-		if(impreview)
+		if(impreview&&image)
 		{
 			if((unsigned)imx<(unsigned)impreview->iw&&(unsigned)imy<(unsigned)impreview->ih)
 			{

@@ -671,17 +671,6 @@ void image_inplacexflip(Image16 *src, char *bayer);
 void image_inplaceyflip(Image16 *src, char *bayer);
 void image_transpose(Image16 **src, char *bayer);
 
-//typedef struct ImageHeaderStruct//greyscale image object
-//{
-//	int xcap, ycap, iw, ih, depth, srcdepth;//cap >= dim, depth 8 or 16
-//	unsigned char data[];
-//} ImageHeader, *ImageHandle;
-//void image_export_rgb8(ImageHandle dst, ImageHandle src, int imagetype);
-//void image_blit(ImageHandle dst, int x, int y, const unsigned char *src, int iw, int ih, int rowpad, int srcdepth);
-//ImageHandle image_construct(int xcap, int ycap, int dstdepth, const unsigned char *src, int iw, int ih, int rowpad, int srcdepth);
-//void image_free(ImageHandle *image);
-//void image_resize(ImageHandle *image, int w, int h);
-
 //the following 3 functions return: a negative value on failure; 0 on success
 int load_media(const wchar_t *filename, Image16 **image, int erroronfail);
 int save_media(const wchar_t *filename, Image8 *image, int erroronfail);
@@ -739,6 +728,7 @@ typedef enum ProfilePlotModeEnum
 } ProfilePlotMode;
 extern ProfilePlotMode profileplotmode;
 
+void center_image(int iw, int ih);
 void impreview2gpu(uint8_t *data, int iw, int ih);
 void videoplayback_start(const char *fn, int has_video, int has_audio);
 void videoplayback_pause(int stop);
