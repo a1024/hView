@@ -68,7 +68,7 @@ enum
 {
 	SLIDER_HEIGHT=64,
 
-	VOLUME_ANIMATION_NFRAMES=32,
+	VOLUME_ANIMATION_NFRAMES=64,
 };
 int mute_audio=0;
 float g_volume=1;
@@ -365,8 +365,11 @@ int io_init(int argc, char **argv)//return false to abort
 {
 #ifdef _DEBUG
 	fn=filter_path(
+		"E:/Share Box/Sound & Music/20250411 2.mp3"
+	//	"E:/Share Box/Sound & Music/2024-11-07 at 3.54.45 PM.mp4"
+	//	"E:/Share Box/Sound & Music/145 (Poodles) by Jake Chudnow [DokBeZKKeKI].opus"
 	//	"D:/ML/dataset-Internet/quantum.mp4"
-		"D:/ML/dataset-Internet/birds.webm"
+	//	"D:/ML/dataset-Internet/birds.webm"
 	//	"D:/ML/dataset-Internet/star_wars.webm"
 	//	"D:/ML/dataset-Internet/accident.webm"	//silent
 	//	"D:/ML/dataset-Internet/revolver.webm"
@@ -1136,7 +1139,7 @@ int io_keyup(IOKey key, char c)
 		if(drag==DRAG_SEEK)
 		{
 			drag=DRAG_NONE;
-			slider_set((double)mx/w, 0);
+		//	slider_set((double)mx/w, 0);
 			mouse_release();
 		}
 		else if(drag==DRAG_IMAGE)//stop dragging
@@ -1417,14 +1420,14 @@ void io_render()
 
 	if(h<=0)
 		return;
-	if(impreview&&animated)
+	if(animated)
 	{
 		slider_get(&slider);
 		if(slider.playing)
 		{
 			if(!videoplayback_update())
 			{
-				if(hist_on)
+				if(impreview&&hist_on)
 					calc_hist();
 			}
 		}
@@ -1441,9 +1444,6 @@ void io_render()
 		int
 			sx1=image2screen_x_int(0), sx2=image2screen_x_int(impreview->iw),
 			sy1=image2screen_y_int(0), sy2=image2screen_y_int(impreview->ih);
-		int
-			imx=screen2image_x_int(mx),
-			imy=screen2image_y_int(my);
 
 		display_texture(sx1, sx2, sy1, sy2, image_txid, 1, 0, 1, 0, 1);
 	//	display_texture_i(sx1, sx2, sy1, sy2, (int*)impreview->data, impreview->iw, impreview->ih, 0, 1, 0, 1, 1, 0, 1);
@@ -1512,24 +1512,27 @@ void io_render()
 				break;
 			}
 		}
-		if(animated&&!slider_hide)
+	}
+	if(animated&&!slider_hide)
+	{
+		draw_rect(0, (float)(w*slider.timestamp/slider.duration), (float)(h-tdy-SLIDER_HEIGHT), (float)(h-tdy), 0x804080C0);
+		double step=1;
+		while(w*step/slider.duration<32)
+			step*=2;
+		for(double tick=step;tick<slider.duration;tick+=step)
+			GUIPrint(0, (float)(w*tick/slider.duration), (float)(h-tdy-SLIDER_HEIGHT), 1, "%.0lf", tick);
+		if(animation_ctr>0)
 		{
-			draw_rect(0, (float)(w*slider.timestamp/slider.duration), (float)(h-tdy-SLIDER_HEIGHT), (float)(h-tdy), 0x804080C0);
-			double step=1;
-			while(w*step/slider.duration<32)
-				step*=2;
-			for(double tick=step;tick<slider.duration;tick+=step)
-				GUIPrint(0, (float)(w*tick/slider.duration), (float)(h-tdy-SLIDER_HEIGHT), 1, "%.0lf", tick);
-			if(animation_ctr>0)
-			{
-				draw_rect((float)(w-SLIDER_HEIGHT), (float)w, (float)(h-h/2.f*g_volume), (float)h, 0x80C08040);
-				if(mute_audio)
-					GUIPrint(0, (float)(w-200), h/2.f, 2, "Muted");
-				else
-					GUIPrint(0, (float)(w-200), h/2.f, 2, "%8.4lf%%", 100.*g_volume);
-				--animation_ctr;
-			}
+			draw_rect((float)(w-SLIDER_HEIGHT), (float)w, (float)(h-h/2.f*g_volume), (float)h, 0x80C08040);
+			if(mute_audio)
+				GUIPrint(0, (float)(w-200), h/2.f, 2, "Muted");
+			else
+				GUIPrint(0, (float)(w-200), h/2.f, 2, "%8.4lf%%", 100.*g_volume);
+			--animation_ctr;
 		}
+	}
+	if(impreview)
+	{
 		if(profileplotmode>PROFILE_OFF)
 		{
 			void (*draw_profile)(int comp, int color);
@@ -1577,6 +1580,9 @@ void io_render()
 		case IM_RGBA:		imtypestr="IM_RGBA";		break;
 		case IM_BAYERv2:	imtypestr="IM_BAYERv2";		break;
 		}
+		int
+			imx=screen2image_x_int(mx),
+			imy=screen2image_y_int(my);
 		//g_printed=0;
 		GUIPrint_append(0, 0, h-tdy, 1, 0, "%s  XY(%5d, %5d) / WH%5d x%5d  x%lf bright%d  %s  depth %d  %10td bytes %10.6lf:1",
 			strlastmodified,

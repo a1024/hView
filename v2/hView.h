@@ -698,6 +698,7 @@ typedef enum ImageTypeEnum
 	IM_GRAYSCALEv2,		//unsigned short image[ih][iw];				unsigned char impreview[ih][iw];		GREY+ALPHA?
 	IM_RGBA,		//unsigned short image[ih][iw][4];			int impreview[ih][iw];
 	IM_BAYERv2,		//unsigned short image[ih/2][2][iw/2][2]; RGGB		int impreview[ih/2][iw/2];
+	IM_NONE,
 
 //	IM_GRAYSCALE,		//RGBA where R, G, and B have same value
 //	IM_BAYER,		//if bayer matrix is RGGB then in quads of {0xAA0000RR, 0xAA00GG00;  0xAA00GG00, 0xAABB0000}

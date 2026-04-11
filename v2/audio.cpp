@@ -211,7 +211,7 @@ extern "C" int audioplayback_pause(int stop)
 {
 	int ret=S_OK;
 
-	if(stop)//end
+	if(stop==1)//end
 	{
 		ret=audioctx.client->Stop();
 		if(ret!=S_OK)
@@ -222,6 +222,18 @@ extern "C" int audioplayback_pause(int stop)
 		audioctx.stopflag=1;
 		mt_finish(audioctx.threadctx);
 		CoUninitialize();
+	}
+	else if(stop==2)//flush
+	{
+		ret=audioctx.client->Stop();
+		if(ret!=S_OK)
+			ERROR_A(ret);
+		ret=audioctx.client->Reset();
+		if(ret!=S_OK)
+			ERROR_A(ret);
+		ret=audioctx.client->Start();
+		if(ret!=S_OK)
+			ERROR_A(ret);
 	}
 	else//pause
 	{
