@@ -363,12 +363,14 @@ int io_init(int argc, wchar_t **argv)//return false to abort
 {
 #ifdef _DEBUG
 //#if 0
-	const wchar_t *wfilename=
+	const wchar_t *filename=
 
-		L"E:/Share Box/Sound & Music/20250411 2.mp3"
+	//	L"D:/ML/dataset-Internet/os_bleh.gif"
+	//	L"E:/Share Box/Sound & Music/Headshot.wav"
+	//	L"E:/Share Box/Sound & Music/20250411 2.mp3"
 	//	L"E:/Share Box/Sound & Music/2024-11-07 at 3.54.45 PM.mp4"
 	//	L"E:/Share Box/Sound & Music/145 (Poodles) by Jake Chudnow [DokBeZKKeKI].opus"
-	//	L"D:/ML/dataset-Internet/quantum.mp4"
+		L"D:/ML/dataset-Internet/quantum.mp4"
 	//	L"D:/ML/dataset-Internet/birds.webm"
 	//	L"D:/ML/dataset-Internet/star_wars.webm"
 	//	L"D:/ML/dataset-Internet/accident.webm"	//silent
@@ -396,10 +398,10 @@ int io_init(int argc, wchar_t **argv)//return false to abort
 	//	L"C:/Projects/datasets/dataset-RAW/6K9A8788.CR3"
 
 	;
-	load_media(wfilename, &image, 1);
+	load_media(filename, &image, 1);
 	if(image||animated)
 	{
-		fn=filter_pathw(wfilename, -1, 0);
+		fn=filter_pathw(filename, -1, 0);
 		update_image(1, 0);
 		if(impreview)
 			center_image(impreview->iw, impreview->ih);//
@@ -1497,7 +1499,7 @@ void io_render()
 		slider_get(&slider);
 		if(slider.playing)
 		{
-			if(!videoplayback_update())
+			if(!frame_dequeue())
 			{
 				if(impreview&&hist_on)
 					calc_hist();

@@ -1634,7 +1634,7 @@ typedef struct _VideoDecodeArgs
 
 	double videotimestamp, framedelta;
 	int coarsedelta;
-	double duration, loopoffset;
+	double duration;
 	double timescale;
 
 	AVRational timebase;
@@ -1654,7 +1654,7 @@ int slider_get(Slider *slider)
 {
 	if(!video_decode_args)
 		return -1;
-	slider->timestamp=video_decode_args->videotimestamp-video_decode_args->loopoffset;
+	slider->timestamp=fmod(video_decode_args->videotimestamp, video_decode_args->duration);
 	slider->duration=video_decode_args->duration;
 	slider->timescale=video_decode_args->timescale;
 	slider->playing=video_decode_args->playing;
@@ -1667,7 +1667,6 @@ static void videoseek()
 	int64_t ts;
 	int error=0;
 	
-	args->loopoffset=0;
 	if(args->has_video)
 	{
 		AVRational r={1, AV_TIME_BASE};
@@ -1679,10 +1678,7 @@ static void videoseek()
 		ts=(int64_t)(args->seektarget*args->audioCodecContext->sample_rate);
 		streamindex=args->audio_stream_index;
 	}
-	int seekcond=fabs(args->seektarget-(args->videotimestamp-args->loopoffset))>100;
-	error=avformat.av_seek_frame(args->formatContext, streamindex, ts,
-		seekcond?AVSEEK_FLAG_ANY:AVSEEK_FLAG_BACKWARD
-	);
+	error=avformat.av_seek_frame(args->formatContext, streamindex, ts, AVSEEK_FLAG_BACKWARD);
 
 	if(error<0)
 		return;
@@ -1795,7 +1791,7 @@ int audioplayback_dequeue(float *out, int nsamples)
 	}
 	return i;
 }
-int videoplayback_update(void)
+int frame_dequeue(void)
 {
 	VideoDecodeArgs *args=video_decode_args;
 	extern Image8 *impreview;
@@ -1881,7 +1877,7 @@ int videoplayback_update(void)
 	impreview2gpu(impreview->data, impreview->iw, impreview->ih);
 	return 0;
 }
-static int enqueueframe(VideoDecodeArgs *args)
+static int frame_enqueue(VideoDecodeArgs *args)
 {
 	enum AVPixelFormat format=(enum AVPixelFormat)args->frame->format;
 	if(!args->frame->width||!args->frame->height)
@@ -1979,7 +1975,7 @@ static int enqueueframe(VideoDecodeArgs *args)
 		else
 			memcpy(frame3->data, args->vframe2->data[0], usize);
 	}
-	frame3->pts=args->frame->best_effort_timestamp*args->ftimebase+args->loopoffset;
+	frame3->pts=args->frame->best_effort_timestamp*args->ftimebase;
 	args->fq.write_idx=(args->fq.write_idx+1)%FRAMEQUEUE_CAP;
 	++args->fq.count;
 	cond_signal(args->fq.not_empty);
@@ -2130,7 +2126,7 @@ static void videoplayback_decode(void *p)
 					continue;
 				avutil.av_frame_unref(args->frame);
 			}
-			enqueueframe(args);
+			frame_enqueue(args);
 			avcodec.av_packet_unref(args->packet);
 			args->albumart=1;
 		}
@@ -2175,7 +2171,7 @@ static void videoplayback_decode(void *p)
 						}
 						args->seekflag=0;
 					}
-					if(enqueueframe(args))
+					if(frame_enqueue(args))
 						break;
 
 					avutil.av_frame_unref(args->frame);
@@ -2326,7 +2322,7 @@ static void videoplayback_decode(void *p)
 		framenumber=0;
 		if(!args->duration)
 			args->duration=time_sec()-tstart;
-		args->loopoffset+=args->duration;
+		args->videotimestamp=0;
 	}
 	avformat.avformat_close_input(&video_decode_args->formatContext);
 	avcodec.av_packet_free(&video_decode_args->packet);

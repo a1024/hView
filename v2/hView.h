@@ -732,7 +732,7 @@ void center_image(int iw, int ih);
 void impreview2gpu(uint8_t *data, int iw, int ih);
 void videoplayback_start(const char *fn, int has_video, int has_audio);
 void videoplayback_pause(int stop);
-int videoplayback_update(void);
+int frame_dequeue(void);
 int audioplayback_dequeue(float *out, int nsamples);
 int audioplayback_start(void);
 int audioplayback_pause(int stop);//clear audio circular buffer on stop
