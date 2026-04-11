@@ -1652,7 +1652,7 @@ int g_buffering=0;
 double seek_error=0;
 int slider_get(Slider *slider)
 {
-	if(!video_decode_args)
+	if(!video_decode_args||!video_decode_args->duration)
 		return -1;
 	slider->timestamp=fmod(video_decode_args->videotimestamp, video_decode_args->duration);
 	slider->duration=video_decode_args->duration;
@@ -2144,7 +2144,7 @@ static void videoplayback_decode(void *p)
 					avcodec.av_packet_unref(args->packet);
 					continue;
 				}
-				CHECK_AV2(error, args->erroronfail,);
+				//CHECK_AV2(error, args->erroronfail,);
 				while(error>=0)
 				{
 					error=avcodec.avcodec_receive_frame(args->videoCodecContext, args->frame);
@@ -2185,7 +2185,15 @@ static void videoplayback_decode(void *p)
 					avcodec.av_packet_unref(args->packet);
 					continue;
 				}
-				CHECK_AV2(error, args->erroronfail,);
+				//if(error<0)
+				//{
+				//	char buf[1024]={0};
+				//	avutil.av_strerror(error, buf, 1024);
+				//	for(int k=0;k<1024;++k)
+				//		if(!buf[k])
+				//			break;
+				//}
+				//CHECK_AV2(error, args->erroronfail,);
 				while(error>=0)
 				{
 					error=avcodec.avcodec_receive_frame(args->audioCodecContext, args->frame);
@@ -2884,7 +2892,7 @@ int load_media(const wchar_t *filename, Image16 **image, int erroronfail)
 	update_globals(filename, *image);
 	if((framecount>1||audio_stream_index!=-1)&&*image)
 	{
-		center_image(image[0]->iw, image[0]->ih);
+		image_fit2screen(image[0]->iw, image[0]->ih);
 		image_free(image);
 		imagetype=IM_NONE;
 	}

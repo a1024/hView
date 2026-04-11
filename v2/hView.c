@@ -23,7 +23,7 @@ typedef enum DragEnum
 int drag=DRAG_NONE,
 	start_mx=0, start_my=0;//initial drag mouse coords
 
-int imagecentered=0;
+int imagefitted=0;
 double zoom=1;//image pixel size in screen pixels
 enum
 {
@@ -81,7 +81,7 @@ void impreview2gpu(uint8_t *data, int iw, int ih)
 	if(image_txid)
 		send_texture_pot(image_txid, (int*)data, iw, ih, 0, 1);
 }
-void center_image(int iw, int ih)
+void image_fit2screen(int iw, int ih)
 {
 	int wndw=w, wndh=h-17;
 	if((double)wndw/wndh>=(double)iw/ih)//window AR > image AR: fit height
@@ -93,7 +93,7 @@ void center_image(int iw, int ih)
 		zoom=(double)wndw/iw;
 	wpx=(iw-wndw/zoom)*0.5;//center image
 	wpy=(ih-wndh/zoom)*0.5;
-	imagecentered=1;
+	imagefitted=1;
 }
 static void calc_hist()
 {
@@ -313,8 +313,8 @@ static void update_image(int settitle, int render)
 	//	image_blit(impreview, 0, 0, image->data, image->iw, image->ih, image->xcap-image->iw, image->depth);
 	if(hist_on)
 		calc_hist();
-	if(imagecentered)
-		center_image(impreview->iw, impreview->ih);
+	if(imagefitted)
+		image_fit2screen(impreview->iw, impreview->ih);
 	impreview2gpu(impreview->data, impreview->iw, impreview->ih);
 	if(render)
 		io_render();
@@ -357,7 +357,7 @@ static void zoom_at(int xs, int ys, double factor)
 	if(fabs(zoom-1)<tolerance)
 		zoom=1;
 
-	imagecentered=0;
+	imagefitted=0;
 }
 int io_init(int argc, wchar_t **argv)//return false to abort
 {
@@ -365,12 +365,13 @@ int io_init(int argc, wchar_t **argv)//return false to abort
 //#if 0
 	const wchar_t *filename=
 
+		L"D:/Share_box_2/Library/KinDzaDza/Kin.Dza.Dza.1of2.Divx.AC3.640.480.avi"
 	//	L"D:/ML/dataset-Internet/os_bleh.gif"
 	//	L"E:/Share Box/Sound & Music/Headshot.wav"
 	//	L"E:/Share Box/Sound & Music/20250411 2.mp3"
 	//	L"E:/Share Box/Sound & Music/2024-11-07 at 3.54.45 PM.mp4"
 	//	L"E:/Share Box/Sound & Music/145 (Poodles) by Jake Chudnow [DokBeZKKeKI].opus"
-		L"D:/ML/dataset-Internet/quantum.mp4"
+	//	L"D:/ML/dataset-Internet/quantum.mp4"
 	//	L"D:/ML/dataset-Internet/birds.webm"
 	//	L"D:/ML/dataset-Internet/star_wars.webm"
 	//	L"D:/ML/dataset-Internet/accident.webm"	//silent
@@ -404,7 +405,7 @@ int io_init(int argc, wchar_t **argv)//return false to abort
 		fn=filter_pathw(filename, -1, 0);
 		update_image(1, 0);
 		if(impreview)
-			center_image(impreview->iw, impreview->ih);//
+			image_fit2screen(impreview->iw, impreview->ih);//
 	}
 	else
 		array_free(&fn);
@@ -417,7 +418,7 @@ int io_init(int argc, wchar_t **argv)//return false to abort
 		{
 			update_image(1, 0);
 			if(impreview)
-				center_image(impreview->iw, impreview->ih);//
+				image_fit2screen(impreview->iw, impreview->ih);//
 		}
 		else
 			array_free(&fn);
@@ -443,8 +444,8 @@ void io_dropfile(const wchar_t *filename)
 }
 void io_resize()
 {
-	if(image&&image->iw&&image->ih&&imagecentered)
-		center_image(impreview->iw, impreview->ih);
+	if(impreview&&impreview->iw&&impreview->ih&&imagefitted)
+		image_fit2screen(impreview->iw, impreview->ih);
 }
 int io_mousemove()//return true to redraw
 {
@@ -865,7 +866,7 @@ int io_keydn(IOKey key, char c)
 		break;
 	case 'E':
 		wpx=0, wpy=0, zoom=1;
-		imagecentered=0;
+		imagefitted=0;
 		return 1;
 	case 'C':
 		if(GET_KEY_STATE(KEY_CTRL))//copy screen contents
@@ -1038,7 +1039,7 @@ int io_keydn(IOKey key, char c)
 			}
 		}
 		else if(impreview)
-			center_image(impreview->iw, impreview->ih);
+			image_fit2screen(impreview->iw, impreview->ih);
 		return 1;
 	case 'V':
 		if(GET_KEY_STATE(KEY_CTRL))
@@ -1055,8 +1056,8 @@ int io_keydn(IOKey key, char c)
 				impreview=im2;
 				imagetype=IM_RGBA;
 				imagedepth=im2->srcdepth;
-				if(imagecentered)
-					center_image(image->iw, image->ih);
+				if(imagefitted)
+					image_fit2screen(image->iw, image->ih);
 				return 1;
 			}
 		}

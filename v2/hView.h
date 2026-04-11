@@ -681,7 +681,7 @@ char* get_codecinfo(void);//don't forget to free(mem)
 Image8 *paste_bmp_from_clipboard();
 
 
-extern int imagecentered;
+extern int imagefitted;
 extern double
 	zoom,//image pixel size in screen pixels
 	wpx, wpy;//window position (top-left corner) in image coordinates
@@ -728,7 +728,7 @@ typedef enum ProfilePlotModeEnum
 } ProfilePlotMode;
 extern ProfilePlotMode profileplotmode;
 
-void center_image(int iw, int ih);
+void image_fit2screen(int iw, int ih);
 void impreview2gpu(uint8_t *data, int iw, int ih);
 void videoplayback_start(const char *fn, int has_video, int has_audio);
 void videoplayback_pause(int stop);
