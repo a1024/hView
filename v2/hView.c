@@ -1665,13 +1665,14 @@ void io_render()
 					GUIPrint(0, (float)(w-200), h/2.f, 2, "%8.4lf%%", 100.*g_volume);
 				--animation_ctr;
 			}
-			
-			set_bk_color(0x40404040);
+#ifdef ENABLE_SUBTITLES
 			if(slider.timestamp>=sub_tstart&&slider.timestamp<=sub_tend)
 			{
+				set_bk_color(0x40404040);
 				for(int k=0;k<sub_nlines;++k)
 					GUIPrint(0, 0, h-tdy-SLIDER_HEIGHT-tdy*(sub_nlines-k), 1, "%s", sub_buf+sub_lines[k]);
 			}
+#endif
 			set_bk_color(bk0);
 		}
 		if(impreview&&profileplotmode>PROFILE_OFF)

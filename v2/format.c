@@ -1652,13 +1652,13 @@ double vtime=0, atime=0;
 int g_buffering=0;
 double seek_error=0;
 
-//	#define ENABLE_SUBTITLES
-
+#ifdef ENABLE_SUBTITLES
 char sub_buf[SUB_BUF_SIZE]={0};
 int sub_printed=0;
 int sub_lines[16]={0};
 int sub_nlines=0;
 double sub_tstart=0, sub_tend=0;
+#endif
 
 int slider_get(Slider *slider)
 {

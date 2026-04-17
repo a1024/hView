@@ -747,6 +747,8 @@ int slider_get(Slider *slider);
 int slider_set(double ratio, int fast);
 int slider_changespeed(double ratio);
 
+//	#define ENABLE_SUBTITLES
+#ifdef ENABLE_SUBTITLES
 enum
 {
 	SUB_BUF_SIZE=8192,
@@ -756,6 +758,7 @@ extern int sub_printed;
 extern int sub_lines[16];
 extern int sub_nlines;
 extern double sub_tstart, sub_tend;
+#endif
 
 
 //tests
