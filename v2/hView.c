@@ -74,6 +74,9 @@ int mute_audio=0;
 float g_volume=1;
 static int animation_ctr=0;
 
+extern int g_averror, g_avline;
+extern char ffmpegerror[64];
+
 void impreview2gpu(uint8_t *data, int iw, int ih)
 {
 	if(!image_txid)
@@ -365,8 +368,7 @@ int io_init(int argc, wchar_t **argv)//return false to abort
 //#if 0
 	const wchar_t *filename=
 
-		L"D:/Share_box_2/Library/KinDzaDza/Kin.Dza.Dza.1of2.Divx.AC3.640.480.avi"
-	//	L"D:/ML/dataset-Internet/os_bleh.gif"
+		L"D:/ML/dataset-Internet/os_bleh.gif"
 	//	L"E:/Share Box/Sound & Music/Headshot.wav"
 	//	L"E:/Share Box/Sound & Music/20250411 2.mp3"
 	//	L"E:/Share Box/Sound & Music/2024-11-07 at 3.54.45 PM.mp4"
@@ -1495,6 +1497,13 @@ void io_render()
 
 	if(h<=0)
 		return;
+	if(g_averror)
+	{
+		static uint32_t LOL_1=0;
+		++LOL_1;
+		if(LOL_1<=1)
+			messageboxa(MBOX_OK, "Error", "(%d) %d: %s", g_avline, g_averror, ffmpegerror);
+	}
 	if(animated)
 	{
 		slider_get(&slider);
@@ -1655,6 +1664,13 @@ void io_render()
 				else
 					GUIPrint(0, (float)(w-200), h/2.f, 2, "%8.4lf%%", 100.*g_volume);
 				--animation_ctr;
+			}
+			
+			set_bk_color(0x40404040);
+			if(slider.timestamp>=sub_tstart&&slider.timestamp<=sub_tend)
+			{
+				for(int k=0;k<sub_nlines;++k)
+					GUIPrint(0, 0, h-tdy-SLIDER_HEIGHT-tdy*(sub_nlines-k), 1, "%s", sub_buf+sub_lines[k]);
 			}
 			set_bk_color(bk0);
 		}

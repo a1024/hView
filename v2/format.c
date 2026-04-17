@@ -42,7 +42,8 @@
 #endif
 static const char file[]=__FILE__;
 
-static char ffmpegerror[AV_ERROR_MAX_STRING_SIZE]={0};
+int g_averror=0, g_avline=0;
+char ffmpegerror[AV_ERROR_MAX_STRING_SIZE]={0};
 #define CHECK_AV(E)\
 	do\
 	{\
@@ -62,16 +63,11 @@ static char ffmpegerror[AV_ERROR_MAX_STRING_SIZE]={0};
 #define CHECK_AV2(E, F, R)\
 	do\
 	{\
-		if(E<0)\
+		if(E<0&&!g_averror)\
 		{\
-			if(F)\
-			{\
-				if(!avutil.av_strerror(E, ffmpegerror, AV_ERROR_MAX_STRING_SIZE))\
-					LOG_WARNING("%s", ffmpegerror);\
-				else\
-					LOG_WARNING("FFmpeg %d", E);\
-			}\
-			return R;\
+			g_averror=E;\
+			g_avline=__LINE__;\
+			avutil.av_strerror(E, ffmpegerror, AV_ERROR_MAX_STRING_SIZE);\
 		}\
 	}while(0)
 
@@ -1362,10 +1358,12 @@ static void *handle_avformat=0;
 	APIFUNC(avcodec_send_frame, int (__stdcall *avcodec_send_frame)(AVCodecContext *avctx, const AVFrame *frame))\
 	APIFUNC(avcodec_receive_frame, int (__stdcall *avcodec_receive_frame)(AVCodecContext *avctx, AVFrame *frame))\
 	APIFUNC(avcodec_free_context, void (__stdcall *avcodec_free_context)(AVCodecContext **avctx))\
-	APIFUNC(avcodec_flush_buffers, void (__stdcall* avcodec_flush_buffers)(AVCodecContext *avctx))\
+	APIFUNC(avcodec_flush_buffers, void (__stdcall *avcodec_flush_buffers)(AVCodecContext *avctx))\
 	APIFUNC(av_packet_alloc, AVPacket *(__stdcall *av_packet_alloc)(void))\
-	APIFUNC(av_packet_free, void (__stdcall* av_packet_free)(AVPacket **pkt))\
-	APIFUNC(av_packet_unref, void (__stdcall* av_packet_unref)(AVPacket *pkt))\
+	APIFUNC(av_packet_free, void (__stdcall *av_packet_free)(AVPacket **pkt))\
+	APIFUNC(av_packet_unref, void (__stdcall *av_packet_unref)(AVPacket *pkt))\
+	APIFUNC(avcodec_decode_subtitle2, int (__stdcall *avcodec_decode_subtitle2)(AVCodecContext *avctx, AVSubtitle *sub, int *got_sub_ptr, const AVPacket *avpkt))\
+	APIFUNC(avsubtitle_free, void (__stdcall *avsubtitle_free)(AVSubtitle *sub))\
 
 static const char *symnames_avcodec[]=
 {
@@ -1388,17 +1386,17 @@ static void *handle_avcodec=0;
 	APIFUNC(avutil_version, unsigned (__stdcall *avutil_version)(void))\
 	APIFUNC(av_strerror, int (__stdcall *av_strerror)(int errnum, char *errbuf, size_t errbuf_size))\
 	APIFUNC(av_frame_alloc, AVFrame *(__stdcall *av_frame_alloc)(void))\
-	APIFUNC(av_frame_free, void (__stdcall* av_frame_free)(AVFrame **frame))\
-	APIFUNC(av_frame_get_buffer, int (__stdcall* av_frame_get_buffer)(AVFrame *frame, int align))\
-	APIFUNC(av_frame_unref, void (__stdcall* av_frame_unref)(AVFrame *frame))\
-	APIFUNC(av_pix_fmt_desc_get, const AVPixFmtDescriptor *(__stdcall* av_pix_fmt_desc_get)(enum AVPixelFormat pix_fmt))\
-	APIFUNC(av_dict_set, int (__stdcall* av_dict_set)(AVDictionary **pm, const char *key, const char *value, int flags))\
-	APIFUNC(av_opt_set, int (__stdcall* av_opt_set)(void *obj, const char *name, const char *val, int search_flags))\
-	APIFUNC(av_opt_show2, int (__stdcall* av_opt_show2)(void *obj, void *av_log_obj, int req_flags, int rej_flags))\
-	APIFUNC(av_log_default_callback, void (__stdcall* av_log_default_callback)(void *avcl, int level, const char *fmt, va_list vl))\
-	APIFUNC(av_image_fill_arrays, int (__stdcall* av_image_fill_arrays)(uint8_t *dst_data[4], int dst_linesize[4], const uint8_t *src, enum AVPixelFormat pix_fmt, int width, int height, int align))\
-	APIFUNC(av_rescale_rnd, int64_t (__stdcall* av_rescale_rnd)(int64_t a, int64_t b, int64_t c, enum AVRounding rnd))\
-	APIFUNC(av_rescale_q, int64_t (__stdcall* av_rescale_q)(int64_t a, AVRational bq, AVRational cq))\
+	APIFUNC(av_frame_free, void (__stdcall *av_frame_free)(AVFrame **frame))\
+	APIFUNC(av_frame_get_buffer, int (__stdcall *av_frame_get_buffer)(AVFrame *frame, int align))\
+	APIFUNC(av_frame_unref, void (__stdcall *av_frame_unref)(AVFrame *frame))\
+	APIFUNC(av_pix_fmt_desc_get, const AVPixFmtDescriptor *(__stdcall *av_pix_fmt_desc_get)(enum AVPixelFormat pix_fmt))\
+	APIFUNC(av_dict_set, int (__stdcall *av_dict_set)(AVDictionary **pm, const char *key, const char *value, int flags))\
+	APIFUNC(av_opt_set, int (__stdcall *av_opt_set)(void *obj, const char *name, const char *val, int search_flags))\
+	APIFUNC(av_opt_show2, int (__stdcall *av_opt_show2)(void *obj, void *av_log_obj, int req_flags, int rej_flags))\
+	APIFUNC(av_log_default_callback, void (__stdcall *av_log_default_callback)(void *avcl, int level, const char *fmt, va_list vl))\
+	APIFUNC(av_image_fill_arrays, int (__stdcall *av_image_fill_arrays)(uint8_t *dst_data[4], int dst_linesize[4], const uint8_t *src, enum AVPixelFormat pix_fmt, int width, int height, int align))\
+	APIFUNC(av_rescale_rnd, int64_t (__stdcall *av_rescale_rnd)(int64_t a, int64_t b, int64_t c, enum AVRounding rnd))\
+	APIFUNC(av_rescale_q, int64_t (__stdcall *av_rescale_q)(int64_t a, AVRational bq, AVRational cq))\
 
 static const char *symnames_avutil[]=
 {
@@ -1418,12 +1416,12 @@ static void *handle_avutil=0;
 
 #if 1
 #define APILIST_SWSCALE\
-	APIFUNC(swscale_version, unsigned (__stdcall* swscale_version)(void))\
-	APIFUNC(sws_isSupportedInput, int (__stdcall* sws_isSupportedInput)(enum AVPixelFormat pix_fmt))\
-	APIFUNC(sws_isSupportedOutput, int (__stdcall* sws_isSupportedOutput)(enum AVPixelFormat pix_fmt))\
-	APIFUNC(sws_getContext, struct SwsContext *(__stdcall* sws_getContext)(int srcW, int srcH, enum AVPixelFormat srcFormat, int dstW, int dstH, enum AVPixelFormat dstFormat, int flags, SwsFilter *srcFilter, SwsFilter *dstFilter, const double *param))\
-	APIFUNC(sws_scale, int (__stdcall* sws_scale)(struct SwsContext *c, const uint8_t *const srcSlice[], const int srcStride[], int srcSliceY, int srcSliceH, uint8_t *const dst[], const int dstStride[]))\
-	APIFUNC(sws_freeContext, void (__stdcall* sws_freeContext)(struct SwsContext *swsContext))\
+	APIFUNC(swscale_version, unsigned (__stdcall *swscale_version)(void))\
+	APIFUNC(sws_isSupportedInput, int (__stdcall *sws_isSupportedInput)(enum AVPixelFormat pix_fmt))\
+	APIFUNC(sws_isSupportedOutput, int (__stdcall *sws_isSupportedOutput)(enum AVPixelFormat pix_fmt))\
+	APIFUNC(sws_getContext, struct SwsContext *(__stdcall *sws_getContext)(int srcW, int srcH, enum AVPixelFormat srcFormat, int dstW, int dstH, enum AVPixelFormat dstFormat, int flags, SwsFilter *srcFilter, SwsFilter *dstFilter, const double *param))\
+	APIFUNC(sws_scale, int (__stdcall *sws_scale)(struct SwsContext *c, const uint8_t *const srcSlice[], const int srcStride[], int srcSliceY, int srcSliceH, uint8_t *const dst[], const int dstStride[]))\
+	APIFUNC(sws_freeContext, void (__stdcall *sws_freeContext)(struct SwsContext *swsContext))\
 
 static const char *symnames_swscale[]=
 {
@@ -1443,12 +1441,12 @@ static void *handle_swscale=0;
 
 #if 1
 #define APILIST_SWRESAMPLE\
-	APIFUNC(swresample_version, unsigned (__stdcall* swresample_version)(void))\
-	APIFUNC(swr_alloc_set_opts2, int (__stdcall* swr_alloc_set_opts2)(struct SwrContext **ps, const AVChannelLayout *out_ch_layout, enum AVSampleFormat out_sample_fmt, int out_sample_rate, const AVChannelLayout *in_ch_layout, enum AVSampleFormat  in_sample_fmt, int  in_sample_rate, int log_offset, void *log_ctx))\
-	APIFUNC(swr_init, int (__stdcall* swr_init)(struct SwrContext *s))\
-	APIFUNC(swr_convert, int (__stdcall* swr_convert)(struct SwrContext *s, uint8_t * const *out, int out_count, const uint8_t * const *in , int in_count))\
-	APIFUNC(swr_get_delay, int64_t (__stdcall* swr_get_delay)(struct SwrContext *s, int64_t base))\
-	APIFUNC(swr_free, void (__stdcall* swr_free)(struct SwrContext **s))\
+	APIFUNC(swresample_version, unsigned (__stdcall *swresample_version)(void))\
+	APIFUNC(swr_alloc_set_opts2, int (__stdcall *swr_alloc_set_opts2)(struct SwrContext **ps, const AVChannelLayout *out_ch_layout, enum AVSampleFormat out_sample_fmt, int out_sample_rate, const AVChannelLayout *in_ch_layout, enum AVSampleFormat  in_sample_fmt, int  in_sample_rate, int log_offset, void *log_ctx))\
+	APIFUNC(swr_init, int (__stdcall *swr_init)(struct SwrContext *s))\
+	APIFUNC(swr_convert, int (__stdcall *swr_convert)(struct SwrContext *s, uint8_t * const *out, int out_count, const uint8_t * const *in , int in_count))\
+	APIFUNC(swr_get_delay, int64_t (__stdcall *swr_get_delay)(struct SwrContext *s, int64_t base))\
+	APIFUNC(swr_free, void (__stdcall *swr_free)(struct SwrContext **s))\
 
 static const char *symnames_swresample[]=
 {
@@ -1615,14 +1613,17 @@ typedef struct _VideoDecodeArgs
 	//locals
 	AVFormatContext *formatContext;
 	int32_t video_stream_index, audio_stream_index;
+//	int32_t subtitle_stream_index;
 	AVCodec const *videocodec;
 	AVCodec const *audiocodec;
+	AVCodec const *subtitlecodec;
 	AVCodecContext *videoCodecContext;
 	AVCodecContext *audioCodecContext;
+	AVCodecContext *subtitleCodecContext;
 	AVPacket *packet;
 	AVFrame *frame, *vframe2;
 	float *abuf;
-	uint32_t nsamples_cap, nsamples_converted;
+	int32_t nsamples_cap, nsamples_converted;
 	struct SwsContext *swsctx;
 	struct SwrContext *swrctx;
 	
@@ -1650,6 +1651,15 @@ uint64_t framenumber=0;
 double vtime=0, atime=0;
 int g_buffering=0;
 double seek_error=0;
+
+//	#define ENABLE_SUBTITLES
+
+char sub_buf[SUB_BUF_SIZE]={0};
+int sub_printed=0;
+int sub_lines[16]={0};
+int sub_nlines=0;
+double sub_tstart=0, sub_tend=0;
+
 int slider_get(Slider *slider)
 {
 	if(!video_decode_args||!video_decode_args->duration)
@@ -1982,6 +1992,99 @@ static int frame_enqueue(VideoDecodeArgs *args)
 	mutex_unlock(args->fq.mutex);
 	return 0;
 }
+
+
+//	#define DEBUG_FILE
+#ifdef DEBUG_FILE
+typedef struct
+{
+	char     riff_id[4];     // "RIFF"
+	uint32_t riff_size;
+	char     wave_id[4];     // "WAVE"
+
+	char     fmt_id[4];      // "fmt "
+	uint32_t fmt_size;       // 16 for PCM
+	uint16_t audio_format;   // 3 = IEEE float
+	uint16_t num_channels;   // 2
+	uint32_t sample_rate;
+	uint32_t byte_rate;
+	uint16_t block_align;
+	uint16_t bits_per_sample;
+
+	char     data_id[4];     // "data"
+	uint32_t data_size;
+} WavHeader;
+static int save_wav_s16(const char *filename, int16_t *data, int num_frames, int num_channels, int sample_rate)
+{
+	int bits_per_sample = 16;
+	int block_align = num_channels * sizeof(int16_t);
+	int byte_rate = sample_rate * block_align;
+	uint32_t data_size = num_frames * block_align;
+
+	WavHeader h;
+
+	memcpy(h.riff_id, "RIFF", 4);
+	h.riff_size = 36 + data_size;
+	memcpy(h.wave_id, "WAVE", 4);
+
+	memcpy(h.fmt_id, "fmt ", 4);
+	h.fmt_size = 16;
+	h.audio_format = 1; // PCM
+	h.num_channels = num_channels;
+	h.sample_rate = sample_rate;
+	h.byte_rate = byte_rate;
+	h.block_align = block_align;
+	h.bits_per_sample = bits_per_sample;
+
+	memcpy(h.data_id, "data", 4);
+	h.data_size = data_size;
+	
+	FILE *f = fopen(filename, "wb");
+	if (!f) return -1;
+	fwrite(&h, sizeof(h), 1, f);
+	fwrite(data, 1, data_size, f);
+
+	fclose(f);
+	return 0;
+}
+static int save_wav_f32_stereo(const char *filename, float *data, int num_frames, int sample_rate)
+{
+	int num_channels = 2;
+	int bits_per_sample = 32;
+	int block_align = num_channels * (bits_per_sample / 8);
+	int byte_rate = sample_rate * block_align;
+	uint32_t data_size = num_frames * block_align;
+
+	WavHeader h={0};
+
+	// RIFF
+	h.riff_id[0]='R'; h.riff_id[1]='I'; h.riff_id[2]='F'; h.riff_id[3]='F';
+	h.riff_size = 36 + data_size;
+	h.wave_id[0]='W'; h.wave_id[1]='A'; h.wave_id[2]='V'; h.wave_id[3]='E';
+
+	// fmt
+	h.fmt_id[0]='f'; h.fmt_id[1]='m'; h.fmt_id[2]='t'; h.fmt_id[3]=' ';
+	h.fmt_size = 16;
+	h.audio_format = 3; // IEEE float
+	h.num_channels = num_channels;
+	h.sample_rate = sample_rate;
+	h.byte_rate = byte_rate;
+	h.block_align = block_align;
+	h.bits_per_sample = bits_per_sample;
+
+	// data
+	h.data_id[0]='d'; h.data_id[1]='a'; h.data_id[2]='t'; h.data_id[3]='a';
+	h.data_size = data_size;
+	
+	FILE *f = fopen(filename, "wb");
+	if (!f) return -1;
+	fwrite(&h, sizeof(h), 1, f);
+	fwrite(data, 1, data_size, f);
+	fclose(f);
+	return 0;
+}
+#endif
+
 static void videoplayback_decode(void *p)
 {
 	VideoDecodeArgs *args=(VideoDecodeArgs*)p;
@@ -2004,13 +2107,15 @@ static void videoplayback_decode(void *p)
 
 	AVCodecParameters *videoCodecParameters=0;
 	AVCodecParameters *audioCodecParameters=0;
+//	AVCodecParameters *subtitleCodecParameters=0;
 	args->video_stream_index=-1;
 	args->audio_stream_index=-1;
+//	args->subtitle_stream_index=-1;
 	for(unsigned i=0;i<args->formatContext->nb_streams;++i)
 	{
 		AVStream *stream=args->formatContext->streams[i];
-		AVCodec const *localCodec=avcodec.avcodec_find_decoder(stream->codecpar->codec_id);
-		if(!localCodec)
+		AVCodec const *codecref=avcodec.avcodec_find_decoder(stream->codecpar->codec_id);
+		if(!codecref)
 		{
 			unsigned version=avcodec.avcodec_version();
 			LOG_WARNING("This codec is not supported on this build of libavcodec %d.%d.%d"
@@ -2025,7 +2130,7 @@ static void videoplayback_decode(void *p)
 			if(args->video_stream_index==-1)
 			{
 				args->video_stream_index=i;
-				args->videocodec=localCodec;
+				args->videocodec=codecref;
 				videoCodecParameters=stream->codecpar;
 			}
 		}
@@ -2034,10 +2139,21 @@ static void videoplayback_decode(void *p)
 			if(args->audio_stream_index==-1)
 			{
 				args->audio_stream_index=i;
-				args->audiocodec=localCodec;
+				args->audiocodec=codecref;
 				audioCodecParameters=stream->codecpar;
 			}
 		}
+#ifdef ENABLE_SUBTITLES
+		else if(stream->codecpar->codec_type==AVMEDIA_TYPE_SUBTITLE)
+		{
+			if(args->subtitle_stream_index==-1)
+			{
+				args->subtitle_stream_index=i;
+				args->subtitlecodec=codecref;
+				subtitleCodecParameters=stream->codecpar;
+			}
+		}
+#endif
 	}
 	if(args->video_stream_index==-1&&args->audio_stream_index==-1)
 	{
@@ -2058,6 +2174,7 @@ static void videoplayback_decode(void *p)
 		CHECK_AV2(error, args->erroronfail,);
 		error=avcodec.avcodec_open2(args->videoCodecContext, args->videocodec, 0);
 		CHECK_AV2(error, args->erroronfail,);
+		imagetype=IM_RGBA;
 	}
 	if(args->audio_stream_index!=-1)
 	{
@@ -2072,8 +2189,31 @@ static void videoplayback_decode(void *p)
 		CHECK_AV2(error, args->erroronfail,);
 		error=avcodec.avcodec_open2(args->audioCodecContext, args->audiocodec, 0);
 		CHECK_AV2(error, args->erroronfail,);
+		//console_start();
+		//console_log("block_align=%d sample_rate=%d ch=%d extradata=%p size=%d\n",
+		//	args->audioCodecContext->block_align,
+		//	args->audioCodecContext->sample_rate,
+		//	args->audioCodecContext->ch_layout.nb_channels,
+		//	args->audioCodecContext->extradata,
+		//	args->audioCodecContext->extradata_size
+		//);
 	}
-
+#ifdef ENABLE_SUBTITLES
+	if(args->subtitle_stream_index!=-1)
+	{
+		args->subtitleCodecContext=avcodec.avcodec_alloc_context3(args->subtitlecodec);
+		if(!args->subtitleCodecContext)
+		{
+			if(args->erroronfail)
+				LOG_WARNING("Alloc error");
+			return;
+		}
+		error=avcodec.avcodec_parameters_to_context(args->subtitleCodecContext, subtitleCodecParameters);
+		CHECK_AV2(error, args->erroronfail,);
+		error=avcodec.avcodec_open2(args->subtitleCodecContext, args->subtitlecodec, 0);
+		CHECK_AV2(error, args->erroronfail,);
+	}
+#endif
 	args->frame=avutil.av_frame_alloc();
 	args->packet=avcodec.av_packet_alloc();
 	if(!args->frame||!args->packet)
@@ -2108,7 +2248,7 @@ static void videoplayback_decode(void *p)
 		args->duration=0;
 	}
 	timer_start(args->coarsedelta, TIMER_ID_VIDEO);
-#if 1
+
 	args->albumart=0;
 	if(args->audio_stream_index!=-1&&args->video_stream_index!=-1)
 	{
@@ -2131,6 +2271,19 @@ static void videoplayback_decode(void *p)
 			args->albumart=1;
 		}
 	}
+#ifdef DEBUG_FILE
+	int debug_saved=0;
+	ArrayHandle debug_data=0;
+	ARRAY_ALLOC(int16_t[1], debug_data, 0, 0, 8192, 0);
+//	ARRAY_ALLOC(float[2], debug_data, 0, 0, 8192, 0);
+
+	//const char *debugfn="20260417_0159am.wav";
+	//FILE *fdebug=fopen(debugfn, "wb");
+	//if(!fdebug)
+	//{
+	//	LOG_ERROR("Cannot open \"%s\" for writing", debugfn);
+	//	return;
+	//}
 #endif
 	for(;;)
 	{
@@ -2151,13 +2304,16 @@ static void videoplayback_decode(void *p)
 					if(error==AVERROR(EAGAIN)||error==AVERROR_EOF)
 						break;
 					if(args->seekflag&&error<0)
+					{
+						avutil.av_frame_unref(args->frame);
 						continue;
+					}
 					CHECK_AV2(error, args->erroronfail,);
 
-					if(!args->albumart&&args->frame->best_effort_timestamp==AV_NOPTS_VALUE)
-						continue;
 					if(args->seekflag)
 					{
+						if(!args->albumart&&args->frame->best_effort_timestamp==AV_NOPTS_VALUE)
+							continue;
 						double t=args->frame->best_effort_timestamp*args->ftimebase;
 						if(t<args->seektarget)
 						{
@@ -2200,18 +2356,50 @@ static void videoplayback_decode(void *p)
 					if(error==AVERROR(EAGAIN)||error==AVERROR_EOF)
 						break;
 					if(args->seekflag&&error<0)
+					{
+						avutil.av_frame_unref(args->frame);
 						continue;
+					}
 					CHECK_AV2(error, args->erroronfail,);
 					
-					if(args->frame->best_effort_timestamp==AV_NOPTS_VALUE)
-						continue;
 					if(args->seekflag)
 					{
+						if(args->frame->best_effort_timestamp==AV_NOPTS_VALUE)
+						{
+							avutil.av_frame_unref(args->frame);
+							continue;
+						}
 						double t=args->frame->best_effort_timestamp*args->ftimebase;
 						if(t<args->seektarget)
+						{
+							avutil.av_frame_unref(args->frame);
 							continue;
+						}
 						args->seekflag=0;
 					}
+
+#if 0
+					static int counter=0;
+					if(!counter)
+						console_start();
+					static double pts0=0;
+					double pts=args->frame->best_effort_timestamp*args->ftimebase;
+					static double t0=0;
+					double t=time_sec();
+					if(!t0)
+						t0=t;
+					console_log("wall delta %12.6lf sec  pts delta %12.6lf sec  nframes %d\n", t-t0, pts-pts0, args->frame->nb_samples);
+					t0=t;
+					pts0=pts;
+					//console_log("frame %d nb=%d fmt=%d planar=%d ptr=%p\n"
+					//	, counter++
+					//	, args->frame->nb_samples
+					//	, args->frame->format
+					//	, args->frame->format
+					//	, args->frame->data[0]
+					//);
+					//av_sample_fmt_is_planar
+#endif
 
 					if(!args->swrctx||timescale!=args->timescale)
 					{
@@ -2238,31 +2426,36 @@ static void videoplayback_decode(void *p)
 						CHECK_AV2(error, args->erroronfail,);
 						timescale=args->timescale;
 					}
-					uint32_t prevnsamples=args->nsamples_cap;
-					args->nsamples_cap=(int32_t)avutil.av_rescale_rnd(
+					int32_t nsamples=(int32_t)avutil.av_rescale_rnd(
 						swresample.swr_get_delay(args->swrctx, args->frame->sample_rate)+args->frame->nb_samples,
 						48000,
 						args->frame->sample_rate,
 						AV_ROUND_UP
 					);
-					if(!args->abuf||prevnsamples<args->nsamples_cap)
+					if(!args->abuf||nsamples>args->nsamples_cap)
 					{
-						void *ptr=(float*)realloc(args->abuf, args->nsamples_cap*sizeof(float[2]));
+						void *ptr=(float*)realloc(args->abuf, nsamples*sizeof(float[2]));
 						if(!ptr)
 						{
 							LOG_ERROR("Alloc error");
 							return;
 						}
 						args->abuf=(float*)ptr;
+						args->nsamples_cap=nsamples;
 					}
 					uint8_t *out_ptr[]={(uint8_t*)args->abuf};
 					args->nsamples_converted=swresample.swr_convert(
 						args->swrctx,
 						out_ptr,
-						args->nsamples_cap,
+						nsamples,
 						(const uint8_t**)args->frame->data,
 						args->frame->nb_samples
 					);
+#ifdef DEBUG_FILE
+					if(!debug_saved)
+						array_append(&debug_data, args->frame->data[0], sizeof(int16_t[1]), args->frame->nb_samples, 1, 8192, 0);
+					//	array_append(&debug_data, args->abuf, sizeof(float[2]), args->nsamples_converted, 1, 8192, 0);
+#endif
 
 					for(int i=0;i<(int)args->nsamples_converted;)
 					{
@@ -2313,6 +2506,40 @@ static void videoplayback_decode(void *p)
 					avutil.av_frame_unref(args->frame);
 				}
 			}
+#ifdef ENABLE_SUBTITLES
+			else if(args->packet->stream_index==args->subtitle_stream_index)
+			{
+				AVSubtitle sub={0};
+				int got_sub=0;
+
+				error=avcodec.avcodec_decode_subtitle2(args->subtitleCodecContext, &sub, &got_sub, args->packet);
+				if(error==AVERROR(EAGAIN)||error==AVERROR_EOF)
+					break;
+				if(error<0)
+					continue;
+				if(got_sub)
+				{
+					double ts=args->packet->pts*args->ftimebase;
+
+					sub_tstart=ts+sub.start_display_time*0.001;
+					sub_tend=ts+sub.end_display_time*0.001;
+
+					sub_printed=0;
+					sub_nlines=0;
+					for(int k=0;k<sub.num_rects;++k)
+					{
+						AVSubtitleRect *r=sub.rects[k];
+						if(r->type==SUBTITLE_TEXT)
+						{
+							sub_printed+=snprintf(sub_buf+sub_printed, SUB_BUF_SIZE-sub_printed, "%s", r->text);
+							++sub_printed;//skip null terminator
+							sub_lines[sub_nlines++]=sub_printed;
+						}
+					}
+					avcodec.avsubtitle_free(&sub);
+				}
+			}
+#endif
 			avcodec.av_packet_unref(args->packet);
 			if(args->seekrequest)
 			{
@@ -2326,12 +2553,26 @@ static void videoplayback_decode(void *p)
 			avcodec.avcodec_flush_buffers(args->videoCodecContext);
 		if(args->has_audio)
 			avcodec.avcodec_flush_buffers(args->audioCodecContext);
-		avformat.avformat_seek_file(args->formatContext, args->albumart?args->audio_stream_index:args->video_stream_index, INT64_MIN, 0, INT64_MAX, AVSEEK_FLAG_BACKWARD);
+		avformat.avformat_seek_file(args->formatContext,
+			args->has_audio?args->audio_stream_index:args->video_stream_index,
+			INT64_MIN, 0, INT64_MAX, AVSEEK_FLAG_BACKWARD
+		);
 		framenumber=0;
 		if(!args->duration)
 			args->duration=time_sec()-tstart;
 		args->videotimestamp=0;
+#ifdef DEBUG_FILE
+		if(!debug_saved)
+		{
+			save_wav_s16("20260417_0220am.wav", (int16_t*)debug_data->data, debug_data->count, 1, 44100);
+		//	save_wav_f32_stereo("20260417_0159am.wav", (float*)debug_data->data, debug_data->count, 44100);
+			debug_saved=1;
+			array_free(&debug_data);
+		}
+#endif
 	}
+	if(args->swrctx)
+		swresample.swr_free(&args->swrctx);
 	avformat.avformat_close_input(&video_decode_args->formatContext);
 	avcodec.av_packet_free(&video_decode_args->packet);
 	avutil.av_frame_free(&video_decode_args->frame);
