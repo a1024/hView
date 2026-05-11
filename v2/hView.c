@@ -1058,6 +1058,7 @@ int io_keydn(IOKey key, char c)
 				impreview=im2;
 				imagetype=IM_RGBA;
 				imagedepth=im2->srcdepth;
+				update_image(0, 0);
 				if(imagefitted)
 					image_fit2screen(image->iw, image->ih);
 				return 1;

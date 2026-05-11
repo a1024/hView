@@ -1188,12 +1188,12 @@ static LRESULT __stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPA
 			if(fullscreen)//enter fullscreen
 			{
 				GetWindowRect(ghWnd, &oldWindowSize);
-				SetWindowLongA(hWnd, GWL_STYLE, WS_OVERLAPPED);
+				SetWindowLongW(hWnd, GWL_STYLE, WS_OVERLAPPED);
 				SetWindowPos(hWnd, HWND_TOP, 0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN), SWP_SHOWWINDOW);
 			}
 			else//exit fullscreen
 			{
-				SetWindowLongA(hWnd, GWL_STYLE, WS_CAPTION|WS_SYSMENU|WS_THICKFRAME|WS_MINIMIZEBOX|WS_MAXIMIZEBOX|WS_CLIPCHILDREN);
+				SetWindowLongW(hWnd, GWL_STYLE, WS_CAPTION|WS_SYSMENU|WS_THICKFRAME|WS_MINIMIZEBOX|WS_MAXIMIZEBOX|WS_CLIPCHILDREN);
 				SetWindowPos(hWnd, HWND_TOP, oldWindowSize.left, oldWindowSize.top, oldWindowSize.right-oldWindowSize.left, oldWindowSize.bottom-oldWindowSize.top, SWP_SHOWWINDOW);
 			}
 		}
@@ -1215,21 +1215,21 @@ static LRESULT __stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPA
 		PostQuitMessage(0);
 		break;
 	}
-	return DefWindowProcA(hWnd, message, wParam, lParam);
+	return DefWindowProcW(hWnd, message, wParam, lParam);
 }
 int __stdcall WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrev, _In_ char *pCmdLine, _In_ int nShowCmd)
 {
-	WNDCLASSEXA wndClassEx=
+	WNDCLASSEXW wndClassEx=
 	{
-		sizeof(WNDCLASSEXA), CS_HREDRAW|CS_VREDRAW|CS_DBLCLKS,
+		sizeof(WNDCLASSEXW), CS_HREDRAW|CS_VREDRAW|CS_DBLCLKS,
 		WndProc, 0, 0, hInstance,
-		LoadIconA(0, IDI_APPLICATION),
-		LoadCursorA(0, IDC_ARROW),
+		LoadIconW(0, MAKEINTRESOURCEW(IDI_APPLICATION)),
+		LoadCursorW(0, MAKEINTRESOURCEW(IDC_ARROW)),
 
 		0,
 	//	(HBRUSH)(COLOR_WINDOW+1),
 
-		0, "MainWindowClass", 0
+		0, L"MainWindowClass", 0
 	};
 	MSG msg;
 
@@ -1253,9 +1253,9 @@ int __stdcall WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrev, _In_ c
 		HRESULT ret2=OleInitialize(0);
 		(void)ret2;
 	}
-	int success=RegisterClassExA(&wndClassEx);
+	int success=RegisterClassExW(&wndClassEx);
 	SYS_ASSERT(success);
-	ghWnd=CreateWindowExA(WS_EX_ACCEPTFILES, wndClassEx.lpszClassName, "",
+	ghWnd=CreateWindowExW(WS_EX_ACCEPTFILES, wndClassEx.lpszClassName, L"",
 		WS_CAPTION|WS_SYSMENU|WS_THICKFRAME|WS_MINIMIZEBOX|WS_MAXIMIZEBOX|WS_CLIPCHILDREN,
 		CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, 0, 0, hInstance, 0
 	);
@@ -1265,7 +1265,7 @@ int __stdcall WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrev, _In_ c
 		LOG_ERROR("Cannot create window");
 		return 0;
 	}
-	//LONG style=GetWindowLongA(ghWnd, GWL_STYLE);//0x06cf0000
+	//LONG style=GetWindowLongW(ghWnd, GWL_STYLE);//0x06cf0000
 
 	GetClientRect(ghWnd, &R);
 	w=R.right-R.left;
@@ -1288,11 +1288,11 @@ int __stdcall WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrev, _In_ c
 	int ret;
 	for(;;)
 	{
-		ret=GetMessageA(&msg, 0, 0, 0);
+		ret=GetMessageW(&msg, 0, 0, 0);
 		if(!ret||ret==-1)//GetMessageA returns 0 at WM_QUIT, and -1 when ghWnd was closed
 			break;
 		TranslateMessage(&msg);
-		DispatchMessageA(&msg);
+		DispatchMessageW(&msg);
 	}
 
 		//finish
