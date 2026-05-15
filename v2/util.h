@@ -571,6 +571,7 @@ ptrdiff_t acme_strrchr(const char *str, ptrdiff_t len, char c);//find last occur
 ArrayHandle filter_path(const char *path, int len, int slash);//replaces back slashes with slashes, adds trailing slash if missing, as ArrayHandle
 ArrayHandle filter_pathw(const wchar_t *path, int len, int slash);
 void get_filetitle(const char *fn, int len, int *idx_start, int *idx_end);//pass -1 for len if unknown
+void get_filetitlew(const wchar_t *fn, int len, int *idx_start, int *idx_end);//pass -1 for len if unknown
 ArrayHandle get_filenames(const char *path, const char **extensions, int extCount, int fullyqualified);//returns array of strings, extensions without period '.'
 ArrayHandle get_filenamesw(const wchar_t *path, const wchar_t **extensions, int extCount, int fullyqualified);
 

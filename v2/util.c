@@ -2791,6 +2791,21 @@ void get_filetitle(const char *fn, int len, int *idx_start, int *idx_end)//pass 
 	if(idx_end)
 		*idx_end=kpoint;
 }
+void get_filetitlew(const wchar_t *fn, int len, int *idx_start, int *idx_end)//pass -1 for len if unknown
+{
+	int kpoint, kslash;
+	if(len<0)
+		len=(int)wcslen(fn);
+	for(kpoint=(int)len-1;kpoint>=0&&fn[kpoint]!=L'.';--kpoint);
+	if(kpoint<0)
+		kpoint=len;
+	for(kslash=kpoint-1;kslash>=0&&fn[kslash]!=L'/'&&fn[kslash]!=L'\\';--kslash);
+	++kslash;
+	if(idx_start)
+		*idx_start=kslash;
+	if(idx_end)
+		*idx_end=kpoint;
+}
 static const char* get_extension(const char *filename, ptrdiff_t len)//excludes the dot
 {
 	ptrdiff_t idx;

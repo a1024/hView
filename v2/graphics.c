@@ -1027,6 +1027,7 @@ float print_line_enqueue(ArrayHandle *vertices, float tab_origin, float x, float
 					vptr[idx++]=rect[2], vptr[idx++]=rect[1],	vptr[idx++]=txc->x2, vptr[idx++]=txc->y1;//top right
 
 					++printable_count;
+					(void)printable_count;
 				}
 				else
 					cursor_cols+=advance_cols;

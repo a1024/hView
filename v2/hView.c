@@ -576,127 +576,166 @@ int io_keydn(IOKey key, char c)
 		}
 		break;
 	case KEY_F2://info
-		if(image&&impreview)
 		{
 			wchar_t buf[2048]={0};
-			int nprinted=0;
-			ptrdiff_t usize=0;
-			time_t created2=0, lastmodified2=0, lastaccess2=0;
-			switch(imagetype)
+			if(image&&impreview)
 			{
-			default://make gcc happy
-				break;
-			case IM_GRAYSCALEv2:
-			case IM_RGBA:
-				usize=(ptrdiff_t)ceil((double)image->srcnch*image->iw*image->ih*log2(image->nlevels0)/8);
-				break;
-			case IM_BAYERv2:
-				usize=(ptrdiff_t)ceil((double)image->iw*image->ih*log2(image->nlevels0)/8);
-				break;
+				int nprinted=0;
+				ptrdiff_t usize=0;
+				time_t created2=0, lastmodified2=0, lastaccess2=0;
+				switch(imagetype)
+				{
+				default://make gcc happy
+					break;
+				case IM_GRAYSCALEv2:
+				case IM_RGBA:
+					usize=(ptrdiff_t)ceil((double)image->srcnch*image->iw*image->ih*log2(image->nlevels0)/8);
+					break;
+				case IM_BAYERv2:
+					usize=(ptrdiff_t)ceil((double)image->iw*image->ih*log2(image->nlevels0)/8);
+					break;
 
+				}
+				int extidx=0;
+				if(fn)
+				{
+					struct _stat64 info={0};
+					int e2=_wstat64((wchar_t*)fn->data, &info);
+					if(e2)
+						nprinted+=_snwprintf_s(buf+nprinted, _countof(buf)-1-nprinted, _countof(buf)-1-nprinted,
+							L"\"%s\"\n"
+							L"INACCESSIBLE\n"
+							, (wchar_t*)fn->data
+						);
+					else
+					{
+						ptrdiff_t csize=info.st_size;
+						created2=info.st_ctime;
+						lastmodified2=info.st_mtime;
+						lastaccess2=info.st_atime;
+						get_filetitlew((wchar_t*)fn->data, (int)fn->count, 0, &extidx);
+						nprinted+=_snwprintf_s(buf+nprinted, _countof(buf)-1-nprinted, _countof(buf)-1-nprinted,
+							L"\"%s\"\n"
+							L"%11td bytes ("
+							, (wchar_t*)fn->data
+							, usize
+						);
+						nprinted+=print_memsizew(buf+nprinted, _countof(buf)-1-nprinted, usize, 8);
+						nprinted+=_snwprintf_s(buf+nprinted, _countof(buf)-1-nprinted, _countof(buf)-1-nprinted,
+							L") bitmap\n"
+							L"%11td bytes ("
+							, csize
+						);
+						nprinted+=print_memsizew(buf+nprinted, _countof(buf)-1-nprinted, csize, 8);
+						nprinted+=_snwprintf_s(buf+nprinted, _countof(buf)-1-nprinted, _countof(buf)-1-nprinted,
+							L") %s\n"
+							, (wchar_t*)fn->data+extidx
+						);
+					}
+				}
+				else
+				{
+					nprinted+=_snwprintf_s(buf+nprinted, _countof(buf)-1-nprinted, _countof(buf)-1-nprinted,
+						L"%10td bytes ("
+						, usize
+					);
+					nprinted+=print_memsizew(buf+nprinted, _countof(buf)-1-nprinted, usize, 8);
+					nprinted+=_snwprintf_s(buf+nprinted, _countof(buf)-1-nprinted, _countof(buf)-1-nprinted, L") bitmap\n");
+				}
+				nprinted+=_snwprintf_s(buf+nprinted, _countof(buf)-1-nprinted, _countof(buf)-1-nprinted, L"\n");
+				switch(imagetype)
+				{
+				default://make gcc happy
+					break;
+				case IM_GRAYSCALEv2:
+					nprinted+=_snwprintf_s(buf+nprinted, _countof(buf)-1-nprinted, _countof(buf)-1-nprinted,
+						L"CWH %d*%5d*%5d*log2(%5d) G\n"
+						, image->srcnch, image->iw, image->ih, image->nlevels0
+					);
+					break;
+				case IM_RGBA:
+					if(image->srcnch>=3)
+						nprinted+=_snwprintf_s(buf+nprinted, _countof(buf)-1-nprinted, _countof(buf)-1-nprinted,
+							L"CWH %d*%5d*%5d*log2(%5d) RGB%s\n"
+							, image->srcnch, image->iw, image->ih, image->nlevels0, image->srcnch==4?L"A":L""
+						);
+					else
+						nprinted+=_snwprintf_s(buf+nprinted, _countof(buf)-1-nprinted, _countof(buf)-1-nprinted,
+							L"CWH %d*%5d*%5d*log2(%5d) G%s\n"
+							, image->srcnch, image->iw, image->ih, image->nlevels0, image->srcnch==2?L"A":L""
+						);
+					break;
+				case IM_BAYERv2:
+					{
+						char labels[]="RGB";
+						nprinted+=_snwprintf_s(buf+nprinted, _countof(buf)-1-nprinted, _countof(buf)-1-nprinted,
+							L" WHD  %5d*%5d*log2(%5d) %c%c%c%c\n"
+							, image->iw, image->ih, image->nlevels0
+							, labels[(int)bayer[0]]
+							, labels[(int)bayer[1]]
+							, labels[(int)bayer[2]]
+							, labels[(int)bayer[3]]
+						);
+					}
+					break;
+				}
+				nprinted+=_snwprintf_s(buf+nprinted, _countof(buf)-1-nprinted, _countof(buf)-1-nprinted,
+					L"CWH %d*%5d*%5d*8 preview\n"
+					, impreview->nch, impreview->iw, impreview->ih
+				);
+				if(created2)
+				{
+					struct tm date={0};
+					nprinted+=_snwprintf_s(buf+nprinted, _countof(buf)-1-nprinted, _countof(buf)-1-nprinted, L"\n");
+					localtime_s(&date, &created2);
+					nprinted+=(int)wcsftime(buf+nprinted, _countof(buf)-1-nprinted, L"%Y-%m-%d_%H%M%S Created\n", &date);
+					localtime_s(&date, &lastmodified2);
+					nprinted+=(int)wcsftime(buf+nprinted, _countof(buf)-1-nprinted, L"%Y-%m-%d_%H%M%S Modified\n", &date);
+					localtime_s(&date, &lastaccess2);
+					nprinted+=(int)wcsftime(buf+nprinted, _countof(buf)-1-nprinted, L"%Y-%m-%d_%H%M%S Accessed\n", &date);
+				}
+
+				int cancel=messageboxw(MBOX_OKCANCEL, L"Copy to clipboard?", L"%s", buf);
+				if(!cancel)
+					copy_to_clipboardw(buf, nprinted);
 			}
-			int extidx=0;
-			if(fn)
+			else if(fn)
 			{
 				struct _stat64 info={0};
+				struct tm date={0};
+				int nprinted=0;
+
 				int e2=_wstat64((wchar_t*)fn->data, &info);
+
 				if(e2)
-					nprinted+=_snwprintf_s(buf+nprinted, sizeof(buf)-nprinted, sizeof(buf)-1-nprinted,
+					nprinted+=_snwprintf_s(buf+nprinted, _countof(buf)-1-nprinted, _countof(buf)-1-nprinted,
 						L"\"%s\"\n"
 						L"INACCESSIBLE\n"
 						, (wchar_t*)fn->data
 					);
 				else
 				{
-					ptrdiff_t csize=info.st_size;
-					created2=info.st_ctime;
-					lastmodified2=info.st_mtime;
-					lastaccess2=info.st_atime;
-					get_filetitle((char*)fn->data, (int)fn->count, 0, &extidx);
-					nprinted+=_snwprintf_s(buf+nprinted, sizeof(buf)-nprinted, sizeof(buf)-1-nprinted,
+					nprinted+=_snwprintf_s(buf+nprinted, _countof(buf)-1-nprinted, _countof(buf)-1-nprinted,
 						L"\"%s\"\n"
-						L"%11td bytes ("
+						L"%11lld bytes ("
 						, (wchar_t*)fn->data
-						, usize
+						, (int64_t)info.st_size
 					);
-					nprinted+=print_memsizew(buf+nprinted, sizeof(buf)-1-nprinted, usize, 8);
-					nprinted+=_snwprintf_s(buf+nprinted, sizeof(buf)-nprinted, sizeof(buf)-1-nprinted,
-						L") bitmap\n"
-						L"%11td bytes ("
-						, csize
-					);
-					nprinted+=print_memsizew(buf+nprinted, sizeof(buf)-1-nprinted, csize, 8);
-					nprinted+=_snwprintf_s(buf+nprinted, sizeof(buf)-nprinted, sizeof(buf)-1-nprinted,
-						L") %s\n"
-						, (wchar_t*)fn->data+extidx
-					);
-				}
-			}
-			else
-			{
-				nprinted+=_snwprintf_s(buf+nprinted, sizeof(buf)-nprinted, sizeof(buf)-1-nprinted,
-					L"%10td bytes ("
-					, usize
-				);
-				nprinted+=print_memsizew(buf+nprinted, sizeof(buf)-1-nprinted, usize, 8);
-				nprinted+=_snwprintf_s(buf+nprinted, sizeof(buf)-nprinted, sizeof(buf)-1-nprinted, L") bitmap\n");
-			}
-			nprinted+=_snwprintf_s(buf+nprinted, sizeof(buf)-nprinted, sizeof(buf)-1-nprinted, L"\n");
-			switch(imagetype)
-			{
-			default://make gcc happy
-				break;
-			case IM_GRAYSCALEv2:
-				nprinted+=_snwprintf_s(buf+nprinted, sizeof(buf)-nprinted, sizeof(buf)-1-nprinted,
-					L"CWH %d*%5d*%5d G\n"
-					, image->nch, image->iw, image->ih
-				);
-				break;
-			case IM_RGBA:
-				if(image->srcnch>=3)
-					nprinted+=_snwprintf_s(buf+nprinted, sizeof(buf)-nprinted, sizeof(buf)-1-nprinted,
-						L"CWH %d*%5d*%5d RGB%s\n"
-						, image->nch, image->iw, image->ih, image->srcnch==4?L"A":L""
-					);
-				else
-					nprinted+=_snwprintf_s(buf+nprinted, sizeof(buf)-nprinted, sizeof(buf)-1-nprinted,
-						L"CWH %d*%5d*%5d G%s\n"
-						, image->nch, image->iw, image->ih, image->srcnch==2?L"A":L""
-					);
-				break;
-			case IM_BAYERv2:
-				{
-					char labels[]="RGB";
-					nprinted+=_snwprintf_s(buf+nprinted, sizeof(buf)-nprinted, sizeof(buf)-1-nprinted,
-						L" WH   %5d*%5d %c%c%c%c\n"
-						, image->iw, image->ih
-						, labels[(int)bayer[0]]
-						, labels[(int)bayer[1]]
-						, labels[(int)bayer[2]]
-						, labels[(int)bayer[3]]
-					);
-				}
-				break;
-			}
-			nprinted+=_snwprintf_s(buf+nprinted, sizeof(buf)-nprinted, sizeof(buf)-1-nprinted,
-				L"CWH %d*%5d*%5d preview\n"
-				, impreview->nch, impreview->iw, impreview->ih
-			);
-			if(created2)
-			{
-				struct tm date={0};
-				nprinted+=_snwprintf_s(buf+nprinted, sizeof(buf)-nprinted, sizeof(buf)-1-nprinted, L"\n");
-				localtime_s(&date, &created2);
-				nprinted+=(int)wcsftime(buf+nprinted, sizeof(buf)-1-nprinted, L"%Y-%m-%d_%H%M%S Created\n", &date);
-				localtime_s(&date, &lastmodified2);
-				nprinted+=(int)wcsftime(buf+nprinted, sizeof(buf)-1-nprinted, L"%Y-%m-%d_%H%M%S Modified\n", &date);
-				localtime_s(&date, &lastaccess2);
-				nprinted+=(int)wcsftime(buf+nprinted, sizeof(buf)-1-nprinted, L"%Y-%m-%d_%H%M%S Accessed\n", &date);
-			}
+					nprinted+=print_memsizew(buf+nprinted, _countof(buf)-1-nprinted, info.st_size, 8);
+					nprinted+=_snwprintf_s(buf+nprinted, _countof(buf)-1-nprinted, _countof(buf)-1-nprinted, L")\n");
 
-			int cancel=messageboxw(MBOX_OKCANCEL, L"Copy to clipboard?", L"%s", buf);
-			if(!cancel)
-				copy_to_clipboardw(buf, nprinted);
+					nprinted+=_snwprintf_s(buf+nprinted, _countof(buf)-1-nprinted, _countof(buf)-1-nprinted, L"\n");
+					localtime_s(&date, &info.st_ctime);
+					nprinted+=(int)wcsftime(buf+nprinted, _countof(buf)-1-nprinted, L"%Y-%m-%d_%H%M%S Created\n", &date);
+					localtime_s(&date, &info.st_mtime);
+					nprinted+=(int)wcsftime(buf+nprinted, _countof(buf)-1-nprinted, L"%Y-%m-%d_%H%M%S Modified\n", &date);
+					localtime_s(&date, &info.st_atime);
+					nprinted+=(int)wcsftime(buf+nprinted, _countof(buf)-1-nprinted, L"%Y-%m-%d_%H%M%S Accessed\n", &date);
+				}
+				int cancel=messageboxw(MBOX_OKCANCEL, L"Copy to clipboard?", L"%s", buf);
+				if(!cancel)
+					copy_to_clipboardw(buf, nprinted);
+			}
 		}
 		break;
 	case KEY_ESC:

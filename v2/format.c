@@ -851,6 +851,7 @@ static int huf_load(const wchar_t *filename, Image16 **image, int erroronfail)
 				if((unsigned)kx>=header->width)
 					++ky, kx=0;
 			}
+			(void)ky;
 #endif
 
 #if 0
@@ -3076,6 +3077,7 @@ int load_media(const wchar_t *filename, Image16 **image, int erroronfail)
 					imagedepth=desc->comp->depth;
 					//imagedepth=bpp0/desc->nb_components;//X
 					imagetype=IM_RGBA;
+					image[0]->srcnch=desc->nb_components;
 					const unsigned short *srcptr=(const unsigned short*)frame2->data[0];
 					unsigned short *dstptr=image[0]->data;
 					int rowstride=image[0]->nch*(image[0]->iw+padding);
