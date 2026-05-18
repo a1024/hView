@@ -469,23 +469,20 @@ int io_mousewheel(int forward)
 	int mw_fwd=forward>0;
 	if(animated&&!slider_hide&&(uint32_t)(my-(h-tdy-SLIDER_HEIGHT))<SLIDER_HEIGHT)//change animation timescale
 		slider_changespeed(mw_fwd?1.1:1./1.1);
+	else if(animated)
+	{
+		mute_audio=0;
+		g_volume*=mw_fwd?2:0.5f;
+		if(mw_fwd&&!g_volume)
+			g_volume=1.f/128;
+		if(g_volume>2)
+			g_volume=2;
+		animation_ctr=VOLUME_ANIMATION_NFRAMES;
+	}
 	else if(GET_KEY_STATE(KEY_CTRL))
 	{
-		if(animated)
-		{
-			mute_audio=0;
-			g_volume*=mw_fwd?2:0.5f;
-			if(mw_fwd&&!g_volume)
-				g_volume=1.f/128;
-			if(g_volume>2)
-				g_volume=2;
-			animation_ctr=VOLUME_ANIMATION_NFRAMES;
-		}
-		else
-		{
-			brightness+=2*mw_fwd-1;
-			update_image(0, 0);
-		}
+		brightness+=2*mw_fwd-1;
+		update_image(0, 0);
 	}
 	else
 		zoom_at(mx, my, mw_fwd?mousewheel_zoom:1/mousewheel_zoom);//fwd zooms in
