@@ -1525,6 +1525,17 @@ static void load_ffmpeg()
 		ffmpeg_ready=1;
 		return;
 	}
+	if(
+		!handle_avformat	//missing/incompatible
+	||	!handle_avcodec
+	||	!handle_avutil
+	||	!handle_swscale
+	||	!handle_swresample
+	)
+	{
+		ffmpeg_ready=1;
+		return;
+	}
 	ffmpeg_ready=2;
 }
 
@@ -3525,7 +3536,7 @@ char* get_codecinfo(void)//don't forget to free(mem)
 	
 	ptr+=snprintf(ptr, end-ptr, "\n");
 	apiload_libheif();
-	if(handle_libheif==(void*)-1)
+	if(handle_libheif==(void*)-1||!handle_libheif)
 		ptr+=snprintf(ptr, end-ptr, "libheif:\tNot found\n");
 	else
 	{
@@ -3537,7 +3548,7 @@ char* get_codecinfo(void)//don't forget to free(mem)
 	
 	ptr+=snprintf(ptr, end-ptr, "\n");
 	apiload_libraw();
-	if(handle_libraw==(void*)-1)
+	if(handle_libraw==(void*)-1||!handle_libraw)
 		ptr+=snprintf(ptr, end-ptr, "libraw:\tNot found\n");
 	else
 	{
