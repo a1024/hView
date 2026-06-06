@@ -2595,9 +2595,9 @@ static void videoplayback_decode(void *p)
 	playing=0;
 	if(args->swrctx)
 		swresample.swr_free(&args->swrctx);
-	avformat.avformat_close_input(&video_decode_args->formatContext);
 	avcodec.av_packet_free(&video_decode_args->packet);
 	avutil.av_frame_free(&video_decode_args->frame);
+	avformat.avformat_close_input(&video_decode_args->formatContext);
 	avcodec.avcodec_free_context(&video_decode_args->videoCodecContext);
 }
 void videoplayback_start(const char *fn, int has_video, int has_audio)
