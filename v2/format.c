@@ -202,13 +202,19 @@ static void api_load(void **phandle, const char *libname, void *api, const char 
 		return;
 	void (__stdcall **ptr)()=(void (__stdcall**)())api;
 #ifdef _WIN32
-	handle=LoadLibraryA(libname);
+	{
+		uint32_t oldMode=SetErrorMode(SEM_FAILCRITICALERRORS|SEM_NOOPENFILEERRORBOX);
+		handle=LoadLibraryA(libname);
+		SetErrorMode(oldMode);
+	}
 #elif defined __linux__
 	handle=dlopen(libname, RTLD_LAZY|RTLD_GLOBAL);
 #endif
 	if(!handle)
 	{
-		*phandle=(void*)-1;
+	//	error=GetLastError();
+		*phandle=handle;
+	//	*phandle=(void*)-1;
 		return;
 	}
 	for(int k=0;k<symcount;++k)
@@ -2552,6 +2558,7 @@ static void videoplayback_decode(void *p)
 				}
 			}
 #endif
+			playing=1;
 			avcodec.av_packet_unref(args->packet);
 			if(args->seekrequest)
 			{
@@ -2559,8 +2566,10 @@ static void videoplayback_decode(void *p)
 				args->seekrequest=0;
 			}
 		}
-		if(args->stopflag)
+		if(args->stopflag||playopt==PLAYOPT_LIST||playopt==PLAYOPT_SHUF)
 			break;
+		if(playopt==PLAYOPT_ONCE)
+			videoplayback_pause(0);
 		if(args->has_video)
 			avcodec.avcodec_flush_buffers(args->videoCodecContext);
 		if(args->has_audio)
@@ -2583,6 +2592,7 @@ static void videoplayback_decode(void *p)
 		}
 #endif
 	}
+	playing=0;
 	if(args->swrctx)
 		swresample.swr_free(&args->swrctx);
 	avformat.avformat_close_input(&video_decode_args->formatContext);
@@ -2674,7 +2684,7 @@ void videoplayback_pause(int stop)
 
 //https://github.com/ShootingKing-AM/ffmpeg-pseudocode-tutorial
 //https://github.com/leandromoreira/ffmpeg-libav-tutorial/blob/master/README.md
-int load_media(const wchar_t *filename, Image16 **image, int erroronfail)
+int load_media(const wchar_t *filename, Image16 **image, int erroronfail, int needsound)
 {
 	static int callctr=0;
 
@@ -2724,6 +2734,8 @@ int load_media(const wchar_t *filename, Image16 **image, int erroronfail)
 #endif
 	if(ffmpeg_ready!=2)//fallback
 	{
+		if(needsound)
+			return -1;
 		if(erroronfail&&!(callctr++))
 			LOG_WARNING("FFmpeg not found");
 
@@ -2761,7 +2773,11 @@ int load_media(const wchar_t *filename, Image16 **image, int erroronfail)
 		!WSTRICMP(filename+len-5, L".AVIF")||//libheif opens avif too (NEED LIBAVIF)
 		!WSTRICMP(filename+len-5, L".HEIC")
 	)
+	{
+		if(needsound)
+			return -1;
 		return load_heic(filename, image, erroronfail);
+	}
 #endif
 #ifdef HVIEW_INCLUDE_LIBRAW
 	if(
@@ -2776,7 +2792,11 @@ int load_media(const wchar_t *filename, Image16 **image, int erroronfail)
 		!WSTRICMP(filename+len-4, L".REF")||
 		!WSTRICMP(filename+len-4, L".RW2")
 	)
+	{
+		if(needsound)
+			return -1;
 		return load_raw(filename, image, erroronfail);
+	}
 #endif
 
 	if(
@@ -2784,6 +2804,9 @@ int load_media(const wchar_t *filename, Image16 **image, int erroronfail)
 		!WSTRICMP(filename+len-3, L".GR2")
 	)
 	{
+		if(needsound)
+			return -1;
+
 		int iw=0, ih=0, nlevels=0;
 		char bayermatrix[4]={0};
 		short *buf=gr2_load(filename, &iw, &ih, &nlevels, bayermatrix);
@@ -2853,6 +2876,9 @@ int load_media(const wchar_t *filename, Image16 **image, int erroronfail)
 		!WSTRICMP(filename+len-4, L".SLI")
 	)
 	{
+		if(needsound)
+			return -1;
+
 		int iw=0, ih=0, nch=0, dummy_alpha=0;
 		void *ret=slic2_load(filename, &iw, &ih, &nch, &imagedepth, &dummy_alpha, 1);
 		if(!ret)
@@ -2918,7 +2944,11 @@ int load_media(const wchar_t *filename, Image16 **image, int erroronfail)
 	if(
 		!WSTRICMP(filename+len-4, L".HUF")
 	)
+	{
+		if(needsound)
+			return -1;
 		return huf_load(filename, image, erroronfail);
+	}
 
 	if(
 		!WSTRICMP(filename+len-4, L".DOC")||
@@ -3124,11 +3154,15 @@ int load_media(const wchar_t *filename, Image16 **image, int erroronfail)
 			if(framecount>1)
 				break;
 		}
-		avformat.avformat_close_input(&formatContext);
 		avcodec.av_packet_free(&packet);
 		avutil.av_frame_free(&frame);
 		avcodec.avcodec_free_context(&codecContext);
 	}
+	avformat.avformat_close_input(&formatContext);
+	avformat.avformat_free_context(formatContext);
+	if(needsound&&audio_stream_index==-1)
+		return -1;
+
 	if(audio_stream_index!=-1&&video_stream_index==-1)
 		imagetype=IM_NONE;
 	if(framecount>1||audio_stream_index!=-1)

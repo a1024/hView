@@ -68,7 +68,7 @@ enum
 {
 	SLIDER_HEIGHT=64,
 
-	VOLUME_ANIMATION_NFRAMES=48,
+	ANIMATION_NFRAMES=48,
 };
 int mute_audio=0;
 float g_volume=1;
@@ -76,6 +76,8 @@ static int animation_ctr=0;
 
 extern int g_averror, g_avline;
 extern char ffmpegerror[64];
+
+int playopt=PLAYOPT_LOOP, playing=0;
 
 void impreview2gpu(uint8_t *data, int iw, int ih)
 {
@@ -362,15 +364,109 @@ static void zoom_at(int xs, int ys, double factor)
 
 	imagefitted=0;
 }
+void playbackendaction(void)
+{
+	if(playopt==PLAYOPT_LIST||playopt==PLAYOPT_SHUF)
+	{
+		ArrayHandle path=0, filenames=0, *fn2=0;
+
+		videoplayback_pause(1);
+		srand((uint32_t)__rdtsc());
+		WSTR_COPY(path, fn->data, fn->count);
+		wchar_t *str=(wchar_t*)path->data;
+		for(int k=(int)path->count-1;k>=0;--k)
+		{
+			if(str[k]==L'/'||str[k]==L'\\')
+			{
+				str[k+1]=0;
+				path->count=k+1LL;
+				break;
+			}
+		}
+		filenames=get_filenamesw(str, 0, 0, 1);
+		array_free(&path);
+		if(filenames&&filenames->count)
+		{
+			Image16 *im2=0;
+			if(playopt==PLAYOPT_SHUF)
+			{
+				for(int it=0;it<(int)filenames->count;++it)
+				{
+					int idx=rand()<<15^rand();
+					idx%=(int)filenames->count;
+					fn2=(ArrayHandle*)array_at(&filenames, idx);
+					if(!load_media((wchar_t*)fn2[0]->data, &im2, 0, 0))
+						break;
+					if(im2)
+						image_free(&im2);
+				}
+			}
+			else
+			{
+				int currentidx=-1;
+				for(int k=0;k<(int)filenames->count;++k)
+				{
+					fn2=(ArrayHandle*)array_at(&filenames, k);
+					if(!wcscmp((wchar_t*)fn2[0]->data, (wchar_t*)fn->data))
+					{
+						currentidx=k;
+						break;
+					}
+				}
+				if(currentidx==-1)
+#if defined _DEBUG &&0
+				{
+					console_start();
+					for(int k=0;k<(int)filenames->count;++k)
+					{
+						fn2=(ArrayHandle*)array_at(&filenames, k);
+						console_logw(L"%s\n", (wchar_t*)fn2[0]->data);
+					}
+					console_logw(L"\n%s\n", (wchar_t*)fn->data);
+					LOG_WARNING("Navigation error");
+				}
+#else
+				{
+					LOG_WARNING("Navigation error");
+					array_free(&filenames);
+					return;
+				}
+#endif
+				int step=1;
+				for(int k=currentidx+step;MODVAR(k, k, (int)filenames->count), k!=currentidx;k+=step)
+				{
+					fn2=(ArrayHandle*)array_at(&filenames, k);
+					if(!load_media((wchar_t*)fn2[0]->data, &im2, 0, 1))
+					{
+						currentidx=k;
+						break;
+					}
+					if(im2)
+						image_free(&im2);
+				}
+			}
+			if(im2||animated)
+			{
+				image_free(&image);
+				image_free(&impreview);
+				image=im2;
+				array_free(&fn);
+				fn=filter_pathw((wchar_t*)fn2[0]->data, -1, 0);
+				update_image(1, 1);
+			}
+			array_free(&filenames);
+		}
+	}
+}
 int io_init(int argc, wchar_t **argv)//return false to abort
 {
 #ifdef _DEBUG
 //#if 0
 	const wchar_t *filename=
 
-		L"D:/ML/dataset-Internet/os_bleh.gif"
+	//	L"D:/ML/dataset-Internet/os_bleh.gif"
 	//	L"E:/Share Box/Sound & Music/Headshot.wav"
-	//	L"E:/Share Box/Sound & Music/20250411 2.mp3"
+		L"E:/Share Box/Sound & Music/20250411 2.mp3"
 	//	L"E:/Share Box/Sound & Music/2024-11-07 at 3.54.45 PM.mp4"
 	//	L"E:/Share Box/Sound & Music/145 (Poodles) by Jake Chudnow [DokBeZKKeKI].opus"
 	//	L"D:/ML/dataset-Internet/quantum.mp4"
@@ -401,7 +497,7 @@ int io_init(int argc, wchar_t **argv)//return false to abort
 	//	L"C:/Projects/datasets/dataset-RAW/6K9A8788.CR3"
 
 	;
-	load_media(filename, &image, 1);
+	load_media(filename, &image, 1, 0);
 	if(image||animated)
 	{
 		fn=filter_pathw(filename, -1, 0);
@@ -415,7 +511,7 @@ int io_init(int argc, wchar_t **argv)//return false to abort
 	if(argc>1)
 	{
 		fn=filter_pathw(argv[1], -1, 0);
-		load_media((wchar_t*)fn->data, &image, 1);
+		load_media((wchar_t*)fn->data, &image, 1, 0);
 		if(image||animated)
 		{
 			update_image(1, 0);
@@ -434,7 +530,7 @@ void io_dropfile(const wchar_t *filename)
 {
 	Image16 *im2=0;
 
-	load_media(filename, &im2, 0);
+	load_media(filename, &im2, 0, 0);
 	if(im2||animated)
 	{
 		image_free(&image);
@@ -477,7 +573,7 @@ int io_mousewheel(int forward)
 			g_volume=1.f/128;
 		if(g_volume>2)
 			g_volume=2;
-		animation_ctr=VOLUME_ANIMATION_NFRAMES;
+		animation_ctr=ANIMATION_NFRAMES;
 	}
 	else if(GET_KEY_STATE(KEY_CTRL))
 	{
@@ -557,7 +653,7 @@ int io_keydn(IOKey key, char c)
 				"Ctrl V: Paste bitmap from clipboard\n"
 				"H: Toggle histogram\n"
 				"Ctrl H: Toggle hex/decimal pixel labels\n"
-				"P: Toggle pixel label source\n"
+				"P: Toggle pixel label source / Playback end action\n"
 				"X/Y: Toggle horizontal/vertical cross-sections\n"
 				"Quote: Toggle bitplane view\n"
 				"Brackets: Select bitplane\n"
@@ -828,7 +924,7 @@ int io_keydn(IOKey key, char c)
 				for(int k=currentidx+step;MODVAR(k, k, (int)filenames->count), k!=currentidx;k+=step)
 				{
 					fn2=(ArrayHandle*)array_at(&filenames, k);
-					if(!load_media((wchar_t*)fn2[0]->data, &im2, 0))
+					if(!load_media((wchar_t*)fn2[0]->data, &im2, 0, 0))
 					{
 						currentidx=k;
 						break;
@@ -860,7 +956,7 @@ int io_keydn(IOKey key, char c)
 			if(fn2)
 			{
 				Image16 *im2=0;
-				int error=load_media((wchar_t*)fn2->data, &im2, 1);
+				int error=load_media((wchar_t*)fn2->data, &im2, 1, 0);
 				if((im2||animated)&&!error)
 				{
 					image_free(&image);
@@ -881,7 +977,7 @@ int io_keydn(IOKey key, char c)
 		break;
 	case 'M':
 		mute_audio=1-mute_audio;
-		animation_ctr=VOLUME_ANIMATION_NFRAMES;
+		animation_ctr=ANIMATION_NFRAMES;
 		break;
 	case 'Q'://equalization
 		if(GET_KEY_STATE(KEY_CTRL))
@@ -1102,7 +1198,14 @@ int io_keydn(IOKey key, char c)
 		}
 		break;
 	case 'P':
-		pixelpreview=!pixelpreview;
+		if(animated)
+		{
+			int step=GET_KEY_STATE(KEY_SHIFT)?-1:1;
+			playopt=(playopt+step+PLAYOPT_COUNT)%PLAYOPT_COUNT;
+			animation_ctr=ANIMATION_NFRAMES;
+		}
+		else
+			pixelpreview=!pixelpreview;
 		return 1;
 	case 'H':
 		if(GET_KEY_STATE(KEY_CTRL))//toggle pixel label base
@@ -1163,7 +1266,7 @@ int io_keydn(IOKey key, char c)
 		else if(fn)
 		{
 			Image16 *im2=0;
-			load_media((wchar_t*)fn->data, &im2, 0);
+			load_media((wchar_t*)fn->data, &im2, 0, 0);
 			if(im2)
 			{
 				image_free(&image);
@@ -1534,6 +1637,8 @@ void io_render()
 
 	if(h<=0)
 		return;
+	if(animated&&!playing)
+		playbackendaction();
 	if(g_averror)
 	{
 		static uint32_t LOL_1=0;
@@ -1700,6 +1805,10 @@ void io_render()
 					GUIPrint(0, (float)(w-200), h/2.f, 2, "Muted");
 				else
 					GUIPrint(0, (float)(w-200), h/2.f, 2, "%8.4lf%%", 100.*g_volume);
+				GUIPrint(0, 0, h/2.f-3*2*tdy, 2, "%c LOOP", playopt==PLAYOPT_LOOP?'>':' ');
+				GUIPrint(0, 0, h/2.f-2*2*tdy, 2, "%c ONCE", playopt==PLAYOPT_ONCE?'>':' ');
+				GUIPrint(0, 0, h/2.f-1*2*tdy, 2, "%c LIST", playopt==PLAYOPT_LIST?'>':' ');
+				GUIPrint(0, 0, h/2.f+0*2*tdy, 2, "%c SHUF", playopt==PLAYOPT_SHUF?'>':' ');
 				--animation_ctr;
 			}
 #ifdef ENABLE_SUBTITLES

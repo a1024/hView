@@ -672,7 +672,7 @@ void image_inplaceyflip(Image16 *src, char *bayer);
 void image_transpose(Image16 **src, char *bayer);
 
 //the following 3 functions return: a negative value on failure; 0 on success
-int load_media(const wchar_t *filename, Image16 **image, int erroronfail);
+int load_media(const wchar_t *filename, Image16 **image, int erroronfail, int forcesound);
 int save_media(const wchar_t *filename, Image8 *image, int erroronfail);
 int save_media_as(Image16 *image, Image8 *impreview, const wchar_t *initialname, int namelen, int erroronfail);
 
@@ -746,6 +746,17 @@ typedef struct _Slider
 int slider_get(Slider *slider);
 int slider_set(double ratio, int fast);
 int slider_changespeed(double ratio);
+enum
+{
+	PLAYOPT_LOOP,//loop this one (default)
+	PLAYOPT_ONCE,//stop after playback
+	PLAYOPT_LIST,//sequence
+	PLAYOPT_SHUF,//random
+
+	PLAYOPT_COUNT,
+};
+extern int playopt, playing;
+void playbackendaction(void);
 
 //	#define ENABLE_SUBTITLES
 #ifdef ENABLE_SUBTITLES
