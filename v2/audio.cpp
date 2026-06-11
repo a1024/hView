@@ -54,8 +54,9 @@ extern "C" void audioplayback_thread(void *p)
 			Sleep(10);
 			continue;
 		}
-
-		WaitForSingleObject(hEvent, INFINITE);//Wait until WASAPI says we can write
+		
+		//WaitForSingleObject(hEvent, INFINITE);
+		WaitForSingleObject(hEvent, 100);//Wait until WASAPI says we can write
 		
 		if(!ctx->playing)
 			continue;
@@ -91,7 +92,7 @@ typedef enum MessageBoxTypeEnum
 extern "C" int messageboxa(MessageBoxType type, const char *title, const char *format, ...);
 static int audioplayback_error(int line, int e)
 {
-	messageboxa(MBOX_OK, "Error", "audio.cpp(%d): %d", line, e);
+	messageboxa(MBOX_OK, "Error", "audio.cpp(%d): %d  0x%08X", line, e, e);
 	return e;
 }
 #define ERROR_A(E) audioplayback_error(__LINE__, E)
@@ -217,7 +218,7 @@ extern "C" int audioplayback_pause(int stop)
 		if(ret!=S_OK)
 			ERROR_A(ret);
 		ret=audioctx.client->Reset();
-		if(ret!=S_OK)
+		if(ret!=S_OK&&(uint32_t)ret!=0x8889000b)//buffer operation pending
 			ERROR_A(ret);
 		audioctx.stopflag=1;
 		mt_finish(audioctx.threadctx);

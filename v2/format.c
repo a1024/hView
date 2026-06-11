@@ -1654,7 +1654,6 @@ typedef struct _VideoDecodeArgs
 	double videotimestamp, framedelta;
 	int coarsedelta;
 	double duration;
-	double timescale;
 
 	AVRational timebase;
 	double ftimebase;
@@ -1684,7 +1683,7 @@ int slider_get(Slider *slider)
 		return -1;
 	slider->timestamp=fmod(video_decode_args->videotimestamp, video_decode_args->duration);
 	slider->duration=video_decode_args->duration;
-	slider->timescale=video_decode_args->timescale;
+	slider->timescale=g_timescale;
 	slider->playing=video_decode_args->playing;
 	return 0;
 }
@@ -1695,16 +1694,16 @@ static void videoseek()
 	int64_t ts;
 	int error=0;
 	
-	if(args->has_video)
+	if(args->has_audio)
+	{
+		ts=(int64_t)(args->seektarget*args->audioCodecContext->sample_rate);
+		streamindex=args->audio_stream_index;
+	}
+	else
 	{
 		AVRational r={1, AV_TIME_BASE};
 		ts=avutil.av_rescale_q((int64_t)(args->seektarget*AV_TIME_BASE), r, args->timebase);
 		streamindex=args->video_stream_index;
-	}
-	else
-	{
-		ts=(int64_t)(args->seektarget*args->audioCodecContext->sample_rate);
-		streamindex=args->audio_stream_index;
 	}
 	error=avformat.av_seek_frame(args->formatContext, streamindex, ts, AVSEEK_FLAG_BACKWARD);
 
@@ -1765,7 +1764,7 @@ int slider_changespeed(double ratio)
 	
 	if(!args)
 		return -1;
-	args->timescale*=ratio;
+	g_timescale*=ratio;
 	return 0;
 }
 int audioplayback_dequeue(float *out, int nsamples)
@@ -1776,7 +1775,7 @@ int audioplayback_dequeue(float *out, int nsamples)
 	{
 		mutex_lock(args->aq.mutex);
 		while(!args->aq.count&&!args->stopflag)
-			cond_wait(args->aq.not_empty, args->aq.mutex);
+			cond_wait(args->aq.not_empty, args->aq.mutex, 100);
 		if(args->stopflag)
 		{
 			mutex_unlock(args->aq.mutex);
@@ -1834,7 +1833,7 @@ int frame_dequeue(void)
 	double target;
 	if(args->has_audio)
 	{
-		double delta=(audio_time-atime)*args->timescale;
+		double delta=(audio_time-atime)*g_timescale;
 		atime=audio_time;
 		target=args->videotimestamp;
 		args->videotimestamp+=delta;
@@ -1855,7 +1854,7 @@ int frame_dequeue(void)
 			mutex_unlock(args->fq.mutex);
 			return 0;
 		}
-		cond_wait(args->fq.not_empty, args->fq.mutex);
+		cond_wait(args->fq.not_empty, args->fq.mutex, 500);
 	}
 	if(args->stopflag)
 	{
@@ -1965,7 +1964,7 @@ static int frame_enqueue(VideoDecodeArgs *args)
 		return 1;
 	}
 	if(!args->has_audio&&args->fq.count>=FRAMEQUEUE_CAP)
-		cond_wait(args->fq.not_full, args->fq.mutex);
+		cond_wait(args->fq.not_full, args->fq.mutex, 500);
 	PlaybackFrame *frame3=args->fq.frames+args->fq.write_idx;
 	if(!frame3->data||frame3->iw!=args->vframe2->width||frame3->ih!=args->vframe2->height)
 	{
@@ -2240,7 +2239,14 @@ static void videoplayback_decode(void *p)
 		return;
 	}
 	double tstart=0;
-	if(args->has_video)
+	if(args->has_audio)
+	{
+		args->timebase=args->formatContext->streams[args->audio_stream_index]->time_base;
+		args->ftimebase=av_q2d(args->timebase);
+		args->framedelta=50;
+		args->coarsedelta=50;
+	}
+	else
 	{
 		args->timebase=args->formatContext->streams[args->video_stream_index]->time_base;
 		args->ftimebase=av_q2d(args->timebase);
@@ -2249,17 +2255,10 @@ static void videoplayback_decode(void *p)
 		if(args->coarsedelta<10)//min WM_TIMER delay
 			args->coarsedelta=10;
 	}
-	else
-	{
-		args->timebase=args->formatContext->streams[args->audio_stream_index]->time_base;
-		args->ftimebase=av_q2d(args->timebase);
-		args->framedelta=50;
-		args->coarsedelta=50;
-	}
-	if(args->has_video&&args->formatContext->streams[args->video_stream_index]->duration>0)
-		args->duration=args->formatContext->streams[args->video_stream_index]->duration*args->ftimebase;
-	else if(args->formatContext->duration>0)
+	if(args->formatContext->duration>0)
 		args->duration=args->formatContext->duration/(double)AV_TIME_BASE;
+	else if(args->has_video&&args->formatContext->streams[args->video_stream_index]->duration>0)
+		args->duration=args->formatContext->streams[args->video_stream_index]->duration*args->ftimebase;
 	else
 	{
 		tstart=time_sec();
@@ -2395,6 +2394,9 @@ static void videoplayback_decode(void *p)
 						}
 						args->seekflag=0;
 					}
+#ifdef PRINT_DEBUGTS
+					g_debugts=args->frame->best_effort_timestamp*args->ftimebase;//
+#endif
 
 #if 0
 					static int counter=0;
@@ -2419,7 +2421,7 @@ static void videoplayback_decode(void *p)
 					//av_sample_fmt_is_planar
 #endif
 
-					if(!args->swrctx||timescale!=args->timescale)
+					if(!args->swrctx||timescale!=g_timescale)
 					{
 						AVChannelLayout layout=AV_CHANNEL_LAYOUT_STEREO;
 						if(args->swrctx)
@@ -2430,7 +2432,7 @@ static void videoplayback_decode(void *p)
 							//Output (WASAPI)
 							&layout,
 							AV_SAMPLE_FMT_FLT,
-							(int)(48000/args->timescale),
+							(int)(48000/g_timescale),
 
 							//Input (from decoder)
 							&args->frame->ch_layout,
@@ -2442,7 +2444,7 @@ static void videoplayback_decode(void *p)
 						CHECK_AV2(error, args->erroronfail,);
 						error=swresample.swr_init(args->swrctx);
 						CHECK_AV2(error, args->erroronfail,);
-						timescale=args->timescale;
+						timescale=g_timescale;
 					}
 					int32_t nsamples=(int32_t)avutil.av_rescale_rnd(
 						swresample.swr_get_delay(args->swrctx, args->frame->sample_rate)+args->frame->nb_samples,
@@ -2479,7 +2481,8 @@ static void videoplayback_decode(void *p)
 					{
 						mutex_lock(args->aq.mutex);
 						while(args->aq.count>=AUDIO_BUFSIZE&&!args->stopflag)
-							cond_wait(args->aq.not_full, args->aq.mutex);
+						//	cond_wait(args->aq.not_full, args->aq.mutex, 500);
+							cond_wait(args->aq.not_full, args->aq.mutex, INFINITE);
 
 						if(args->stopflag)
 						{
@@ -2619,7 +2622,7 @@ void videoplayback_start(const char *fn, int has_video, int has_audio)
 	aq_init(&video_decode_args->aq);
 	video_decode_args->has_video=has_video;
 	video_decode_args->has_audio=has_audio;
-	video_decode_args->timescale=1;
+//	g_timescale=1;
 	video_decode_args->videotimestamp=0;
 	atime=0;
 	vtime=0;
@@ -2638,13 +2641,6 @@ void videoplayback_pause(int stop)
 		animated=0;
 		video_decode_args->playing=0;
 		video_decode_args->stopflag=1;
-		
-		if(video_decode_args->has_video)
-		{
-			mutex_lock(video_decode_args->fq.mutex);
-			cond_signal(video_decode_args->fq.not_full);
-			mutex_unlock(video_decode_args->fq.mutex);
-		}
 
 		if(video_decode_args->has_audio)
 		{
@@ -2652,6 +2648,13 @@ void videoplayback_pause(int stop)
 			cond_signal(video_decode_args->aq.not_full);
 			mutex_unlock(video_decode_args->aq.mutex);
 			audioplayback_pause(1);
+		}
+		
+		if(video_decode_args->has_video)
+		{
+			mutex_lock(video_decode_args->fq.mutex);
+			cond_signal(video_decode_args->fq.not_full);
+			mutex_unlock(video_decode_args->fq.mutex);
 		}
 
 		mt_finish(video_decode_args->decode_threadctx);

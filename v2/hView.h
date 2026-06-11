@@ -756,6 +756,11 @@ enum
 	PLAYOPT_COUNT,
 };
 extern int playopt, playing;
+extern double g_timescale;
+//	#define PRINT_DEBUGTS
+#ifdef PRINT_DEBUGTS
+extern double g_debugts;//
+#endif
 void playbackendaction(void);
 
 //	#define ENABLE_SUBTITLES

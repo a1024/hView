@@ -78,6 +78,10 @@ extern int g_averror, g_avline;
 extern char ffmpegerror[64];
 
 int playopt=PLAYOPT_LOOP, playing=0;
+double g_timescale=1;
+#ifdef PRINT_DEBUGTS
+double g_debugts=0;//
+#endif
 
 void impreview2gpu(uint8_t *data, int iw, int ih)
 {
@@ -395,7 +399,7 @@ void playbackendaction(void)
 					int idx=rand()<<15^rand();
 					idx%=(int)filenames->count;
 					fn2=(ArrayHandle*)array_at(&filenames, idx);
-					if(!load_media((wchar_t*)fn2[0]->data, &im2, 0, 0))
+					if(!load_media((wchar_t*)fn2[0]->data, &im2, 0, 1))
 						break;
 					if(im2)
 						image_free(&im2);
@@ -1273,6 +1277,7 @@ int io_keydn(IOKey key, char c)
 				image=im2;
 				update_image(0, 1);
 			}
+			g_timescale=1;
 		}
 		break;
 	case 'T':
@@ -1811,6 +1816,9 @@ void io_render()
 				GUIPrint(0, 0, h/2.f+0*2*tdy, 2, "%c SHUF", playopt==PLAYOPT_SHUF?'>':' ');
 				--animation_ctr;
 			}
+#ifdef PRINT_DEBUGTS
+			GUIPrint(0, w/2.f, h/2.f, 2, "%12.6lf", g_debugts);
+#endif
 #ifdef ENABLE_SUBTITLES
 			if(slider.timestamp>=sub_tstart&&slider.timestamp<=sub_tend)
 			{

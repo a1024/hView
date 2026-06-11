@@ -3338,12 +3338,12 @@ void cond_broadcast(void *c)
 	pthread_cond_broadcast(cond);
 #endif
 }
-void cond_wait(void *c, void *m)
+void cond_wait(void *c, void *m, int timeout)
 {
 	cond_t *cond=(cond_t*)c;
 	mutex_t *mutex=(mutex_t*)m;
 #ifdef _WIN32
-	SleepConditionVariableCS(cond, mutex, INFINITE);
+	SleepConditionVariableCS(cond, mutex, timeout);
 #else
 	pthread_cond_wait(cond, mutex);
 #endif

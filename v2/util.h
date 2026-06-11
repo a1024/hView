@@ -595,7 +595,7 @@ void* cond_init(void);
 void cond_destroy(void *c);
 void cond_signal(void *c);
 void cond_broadcast(void *c);
-void cond_wait(void *c, void *m);
+void cond_wait(void *c, void *m, int timeout);
 
 //PROFILER  (spawns a thread)		FIXME port to Linux
 #if defined PROFILER && (defined _MSC_VER || defined _WIN32)
