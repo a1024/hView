@@ -567,16 +567,19 @@ int io_mousemove()//return true to redraw
 int io_mousewheel(int forward)
 {
 	int mw_fwd=forward>0;
-	if(animated&&!slider_hide&&(uint32_t)(my-(h-tdy-SLIDER_HEIGHT))<SLIDER_HEIGHT)//change animation timescale
-		slider_changespeed(mw_fwd?1.1:1./1.1);
-	else if(animated)
+	if(animated)
 	{
-		mute_audio=0;
-		g_volume*=mw_fwd?2:0.5f;
-		if(mw_fwd&&!g_volume)
-			g_volume=1.f/128;
-		if(g_volume>2)
-			g_volume=2;
+		if(!slider_hide&&(uint32_t)(my-(h-tdy-SLIDER_HEIGHT))<SLIDER_HEIGHT)//change animation timescale
+			slider_changespeed(mw_fwd?1.1:1./1.1);
+		else
+		{
+			mute_audio=0;
+			g_volume*=mw_fwd?2:0.5f;
+			if(mw_fwd&&!g_volume)
+				g_volume=1.f/128;
+			if(g_volume>2)
+				g_volume=2;
+		}
 		animation_ctr=ANIMATION_NFRAMES;
 	}
 	else if(GET_KEY_STATE(KEY_CTRL))
@@ -1814,6 +1817,7 @@ void io_render()
 				GUIPrint(0, 0, h/2.f-2*2*tdy, 2, "%c ONCE", playopt==PLAYOPT_ONCE?'>':' ');
 				GUIPrint(0, 0, h/2.f-1*2*tdy, 2, "%c LIST", playopt==PLAYOPT_LIST?'>':' ');
 				GUIPrint(0, 0, h/2.f+0*2*tdy, 2, "%c SHUF", playopt==PLAYOPT_SHUF?'>':' ');
+				GUIPrint(0, w/2.f, (float)(h-3*tdy-SLIDER_HEIGHT), 2, "%12.3lfx", g_timescale);
 				--animation_ctr;
 			}
 #ifdef PRINT_DEBUGTS
