@@ -4,13 +4,6 @@
 #include<stdlib.h>
 static const char file[]=__FILE__;
 
-#define CLAMP2(X, LO, HI)\
-	do\
-	{\
-		if((X)<(LO))X=LO;\
-		if((X)>(HI))X=HI;\
-	}while(0)
-
 #define SHIFT 19
 #define PREDLIST\
 	PRED(N+W-NW)\

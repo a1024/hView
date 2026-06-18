@@ -40,6 +40,17 @@
 		}\
 	}while(0)
 #endif
+//#include<libexif/exif-data.h>
+//#include<libexif/exif-loader.h>
+//#include<libexif/exif-entry.h>
+//#include<libexif/exif-tag.h>
+#ifdef _MSC_VER
+#include<intrin.h>
+#elif defined __GNUC__
+#include<x86intrin.h>
+#endif
+//#include<timeapi.h>
+//#pragma comment(lib, "winmm.lib")
 static const char file[]=__FILE__;
 
 int g_averror=0, g_avline=0;
@@ -65,6 +76,7 @@ char ffmpegerror[AV_ERROR_MAX_STRING_SIZE]={0};
 	{\
 		if(E<0&&!g_averror)\
 		{\
+			__debugbreak();\
 			g_averror=E;\
 			g_avline=__LINE__;\
 			avutil.av_strerror(E, ffmpegerror, AV_ERROR_MAX_STRING_SIZE);\
@@ -214,7 +226,6 @@ static void api_load(void **phandle, const char *libname, void *api, const char 
 	{
 	//	error=GetLastError();
 		*phandle=handle;
-	//	*phandle=(void*)-1;
 		return;
 	}
 	for(int k=0;k<symcount;++k)
@@ -232,7 +243,7 @@ static void api_load(void **phandle, const char *libname, void *api, const char 
 #elif defined __linux__
 			dlclose(handle);
 #endif
-			handle=(void*)-1;
+			handle=0;
 			break;
 		}
 	}
@@ -284,7 +295,7 @@ static void apiload_libheif(void)
 static int load_heic(const wchar_t *filename, Image16 **image, int erroronfail)
 {
 	apiload_libheif();
-	if(handle_libheif==(void*)-1)//missing/incompatible
+	if(!handle_libheif)//missing/incompatible
 		return -1;
 
 	struct heif_error error={0};
@@ -424,7 +435,7 @@ static void apiload_libraw(void)
 static int load_raw(const wchar_t *filename, Image16 **image, int erroronfail)
 {
 	apiload_libraw();
-	if(handle_libraw==(void*)-1)//missing/incompatible
+	if(!handle_libraw)//missing/incompatible
 		return -1;
 
 	libraw_data_t *decoder=libraw.libraw_init(0);
@@ -1476,8 +1487,7 @@ static void load_ffmpeg()
 {
 	if(ffmpeg_ready)
 		return;
-	api_load(&handle_avformat,
-		"avformat-61"
+	api_load(&handle_avformat, "avformat-62"
 #ifdef _WIN32
 		".dll",
 #elif defined __linux__
@@ -1485,8 +1495,7 @@ static void load_ffmpeg()
 #endif
 		&avformat, symnames_avformat, _countof(symnames_avformat)
 	);
-	api_load(&handle_avcodec,
-		"avcodec-61"
+	api_load(&handle_avcodec, "avcodec-62"
 #ifdef _WIN32
 		".dll",
 #elif defined __linux__
@@ -1494,16 +1503,15 @@ static void load_ffmpeg()
 #endif
 		&avcodec, symnames_avcodec, _countof(symnames_avcodec)
 	);
-	api_load(&handle_avutil,
+	api_load(&handle_avutil, "avutil-60"
 #ifdef _WIN32
-		"avutil-59.dll",
+		".dll",
 #elif defined __linux__
-		"avutil-59.so",
+		".so",
 #endif
 		&avutil, symnames_avutil, _countof(symnames_avutil)
 	);
-	api_load(&handle_swscale,
-		"swscale-8"
+	api_load(&handle_swscale, "swscale-9"
 #ifdef _WIN32
 		".dll",
 #elif defined __linux__
@@ -1512,7 +1520,7 @@ static void load_ffmpeg()
 		&swscale, symnames_swscale, _countof(symnames_swscale)
 	);
 	api_load(&handle_swresample,
-		"swresample-5"
+		"swresample-6"
 #ifdef _WIN32
 		".dll",
 #elif defined __linux__
@@ -1520,17 +1528,6 @@ static void load_ffmpeg()
 #endif
 		&swresample, symnames_swresample, _countof(symnames_swresample)
 	);
-	if(
-		handle_avformat==(void*)-1	//missing/incompatible
-	||	handle_avcodec==(void*)-1
-	||	handle_avutil==(void*)-1
-	||	handle_swscale==(void*)-1
-	||	handle_swresample==(void*)-1
-	)
-	{
-		ffmpeg_ready=1;
-		return;
-	}
 	if(
 		!handle_avformat	//missing/incompatible
 	||	!handle_avcodec
@@ -1545,6 +1542,51 @@ static void load_ffmpeg()
 	ffmpeg_ready=2;
 }
 
+#if 0
+#define APILIST_LIBEXIF\
+	APIFUNC(exif_data_new_from_file, ExifData (*exif_data_new_from_file)(const char *path))\
+	APIFUNC(exif_content_get_entry, ExifEntry (*exif_content_get_entry)(ExifContent *content, ExifTag tag))\
+	APIFUNC(exif_data_unref, void (*exif_data_unref)(ExifData *data))\
+
+static const char *symnames_libexif[]=
+{
+#define APIFUNC(NAME, DECL) #NAME,
+	APILIST_LIBEXIF
+#undef  APIFUNC
+};
+typedef struct _APILIBEXIF
+{
+#define APIFUNC(NAME, DECL) DECL;
+	APILIST_LIBEXIF
+#undef  APIFUNC
+} APILIBEXIF;
+static APISWRESAMPLE libexif={0};
+static void *handle_libexif=0;
+static int libexif_ready=0;//0: not loaded,  1: don't use,  2: ready
+static void load_libexif()
+{
+	if(libexif_ready)
+		return;
+	api_load(&handle_libexif,
+		"libexif-12"
+#ifdef _WIN32
+		".dll",
+#elif defined __linux__
+		".so",
+#endif
+		&libexif, symnames_libexif, _countof(symnames_libexif)
+	);
+	if(
+		!handle_libexif			//missing/incompatible
+	)
+	{
+		ffmpeg_ready=1;
+		return;
+	}
+	ffmpeg_ready=2;
+}
+#endif
+
 extern uint32_t animated;
 extern int mute_audio;
 extern float g_volume;
@@ -1554,7 +1596,7 @@ enum
 	DECODESTATE_READY,
 	DECODESTATE_STOPPED,
 
-	FRAMEQUEUE_CAP=8,
+	FRAMEQUEUE_CAP=32,	//PoT
 	
 	DEFAULT_FRAMETIME=30,
 	TIMER_ID_VIDEO=16,
@@ -1566,6 +1608,7 @@ typedef struct _PlaybackFrame
 	int iw, ih;
 	double pts;
 	uint8_t *data;
+	uint32_t txid;
 } PlaybackFrame;
 typedef struct _PlaybackQueue
 {
@@ -1582,6 +1625,8 @@ static void fq_init(PlaybackQueue *fq)
 	fq->mutex=mutex_init();
 	fq->not_full=cond_init();
 	fq->not_empty=cond_init();
+	for(int k=0;k<FRAMEQUEUE_CAP;++k)
+		glGenTextures(1, &fq->frames[k].txid);
 }
 static void fq_destroy(PlaybackQueue *fq)
 {
@@ -1592,6 +1637,8 @@ static void fq_destroy(PlaybackQueue *fq)
 		f->ih=0;
 		f->pts=0;
 		free(f->data);
+		if(f->txid)
+			glDeleteTextures(1, &f->txid);
 		f->data=0;
 	}
 	mutex_destroy(fq->mutex);
@@ -1651,8 +1698,8 @@ typedef struct _VideoDecodeArgs
 	int has_audio;
 	AudioQueue aq;
 
-	double videotimestamp, framedelta;
-	int coarsedelta;
+	double videotimestamp, framedelta;//sec
+	int coarsedelta;//ms
 	double duration;
 
 	AVRational timebase;
@@ -1662,6 +1709,10 @@ typedef struct _VideoDecodeArgs
 	double seektarget, seekfrom;
 
 	int albumart;
+
+	//HANDLE hTimer, hTimerQueue;
+	void *videotimer_tctx;
+	int videotimeron;
 } VideoDecodeArgs;
 VideoDecodeArgs *video_decode_args=0;
 uint64_t framenumber=0;
@@ -1685,6 +1736,7 @@ int slider_get(Slider *slider)
 	slider->duration=video_decode_args->duration;
 	slider->timescale=g_timescale;
 	slider->playing=video_decode_args->playing;
+	slider->framedelta=video_decode_args->framedelta;
 	return 0;
 }
 static void videoseek()
@@ -1696,7 +1748,8 @@ static void videoseek()
 	
 	if(args->has_audio)
 	{
-		ts=(int64_t)(args->seektarget*args->audioCodecContext->sample_rate);
+		ts=(int64_t)(args->seektarget*1000);
+	//	ts=(int64_t)(args->seektarget*args->audioCodecContext->sample_rate);
 		streamindex=args->audio_stream_index;
 	}
 	else
@@ -1844,33 +1897,39 @@ int frame_dequeue(void)
 		args->videotimestamp+=args->framedelta;
 	}
 	if(!args->has_video)
-		return 0;
-
-	mutex_lock(args->fq.mutex);
+		return 1;
+	
+	if(!mutex_trylock(args->fq.mutex))
+		return 1;
+	//mutex_lock(args->fq.mutex);
 	while(!args->fq.count&&!args->stopflag)
 	{
 		if(args->albumart)
 		{
 			mutex_unlock(args->fq.mutex);
-			return 0;
+			return 1;
 		}
-		cond_wait(args->fq.not_empty, args->fq.mutex, 500);
+		if(!cond_wait(args->fq.not_empty, args->fq.mutex, 1))
+		{
+			mutex_unlock(args->fq.mutex);
+			return 1;
+		}
 	}
 	if(args->stopflag)
 	{
 		mutex_unlock(args->fq.mutex);
-		return 0;
+		return 1;
 	}
 	PlaybackFrame *frame4=args->fq.frames+args->fq.read_idx;
 	ptrdiff_t usize=(ptrdiff_t)4*frame4->iw*frame4->ih;
-
+	
 	if(!impreview||impreview->iw!=frame4->iw||impreview->ih!=frame4->ih)
 	{
 		void *ptr=realloc(impreview, sizeof(Image8)+usize);
 		if(!ptr)
 		{
 			LOG_ERROR("Alloc error");
-			return 0;
+			return 1;
 		}
 		impreview=(Image8*)ptr;
 		impreview->iw=frame4->iw;
@@ -1889,10 +1948,13 @@ int frame_dequeue(void)
 		if(!k||minerror>error)
 			minerror=error, bestidx=idx;
 	}
-	for(int k=args->fq.read_idx;k!=bestidx;k=(k+1)%FRAMEQUEUE_CAP)--args->fq.count;
+	for(int k=args->fq.read_idx;k!=bestidx;k=(k+1)%FRAMEQUEUE_CAP)
+		--args->fq.count, ++g_droppedframes;
 	args->fq.read_idx=bestidx;
 	frame4=args->fq.frames+args->fq.read_idx;
+	//impreview2gpu(frame4->data, impreview->iw, impreview->ih);
 	memcpy(impreview->data, frame4->data, usize);
+	//video_txid=frame4->txid;
 	vtime=frame4->pts;
 
 	args->fq.read_idx=(args->fq.read_idx+1)%FRAMEQUEUE_CAP;
@@ -1901,7 +1963,7 @@ int frame_dequeue(void)
 	mutex_unlock(args->fq.mutex);
 	
 	++framenumber;
-	impreview2gpu(impreview->data, impreview->iw, impreview->ih);
+	impreview2gpu(impreview->data, impreview->iw, impreview->ih, &image_txid);
 	return 0;
 }
 static int frame_enqueue(VideoDecodeArgs *args)
@@ -2002,6 +2064,7 @@ static int frame_enqueue(VideoDecodeArgs *args)
 		else
 			memcpy(frame3->data, args->vframe2->data[0], usize);
 	}
+	//impreview2gpu(frame3->data, frame3->iw, frame3->ih, &frame3->txid);
 	frame3->pts=args->frame->best_effort_timestamp*args->ftimebase;
 	args->fq.write_idx=(args->fq.write_idx+1)%FRAMEQUEUE_CAP;
 	++args->fq.count;
@@ -2102,6 +2165,130 @@ static int save_wav_f32_stereo(const char *filename, float *data, int num_frames
 }
 #endif
 
+#if defined USEQUEUETIMER
+static void __stdcall newframecb(PVOID p, BOOLEAN b)
+{
+	VideoDecodeArgs *args=(VideoDecodeArgs*)p;
+	int success=0;
+	if(!args)
+		return;
+	invalidate();
+	//success=PostMessageW(ghWnd, WM_PAINT, TIMER_ID_VIDEO, 0);
+}
+static int videotimer_start()
+{
+	int success=0;
+
+	video_decode_args->hTimerQueue=CreateTimerQueue();
+	if(!video_decode_args->hTimerQueue)
+		return 1;
+	success=CreateTimerQueueTimer(&video_decode_args->hTimer
+		, video_decode_args->hTimerQueue
+		, &newframecb
+		, video_decode_args
+		, video_decode_args->coarsedelta	//first time
+		, video_decode_args->coarsedelta	//repeat
+		, WT_EXECUTEDEFAULT
+	);
+	return !success;
+}
+static int videotimer_stop()
+{
+	int success=0;
+	if(video_decode_args->hTimer)
+	{
+		success=DeleteTimerQueueTimer(video_decode_args->hTimerQueue, video_decode_args->hTimer, 0);
+		video_decode_args->hTimer=0;
+	}
+	if(success&&video_decode_args->hTimerQueue)
+	{
+		success&=DeleteTimerQueue(video_decode_args->hTimerQueue);
+		video_decode_args->hTimerQueue=0;
+	}
+	return success;
+}
+#endif
+#if defined USEHIRESTIMER
+static void timerthread(void *p)
+{
+	VideoDecodeArgs *args=video_decode_args;
+	HANDLE timer=0;
+	double next=0;
+	
+	(void)p;
+	if(!args)
+		return;
+	timer=CreateWaitableTimerExW(
+		NULL,
+		NULL,
+		CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
+		TIMER_ALL_ACCESS
+	);
+	if(!timer)
+	{
+		LOG_WARNING("CreateWaitableTimerExW %d", GetLastError());
+		return;
+	}
+	next=time_sec();
+	while(args->videotimeron)
+	{
+		double now;
+		LARGE_INTEGER due={0};
+		
+		now=time_sec();
+	//	now=args->has_audio?time_sec_audioclock():time_sec();
+		if(next>now)
+		{
+			due.QuadPart=-(int64_t)ceil((next-now)*10e6);//convert to a multiple of 100ns, negative indicate relative time
+			SetWaitableTimerEx(timer, &due, 0, 0, 0, 0, 0);
+			recordevent(EVNT_FRAMEDISPATCH, 1);
+			WaitForSingleObject(timer, INFINITE);
+			recordevent(EVNT_FRAMEDISPATCH, 0);
+		}
+		invalidate();
+		next+=args->framedelta;
+	}
+	CloseHandle(timer);
+}
+static int videotimer_start()
+{
+	video_decode_args->videotimeron=1;
+	video_decode_args->videotimer_tctx=mt_exec(&timerthread, video_decode_args, sizeof(*video_decode_args), 1);
+	return 0;
+	//int success=0;
+	//
+	//video_decode_args->hTimerQueue=CreateTimerQueue();
+	//if(!video_decode_args->hTimerQueue)
+	//	return 1;
+	//success=CreateTimerQueueTimer(&video_decode_args->hTimer
+	//	, video_decode_args->hTimerQueue
+	//	, &newframecb
+	//	, video_decode_args
+	//	, video_decode_args->coarsedelta	//first time
+	//	, video_decode_args->coarsedelta	//repeat
+	//	, WT_EXECUTEDEFAULT
+	//);
+	//return !success;
+}
+static int videotimer_stop()
+{
+	video_decode_args->videotimeron=0;
+	mt_finish(video_decode_args->videotimer_tctx);
+	return 0;
+	//int success=0;
+	//if(video_decode_args->hTimer)
+	//{
+	//	success=DeleteTimerQueueTimer(video_decode_args->hTimerQueue, video_decode_args->hTimer, 0);
+	//	video_decode_args->hTimer=0;
+	//}
+	//if(success&&video_decode_args->hTimerQueue)
+	//{
+	//	success&=DeleteTimerQueue(video_decode_args->hTimerQueue);
+	//	video_decode_args->hTimerQueue=0;
+	//}
+	//return success;
+}
+#endif
 static void videoplayback_decode(void *p)
 {
 	VideoDecodeArgs *args=(VideoDecodeArgs*)p;
@@ -2243,17 +2430,23 @@ static void videoplayback_decode(void *p)
 	{
 		args->timebase=args->formatContext->streams[args->audio_stream_index]->time_base;
 		args->ftimebase=av_q2d(args->timebase);
-		args->framedelta=50;
-		args->coarsedelta=50;
 	}
 	else
 	{
 		args->timebase=args->formatContext->streams[args->video_stream_index]->time_base;
 		args->ftimebase=av_q2d(args->timebase);
+	}
+	if(args->has_video)
+	{
 		args->framedelta=1/av_q2d(args->formatContext->streams[args->video_stream_index]->avg_frame_rate);
-		args->coarsedelta=(int)round(1000*args->framedelta);
+		args->coarsedelta=(int)ROUND64(1000*args->framedelta);
 		if(args->coarsedelta<10)//min WM_TIMER delay
 			args->coarsedelta=10;
+	}
+	else if(args->has_audio)
+	{
+		args->framedelta=0.05;
+		args->coarsedelta=(int)ROUND64(1000*args->framedelta);
 	}
 	if(args->formatContext->duration>0)
 		args->duration=args->formatContext->duration/(double)AV_TIME_BASE;
@@ -2264,7 +2457,12 @@ static void videoplayback_decode(void *p)
 		tstart=time_sec();
 		args->duration=0;
 	}
-	timer_start(args->coarsedelta, TIMER_ID_VIDEO);
+#if defined USEQUEUETIMER || defined USEHIRESTIMER
+	if(args->has_video)
+		videotimer_start();
+	else
+#endif
+		timer_start(args->coarsedelta, TIMER_ID_VIDEO);
 
 	args->albumart=0;
 	if(args->audio_stream_index!=-1&&args->video_stream_index!=-1)
@@ -2308,7 +2506,15 @@ static void videoplayback_decode(void *p)
 		{
 			if(args->packet->stream_index==args->video_stream_index)
 			{
+#ifdef PROFILE_FPS
+				recordevent(EVNT_DEC, 1);
+				//double t=time_sec();
+#endif
 				error=avcodec.avcodec_send_packet(args->videoCodecContext, args->packet);
+#ifdef PROFILE_FPS
+				recordevent(EVNT_DEC, 0);
+				//tdec+=time_sec()-t;
+#endif
 				if(args->seekflag&&error<0)
 				{
 					avcodec.av_packet_unref(args->packet);
@@ -2435,9 +2641,9 @@ static void videoplayback_decode(void *p)
 							(int)(48000/g_timescale),
 
 							//Input (from decoder)
-							&args->frame->ch_layout,
+							&args->audioCodecContext->ch_layout,
 							(enum AVSampleFormat)args->frame->format,
-							args->frame->sample_rate,
+							args->audioCodecContext->sample_rate,
 
 							0, 0
 						);
@@ -2446,10 +2652,11 @@ static void videoplayback_decode(void *p)
 						CHECK_AV2(error, args->erroronfail,);
 						timescale=g_timescale;
 					}
+					int64_t delay=swresample.swr_get_delay(args->swrctx, args->audioCodecContext->sample_rate);
 					int32_t nsamples=(int32_t)avutil.av_rescale_rnd(
-						swresample.swr_get_delay(args->swrctx, args->frame->sample_rate)+args->frame->nb_samples,
+						delay+args->frame->nb_samples,
 						48000,
-						args->frame->sample_rate,
+						args->audioCodecContext->sample_rate,
 						AV_ROUND_UP
 					);
 					if(!args->abuf||nsamples>args->nsamples_cap)
@@ -2637,7 +2844,12 @@ void videoplayback_pause(int stop)
 		return;
 	if(stop)
 	{
-		timer_stop(TIMER_ID_VIDEO);
+#if defined USEQUEUETIMER || defined USEHIRESTIMER
+		if(video_decode_args->has_video)
+			videotimer_stop();
+		else
+#endif
+			timer_stop(TIMER_ID_VIDEO);
 		animated=0;
 		video_decode_args->playing=0;
 		video_decode_args->stopflag=1;
@@ -2673,9 +2885,23 @@ void videoplayback_pause(int stop)
 		if(video_decode_args->has_audio)
 			audioplayback_pause(0);
 		if(video_decode_args->playing)
-			timer_start(video_decode_args->coarsedelta, TIMER_ID_VIDEO);
+		{
+#if defined USEQUEUETIMER || defined USEHIRESTIMER
+			if(video_decode_args->has_video)
+				videotimer_start();
+			else
+#endif
+				timer_start(video_decode_args->coarsedelta, TIMER_ID_VIDEO);
+		}
 		else
-			timer_stop(TIMER_ID_VIDEO);
+		{
+#if defined USEQUEUETIMER || defined USEHIRESTIMER
+			if(video_decode_args->has_video)
+				videotimer_stop();
+			else
+#endif
+				timer_stop(TIMER_ID_VIDEO);
+		}
 	}
 }
 
@@ -2691,7 +2917,6 @@ int load_media(const wchar_t *filename, Image16 **image, int erroronfail, int ne
 {
 	static int callctr=0;
 
-	load_ffmpeg();
 #if 1
 	//{
 	//	struct _stat64 info={0};
@@ -2735,41 +2960,6 @@ int load_media(const wchar_t *filename, Image16 **image, int erroronfail, int ne
 		}
 	}
 #endif
-	if(ffmpeg_ready!=2)//fallback
-	{
-		if(needsound)
-			return -1;
-		if(erroronfail&&!(callctr++))
-			LOG_WARNING("FFmpeg not found");
-
-		unsigned short *stbi_load_16(char const *filename, int *x, int *y, int *channels_in_file, int desired_channels);
-		unsigned char* stbi_load(const char *filename, int *x, int *y, int *channels_in_file, int desired_channels);
-		int iw=0, ih=0, nch=0;
-		char fn_utf8[4096]={0};
-		WideCharToMultiByte(CP_UTF8, 0, filename, -1, fn_utf8, 4096, 0, 0);
-		unsigned char *im2=stbi_load(fn_utf8, &iw, &ih, &nch, 4);
-		if(!im2)
-		{
-			if(erroronfail)
-				LOG_WARNING("Cannot open \"%s\"", filename);
-			return -1;
-		}
-		*image=image_alloc16(0, iw, ih, nch, 4, 256, 8);
-		for(ptrdiff_t k=0, res=(ptrdiff_t)4*iw*ih;k<res;k+=4)//byte -> word
-		{
-			image[0]->data[k+0]=im2[k+0];
-			image[0]->data[k+1]=im2[k+1];
-			image[0]->data[k+2]=im2[k+2];
-			image[0]->data[k+3]=im2[k+3];
-		}
-		free(im2);
-		has_alpha=nch==4;
-		imagetype=IM_RGBA;
-		imagedepth=8;
-		*(int*)bayer=0;
-		update_globals(filename, *image);
-		return 0;
-	}
 	int len=(int)wcslen(filename);
 #ifdef HVIEW_INCLUDE_LIBHEIF
 	if(
@@ -2967,9 +3157,47 @@ int load_media(const wchar_t *filename, Image16 **image, int erroronfail, int ne
 		!WSTRICMP(filename+len-4, L".SVG")
 	)
 		return -2;
+	load_ffmpeg();
+	if(ffmpeg_ready!=2)//fallback
+	{
+		if(needsound)
+			return -1;
+		if(erroronfail&&!(callctr++))
+			LOG_WARNING("FFmpeg not found");
+
+		unsigned short *stbi_load_16(char const *filename, int *x, int *y, int *channels_in_file, int desired_channels);
+		unsigned char* stbi_load(const char *filename, int *x, int *y, int *channels_in_file, int desired_channels);
+		int iw=0, ih=0, nch=0;
+		char fn_utf8[4096]={0};
+		WideCharToMultiByte(CP_UTF8, 0, filename, -1, fn_utf8, 4096, 0, 0);
+		unsigned char *im2=stbi_load(fn_utf8, &iw, &ih, &nch, 4);
+		if(!im2)
+		{
+			if(erroronfail)
+				LOG_WARNING("Cannot open \"%s\"", filename);
+			return -1;
+		}
+		*image=image_alloc16(0, iw, ih, nch, 4, 256, 8);
+		for(ptrdiff_t k=0, res=(ptrdiff_t)4*iw*ih;k<res;k+=4)//byte -> word
+		{
+			image[0]->data[k+0]=im2[k+0];
+			image[0]->data[k+1]=im2[k+1];
+			image[0]->data[k+2]=im2[k+2];
+			image[0]->data[k+3]=im2[k+3];
+		}
+		free(im2);
+		has_alpha=nch==4;
+		imagetype=IM_RGBA;
+		imagedepth=8;
+		*(int*)bayer=0;
+		update_globals(filename, *image);
+		return 0;
+	}
 	
 	char fn_utf8[4096];
 	WideCharToMultiByte(CP_UTF8, 0, filename, -1, fn_utf8, 4096, 0, 0);
+	
+	int rotation=get_metadata(filename);
 
 	int error;
 	AVFormatContext *formatContext=avformat.avformat_alloc_context();
@@ -3166,6 +3394,36 @@ int load_media(const wchar_t *filename, Image16 **image, int erroronfail, int ne
 	if(needsound&&audio_stream_index==-1)
 		return -1;
 
+	g_rotation=rotation;
+	if(g_rotation==ROTATE_ARBITRARY)
+	{
+		float rads=(float)time_sec();//
+		g_rotationmatrix[0]=cosf(rads);
+		g_rotationmatrix[1]=-sinf(rads);
+		g_rotationmatrix[2]=-g_rotationmatrix[1];
+		g_rotationmatrix[3]=g_rotationmatrix[0];
+	}
+	else if(g_rotation==ROTATE_180)
+	{
+		g_rotationmatrix[0]=-1;
+		g_rotationmatrix[1]=0;
+		g_rotationmatrix[2]=0;
+		g_rotationmatrix[3]=-1;
+	}
+	else if(g_rotation==ROTATE_90CW)
+	{
+		g_rotationmatrix[0]=0;
+		g_rotationmatrix[1]=-1;
+		g_rotationmatrix[2]=1;
+		g_rotationmatrix[3]=0;
+	}
+	else if(g_rotation==ROTATE_270CW)
+	{
+		g_rotationmatrix[0]=0;
+		g_rotationmatrix[1]=1;
+		g_rotationmatrix[2]=-1;
+		g_rotationmatrix[3]=0;
+	}
 	if(audio_stream_index!=-1&&video_stream_index==-1)
 		imagetype=IM_NONE;
 	if(framecount>1||audio_stream_index!=-1)
@@ -3183,7 +3441,9 @@ int load_media(const wchar_t *filename, Image16 **image, int erroronfail, int ne
 	update_globals(filename, *image);
 	if((framecount>1||audio_stream_index!=-1)&&*image)
 	{
-		image_fit2screen(image[0]->iw, image[0]->ih);
+		g_iw=image[0]->iw;
+		g_ih=image[0]->ih;
+		image_fit2screen(g_iw, g_ih);
 		image_free(image);
 		imagetype=IM_NONE;
 	}
@@ -3529,7 +3789,7 @@ static void print_version(char **dst, const char *end, const char *libname, int 
 		isdll?"dll":"h"
 	);
 }
-char* get_codecinfo(void)//don't forget to free(mem)
+char* get_libinfo(void)//don't forget to free(mem)
 {
 #define BUFLEN 8192
 	char *str=(char*)malloc(BUFLEN);
@@ -3573,7 +3833,7 @@ char* get_codecinfo(void)//don't forget to free(mem)
 	
 	ptr+=snprintf(ptr, end-ptr, "\n");
 	apiload_libheif();
-	if(handle_libheif==(void*)-1||!handle_libheif)
+	if(!handle_libheif)
 		ptr+=snprintf(ptr, end-ptr, "libheif:\tNot found\n");
 	else
 	{
@@ -3585,7 +3845,7 @@ char* get_codecinfo(void)//don't forget to free(mem)
 	
 	ptr+=snprintf(ptr, end-ptr, "\n");
 	apiload_libraw();
-	if(handle_libraw==(void*)-1||!handle_libraw)
+	if(!handle_libraw)
 		ptr+=snprintf(ptr, end-ptr, "libraw:\tNot found\n");
 	else
 	{

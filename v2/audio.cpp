@@ -27,6 +27,7 @@ typedef struct _AudioCtx
 	IAudioClock *clock;
 } AudioCtx;
 AudioCtx audioctx={0};
+extern "C" int g_ole32initialized;
 extern "C" void* mt_exec(void (*func)(void*), void *args, int argbytes, int nthreads);
 extern "C" void  mt_finish(void *mt_ctx);
 extern "C" int audioplayback_dequeue(float *out, int nsamples);
@@ -102,11 +103,15 @@ extern "C" int audioplayback_start(void)
 
 	memset(&audioctx, 0, sizeof(audioctx));
 
-	ret=CoInitializeEx(0, COINIT_MULTITHREADED);
-	if(ret!=S_OK&&ret!=RPC_E_CHANGED_MODE)
+	if(!g_ole32initialized)
 	{
-		ERROR_A(ret);
-		return ret;
+		ret=CoInitializeEx(0, COINIT_MULTITHREADED);
+		if(ret!=S_OK&&ret!=RPC_E_CHANGED_MODE)
+		{
+			ERROR_A(ret);
+			return ret;
+		}
+		g_ole32initialized=1;
 	}
 
 	audioctx.enumerator=0;
@@ -222,7 +227,7 @@ extern "C" int audioplayback_pause(int stop)
 			ERROR_A(ret);
 		audioctx.stopflag=1;
 		mt_finish(audioctx.threadctx);
-		CoUninitialize();
+	//	CoUninitialize();
 	}
 	else if(stop==2)//flush
 	{

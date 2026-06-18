@@ -54,13 +54,30 @@ extern "C"
 #define ROTATE3(A, B, C, TEMP) TEMP=A, A=B, B=C, C=TEMP
 #define MINVAR(A, B) ((A)<(B)?(A):(B))
 #define MAXVAR(A, B) ((A)>(B)?(A):(B))
-#define CLAMP2(X, LO, HI)\
-	do\
-	{\
-		if((X)<(LO))X=LO;\
-		if((X)>(HI))X=HI;\
-	}while(0)
-//#define CLAMP(LO, X, HI) ((X)>(LO)?(X)<(HI)?(X):(HI):(LO))
+#define CLAMP2(X, L, H) X=X<(L)?L:X, X=X>(H)?H:X
+#if _MSC_VER
+#define LZCNT32 _lzcnt_u32
+#define LZCNT64 _lzcnt_u64
+#define TZCNT32 _tzcnt_u32
+#define TZCNT64 _tzcnt_u64
+#define ROUND32(X) _mm_cvt_ss2si(_mm_set_ss(X))
+#define ROUND64(X) _mm_cvtsd_si64(_mm_set_sd(X))
+#define TRUNC32(X) _mm_cvtt_ss2si(_mm_set_ss(X))
+#define TRUNC64(X) _mm_cvttsd_si64(_mm_set_sd(X))
+#define FLOOR32(X) _mm_cvtt_ss2si(_mm_floor_ps(_mm_set_ss(X)))
+#define FLOOR64(X) _mm_cvttsd_si64(_mm_floor_pd(_mm_set_sd(X)))
+#define CEIL32(X) _mm_cvtt_ss2si(_mm_ceil_ps(_mm_set_ss(X)))
+#define CEIL64(X) _mm_cvttsd_si64(_mm_ceil_pd(_mm_set_sd(X)))
+#else
+#define LZCNT32(X) (X?__builtin_clz(X):32)
+#define LZCNT64(X) (X?__builtin_clzll(X):64)
+#define TZCNT32(X) (X?__builtin_ctz(X):32)
+#define TZCNT64(X) (X?__builtin_ctzll(X):64)
+#define ROUND32(X) roundf(X)
+#define ROUND64(X) round(X)
+#define TRUNC32(X) truncf(X)
+#define TRUNC64(X) trunc(X)
+#endif
 
 //include<smmintrin.h>	SSE4.1
 #define MEDIAN3_32(DST, A, B, C)\
@@ -590,12 +607,13 @@ void  mt_finish(void *mt_ctx);
 void* mutex_init(void);
 void mutex_destroy(void *m);
 void mutex_lock(void *m);
+int mutex_trylock(void *m);
 void mutex_unlock(void *m);
 void* cond_init(void);
 void cond_destroy(void *c);
 void cond_signal(void *c);
 void cond_broadcast(void *c);
-void cond_wait(void *c, void *m, int timeout);
+int cond_wait(void *c, void *m, int timeout);
 
 //PROFILER  (spawns a thread)		FIXME port to Linux
 #if defined PROFILER && (defined _MSC_VER || defined _WIN32)

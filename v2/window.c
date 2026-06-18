@@ -1039,10 +1039,20 @@ void update_main_key_states()
 	keyboard[VK_MENU]=GET_KEY_STATE(VK_LMENU)<<1|GET_KEY_STATE(VK_RMENU);
 }
 
-void timer_start(int ms, int id)
+int timer_start(int ms, int id)
 {
 	if(!timer)
-		SetTimer(ghWnd, id, ms, 0), timer=1;
+	{
+		ptrdiff_t success=SetTimer(ghWnd, id, ms, 0);
+		if(success)
+			timer=1;
+		else
+		{
+			int e=GetLastError();
+			return e;
+		}
+	}
+	return 0;
 }
 void timer_stop(int id)
 {
@@ -1299,6 +1309,8 @@ int __stdcall WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrev, _In_ c
 		io_cleanup();
 		LocalFree(argv);
 		ReleaseDC(ghWnd, ghDC);
+		if(g_ole32initialized)
+			CoUninitialize();
 		OleUninitialize();
 
 	return (int)msg.wParam;

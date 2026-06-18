@@ -1,9 +1,15 @@
-﻿#include"hView.h"
+﻿#define EXPOSE_CVT
+#include"hView.h"
 #include<stdio.h>
 #include<stdlib.h>
 #include<string.h>
 #include<math.h>
 #include<sys/stat.h>
+#ifdef _MSC_VER
+#include<intrin.h>
+#elif defined __GNUC__
+#include<x86intrin.h>
+#endif
 static const char file[]=__FILE__;
 
 //active keys turn on timer
@@ -61,15 +67,27 @@ int pixelpreview=1;
 int brightness=0;//impreview = CLAMP(image<<brightness)
 
 extern uint64_t framenumber;
-uint32_t image_txid=0;
+uint32_t image_txid=0;//maintained by image viewer
+//uint32_t video_txid=0;//maintained by video playback	X
 uint32_t animated=0;
-int slider_hide=0;
 enum
 {
+	ANIMUI_SLIDER=0,
+	ANIMUI_CLEAN,
+	ANIMUI_STATS,
+	ANIMUI_COUNT,
+
 	SLIDER_HEIGHT=64,
 
 	ANIMATION_NFRAMES=48,
 };
+int anim_uitype=
+#if defined _DEBUG
+	ANIMUI_STATS
+#else
+	ANIMUI_SLIDER
+#endif
+;
 int mute_audio=0;
 float g_volume=1;
 static int animation_ctr=0;
@@ -83,25 +101,90 @@ double g_timescale=1;
 double g_debugts=0;//
 #endif
 
-void impreview2gpu(uint8_t *data, int iw, int ih)
+#ifdef PROFILE_FPS
+enum
 {
-	if(!image_txid)
-		glGenTextures(1, &image_txid);
-	if(image_txid)
-		send_texture_pot(image_txid, (int*)data, iw, ih, 0, 1);
+	FPS_QUEUESIZE=1024,
+	FPS_QUEUEMASK=FPS_QUEUESIZE-1,
+};
+typedef struct _ProfileEvent
+{
+	double t;
+	ProfileEventType event;
+	int start;
+} ProfileEvent;
+static int fpsprof_colors[EVNT_COUNT]=
+{
+	0xC00000FF,
+	0xC000FF00,
+	0xC0FF0000,
+	0xC0000000,
+};
+static int fps_start=0;
+static ProfileEvent fps_checkpoints[FPS_QUEUESIZE]={0};
+static void *fps_mutex=0;
+//double fps_checkpoints[FPS_QUEUESIZE][4]={0};
+//double tdec=0, tsend2gpu=0;
+void recordevent(int eventtype, int start)
+{
+	ProfileEvent *e;
+	double t;
+
+	if(!fps_mutex)
+		fps_mutex=mutex_init();
+	t=time_sec();
+	mutex_lock(fps_mutex);
+	e=fps_checkpoints+fps_start++;
+	fps_start&=FPS_QUEUEMASK;
+	e->event=eventtype;
+	e->start=start;
+	e->t=t;
+	mutex_unlock(fps_mutex);
+}
+#endif
+
+int g_rotation=ROTATE_NORMAL;
+double g_rotationmatrix[4]={1, 0, 0, 1};
+int g_droppedframes=0;
+int g_ole32initialized=0;
+int g_iw=0, g_ih=0;
+
+int impreview2gpu(uint8_t *data, int iw, int ih, uint32_t *txid)
+{
+	if(!*txid)
+		glGenTextures(1, txid);
+	if(!*txid)
+	{
+		int e=glGetError();
+		return e;
+	}
+	send_texture_pot(*txid, (int*)data, iw, ih, 0, 1);
+	return 0;
 }
 void image_fit2screen(int iw, int ih)
 {
 	int wndw=w, wndh=h-17;
-	if((double)wndw/wndh>=(double)iw/ih)//window AR > image AR: fit height
-	{
-		if(wndh>0)
-			zoom=(double)wndh/ih;
-	}
-	else//window AR < image AR: fit width
-		zoom=(double)wndw/iw;
-	wpx=(iw-wndw/zoom)*0.5;//center image
+	double rotw=fabs(g_rotationmatrix[0]*iw)+fabs(g_rotationmatrix[1]*ih);
+	double roth=fabs(g_rotationmatrix[2]*iw)+fabs(g_rotationmatrix[3]*ih);
+	zoom=fmin((double)wndw/rotw, (double)wndh/roth);
+	wpx=(iw-wndw/zoom)*0.5;
 	wpy=(ih-wndh/zoom)*0.5;
+	//int wndw=w, wndh=h-17;
+	//if((double)wndw/wndh>=(double)iw/ih)//window AR > image AR: fit height
+	//{
+	//	if(wndh>0)
+	//		zoom=(double)wndh/ih;
+	//}
+	//else//window AR < image AR: fit width
+	//	zoom=(double)wndw/iw;
+	//wpx=(iw-wndw/zoom)*0.5;//center image
+	//wpy=(ih-wndh/zoom)*0.5;
+	//{
+	//	HPoint2D p={0, 0};
+	//	screen2image(&p);
+	//	wpx=(int)floor(p.x);
+	//	wpy=(int)floor(p.y);
+	//}
 	imagefitted=1;
 }
 static void calc_hist()
@@ -211,7 +294,7 @@ static void equalize(void)
 		break;
 	}
 	free(hist);
-	impreview2gpu(impreview->data, impreview->iw, impreview->ih);
+	impreview2gpu(impreview->data, impreview->iw, impreview->ih, &image_txid);
 }
 static void update_image(int settitle, int render)
 {
@@ -236,6 +319,19 @@ static void update_image(int settitle, int render)
 		case IM_BAYERv2:
 			impreview=image_alloc8(0, image->iw>>1, image->ih>>1, 4, 8);
 			break;
+		}
+		if(impreview)
+		{
+			//if(g_rotation==ROTATE_90CW||g_rotation==ROTATE_270CW)
+			//{
+			//	g_iw=impreview->ih;
+			//	g_ih=impreview->iw;
+			//}
+			//else
+			{
+				g_iw=impreview->iw;
+				g_ih=impreview->ih;
+			}
 		}
 	//	impreview=image_construct(0, 0, 8, 0, image->iw, image->ih, 0, image->depth);
 	}
@@ -323,8 +419,8 @@ static void update_image(int settitle, int render)
 	if(hist_on)
 		calc_hist();
 	if(imagefitted)
-		image_fit2screen(impreview->iw, impreview->ih);
-	impreview2gpu(impreview->data, impreview->iw, impreview->ih);
+		image_fit2screen(g_iw, g_ih);
+	impreview2gpu(impreview->data, impreview->iw, impreview->ih, &image_txid);
 	if(render)
 		io_render();
 }
@@ -449,7 +545,7 @@ void playbackendaction(void)
 						image_free(&im2);
 				}
 			}
-			if(im2||animated)
+			if((im2||animated)&&fn2)//fn2: to please dumb MSVC linter
 			{
 				image_free(&image);
 				image_free(&impreview);
@@ -464,13 +560,13 @@ void playbackendaction(void)
 }
 int io_init(int argc, wchar_t **argv)//return false to abort
 {
-#ifdef _DEBUG
+#if defined _DEBUG ||0
 //#if 0
 	const wchar_t *filename=
 
+		L"C:/Users/Work Pc/Documents/Half-Life_2041_720p120.mkv"
 	//	L"D:/ML/dataset-Internet/os_bleh.gif"
-	//	L"E:/Share Box/Sound & Music/Headshot.wav"
-		L"E:/Share Box/Sound & Music/20250411 2.mp3"
+	//	L"E:/Share Box/Sound & Music/20250411 2.mp3"
 	//	L"E:/Share Box/Sound & Music/2024-11-07 at 3.54.45 PM.mp4"
 	//	L"E:/Share Box/Sound & Music/145 (Poodles) by Jake Chudnow [DokBeZKKeKI].opus"
 	//	L"D:/ML/dataset-Internet/quantum.mp4"
@@ -507,7 +603,7 @@ int io_init(int argc, wchar_t **argv)//return false to abort
 		fn=filter_pathw(filename, -1, 0);
 		update_image(1, 0);
 		if(impreview)
-			image_fit2screen(impreview->iw, impreview->ih);//
+			image_fit2screen(g_iw, g_ih);//
 	}
 	else
 		array_free(&fn);
@@ -520,7 +616,7 @@ int io_init(int argc, wchar_t **argv)//return false to abort
 		{
 			update_image(1, 0);
 			if(impreview)
-				image_fit2screen(impreview->iw, impreview->ih);//
+				image_fit2screen(g_iw, g_ih);//
 		}
 		else
 			array_free(&fn);
@@ -547,7 +643,7 @@ void io_dropfile(const wchar_t *filename)
 void io_resize()
 {
 	if(impreview&&impreview->iw&&impreview->ih&&imagefitted)
-		image_fit2screen(impreview->iw, impreview->ih);
+		image_fit2screen(g_iw, g_ih);
 }
 int io_mousemove()//return true to redraw
 {
@@ -562,14 +658,14 @@ int io_mousemove()//return true to redraw
 	}
 	else if(drag==DRAG_SEEK)
 		slider_set((double)mx/w, 1);
-	return !timer;//
+	return !timer&&!playing;
 }
 int io_mousewheel(int forward)
 {
 	int mw_fwd=forward>0;
 	if(animated)
 	{
-		if(!slider_hide&&(uint32_t)(my-(h-tdy-SLIDER_HEIGHT))<SLIDER_HEIGHT)//change animation timescale
+		if(anim_uitype!=ANIMUI_CLEAN&&(uint32_t)(my-(h-tdy-SLIDER_HEIGHT))<SLIDER_HEIGHT)//change animation timescale
 			slider_changespeed(mw_fwd?1.1:1./1.1);
 		else
 		{
@@ -640,7 +736,7 @@ int io_keydn(IOKey key, char c)
 		break;
 	case KEY_F1:
 		{
-			char *ver=get_codecinfo();
+			char *ver=get_libinfo();
 			messageboxa(MBOX_OK, "Controls",
 				"Esc/LBUTTON/WASD: Drag image\n"
 				"Enter/Bksp/Wheel: Zoom image\n"
@@ -781,7 +877,7 @@ int io_keydn(IOKey key, char c)
 				}
 				nprinted+=_snwprintf_s(buf+nprinted, _countof(buf)-1-nprinted, _countof(buf)-1-nprinted,
 					L"CWH %d*%5d*%5d*8 preview\n"
-					, impreview->nch, impreview->iw, impreview->ih
+					, impreview->nch, g_iw, g_ih
 				);
 				if(created2)
 				{
@@ -840,7 +936,7 @@ int io_keydn(IOKey key, char c)
 		break;
 	case KEY_ESC:
 	case KEY_LBUTTON:
-		if(animated&&!slider_hide&&key==KEY_LBUTTON&&(uint32_t)(my-(h-tdy-SLIDER_HEIGHT))<SLIDER_HEIGHT)
+		if(animated&&anim_uitype!=ANIMUI_CLEAN&&key==KEY_LBUTTON&&(uint32_t)(my-(h-tdy-SLIDER_HEIGHT))<SLIDER_HEIGHT)
 		{
 			drag=DRAG_SEEK;
 			slider_set((double)mx/w, 0);
@@ -980,7 +1076,11 @@ int io_keydn(IOKey key, char c)
 		break;
 	case 'F':
 		if(animated)
-			slider_hide=1-slider_hide;
+		{
+			int shift=GET_KEY_STATE(KEY_SHIFT);
+			shift=1-2*shift;//shift = go back
+			anim_uitype=(anim_uitype+shift+ANIMUI_COUNT)%ANIMUI_COUNT;
+		}
 		break;
 	case 'M':
 		mute_audio=1-mute_audio;
@@ -1016,13 +1116,19 @@ int io_keydn(IOKey key, char c)
 				break;
 			if(zoom<ZOOM_LIMIT_LABEL)
 			{
-				int
-					x1=screen2image_x_int_rounded(0), y1=screen2image_y_int_rounded(0),
-					x2=screen2image_x_int_rounded(w), y2=screen2image_y_int_rounded(h);
-				if(x1<0)x1=0;
-				if(y1<0)y1=0;
-				if(x2>impreview->iw)x2=impreview->iw;
-				if(y2>impreview->ih)y2=impreview->ih;
+				HPoint2D p1={0, 0}, p2={w, h};
+
+				screen2image(&p1);
+				screen2image(&p2);
+				//int
+				//	x1=screen2image_x_int_rounded(0), y1=screen2image_y_int_rounded(0),
+				//	x2=screen2image_x_int_rounded(w), y2=screen2image_y_int_rounded(h);
+				if(p1.x<0)p1.x=0;
+				if(p1.y<0)p1.y=0;
+				if(p2.x>impreview->iw)p2.x=impreview->iw;
+				if(p2.y>impreview->ih)p2.y=impreview->ih;
+				int x1=(int)floor(p1.x), y1=(int)floor(p1.y);
+				int x2=(int)floor(p2.x), y2=(int)floor(p2.y);
 				int iw=x2-x1, ih=y2-y1;
 				if(iw>0&&ih>0)
 				{
@@ -1053,17 +1159,33 @@ int io_keydn(IOKey key, char c)
 			{
 				ArrayHandle str;
 				STR_ALLOC(str, 0);
-				int
-					sx1=image2screen_x_int(0), sx2=image2screen_x_int(impreview->iw),
-					sy1=image2screen_y_int(0), sy2=image2screen_y_int(impreview->ih);
+				HPoint2D p1={0, 0}, p2={impreview->iw, impreview->ih};
+
+				image2screen(&p1);
+				image2screen(&p2);
+				int sx1=(int)ROUND64(p1.x);
+				int sy1=(int)ROUND64(p1.y);
+				int sx2=(int)ROUND64(p2.x);
+				int sy2=(int)ROUND64(p2.y);
+				//int
+				//	sx1=image2screen_x_int(0), sx2=image2screen_x_int(impreview->iw),
+				//	sy1=image2screen_y_int(0), sy2=image2screen_y_int(impreview->ih);
 				int csx1=sx1, csx2=sx2;
 				int csy1=sy1, csy2=sy2;
 				CLAMP2(csx1, 0, w);
 				CLAMP2(csx2, 0, w);
 				CLAMP2(csy1, 0, h);
 				CLAMP2(csy2, 0, h);
-				int ix1=screen2image_x_int(csx1), ix2=screen2image_x_int(csx2);
-				int iy1=screen2image_y_int(csy1), iy2=screen2image_y_int(csy2);
+				p1.x=csx1; p1.y=csy1;
+				p2.x=csx2; p2.y=csy2;
+				screen2image(&p1);
+				screen2image(&p2);
+				int ix1=(int)ROUND64(p1.x);
+				int iy1=(int)ROUND64(p1.y);
+				int ix2=(int)ROUND64(p2.x);
+				int iy2=(int)ROUND64(p2.y);
+				//int ix1=screen2image_x_int(csx1), ix2=screen2image_x_int(csx2);
+				//int iy1=screen2image_y_int(csy1), iy2=screen2image_y_int(csy2);
 				const char *format;
 				if(pxlabels_hex)
 				{
@@ -1404,12 +1526,16 @@ static void print_pixellabels(int ix1, int ix2, int iy1, int iy2, int xoffset, i
 	for(;iy<yend;++iy)
 	{
 		float y=(float)(iy+yoffset);
-		int ky=image2screen_y_int(y);
+	//	int ky=image2screen_y_int(y);
 		int ix=MAXVAR(ix1, 0), xend=MINVAR(ix2+2, image->iw);
 		for(;ix<xend;++ix)
 		{
 			float x=(float)(ix+xoffset);
-			int kx=image2screen_x_int(x);
+			HPoint2D p={x, y};
+			image2screen(&p);
+			int kx=(int)floor(p.x);
+			int ky=(int)floor(p.y);
+		//	int kx=image2screen_x_int(x);
 			int idx=image->iw*(iy<<1)+(ix<<1);
 			if(imagetype==IM_RGBA)
 				idx<<=2;
@@ -1437,13 +1563,17 @@ static void print_pixellabels_preview(int ix1, int ix2, int iy1, int iy2, int xo
 	float fontsize=1, labeloffset=is_bayer?0:tdy*fontsize*component;
 	for(;iy<yend;iy+=1<<is_bayer)
 	{
-		int ky=image2screen_y_int(iy+yoffset);
+	//	int ky=image2screen_y_int(iy+yoffset);
 		int ix=MAXVAR(ix1, 0), xend=MINVAR(ix2+2, impreview->iw);
 		ix>>=is_bayer;
 		ix<<=is_bayer;
 		for(;ix<xend;ix+=1<<is_bayer)
 		{
-			int kx=image2screen_x_int(ix+xoffset);
+			HPoint2D p={ix+xoffset, iy+yoffset};
+			image2screen(&p);
+			int kx=(int)floor(p.x);
+			int ky=(int)floor(p.y);
+		//	int kx=image2screen_x_int(ix+xoffset);
 			int idx=impreview->iw*iy+ix;
 			//if(imagetype==IM_RGBA)
 				idx<<=2;
@@ -1468,8 +1598,83 @@ static void draw_histogram(int *hist, int nlevels, int color, int y1, int y2)
 		draw_rect_enqueue(&vertices_2d, (float)sym*w/nlevels, (float)(sym+1)*w/nlevels, y2-(float)hist[sym]*(y2-y1)/fmax, (float)y2);
 	draw_2d_flush(vertices_2d, color, GL_TRIANGLES);
 }
-static void draw_profile_x(int comp, int color)//horizontal cross-section profile		to see the color/spatial correlation
+static void draw_profile(int comp, int color, int profx, int frompreview)//horizontal cross-section profile		to see the color/spatial correlation
 {
+	int nlevels=(1<<imagedepth)-1;
+	if(profx)
+	{
+		float scale=(float)h*0.5f/(float)nlevels;
+		for(int kx=0;kx<w;++kx)
+		{
+			HPoint2D p={kx, my};
+		
+			screen2image(&p);
+			int ix=(int)floor(p.x);
+			int iy=(int)floor(p.y);
+			int pixel=0;
+			if((uint32_t)ix<(uint32_t)impreview->iw&&(uint32_t)iy<(uint32_t)impreview->ih)
+			{
+				if(frompreview)
+					pixel=impreview->data[4*(impreview->iw*iy+ix)+comp];
+				else
+				{
+					switch(imagetype)
+					{
+					case IM_GRAYSCALEv2:
+						pixel=image->data[image->iw*iy+ix];
+						break;
+					case IM_RGBA:
+						pixel=image->data[4*(image->iw*iy+ix)+comp];
+						break;
+					case IM_BAYERv2:
+						pixel=image->data[image->iw*((iy&~1)|comp>>1)+2*ix+(comp&1)];
+						break;
+					default://stupid GCC warnings
+						break;
+					}
+				}
+			}
+			draw_curve_enqueue(&vertices_2d, (float)kx, (float)pixel*scale);
+		}
+	}
+	else
+	{
+		float scale=(float)w*0.5f/(float)nlevels;
+		for(int ky=0;ky<h;++ky)
+		{
+			HPoint2D p={mx, ky};
+		
+			screen2image(&p);
+			int ix=(int)floor(p.x);
+			int iy=(int)floor(p.y);
+			int pixel=0;
+			if((uint32_t)ix<(uint32_t)impreview->iw&&(uint32_t)iy<(uint32_t)g_ih)
+			{
+				if(frompreview)
+					pixel=impreview->data[4*(impreview->iw*iy+ix)+comp];
+				else
+				{
+					switch(imagetype)
+					{
+					case IM_GRAYSCALEv2:
+						pixel=image->data[image->iw*iy+ix];
+						break;
+					case IM_RGBA:
+						pixel=image->data[4*(image->iw*iy+ix)+comp];
+						break;
+					case IM_BAYERv2:
+						pixel=image->data[image->iw*((iy&~1)|comp>>1)+2*ix+(comp&1)];
+						break;
+					default://stupid GCC warnings
+						break;
+					}
+				}
+			}
+			draw_curve_enqueue(&vertices_2d, (float)pixel*scale, (float)ky);
+		}
+	}
+	draw_2d_flush(vertices_2d, color, GL_LINE_STRIP);
+#if 0
 	int iy=screen2image_y_int(my);
 	if((unsigned)iy<(unsigned)image->ih)
 	{
@@ -1511,9 +1716,45 @@ static void draw_profile_x(int comp, int color)//horizontal cross-section profil
 		}
 		draw_2d_flush(vertices_2d, color, GL_LINE_STRIP);
 	}
+#endif
 }
-static void draw_profile_y(int comp, int color)//vertical cross-section profile
+#if 0
+static void draw_profile_y(int comp, int color, int frompreview)//vertical cross-section profile
 {
+	int nlevels=(1<<imagedepth)-1;
+	float scale=(float)w*0.5f/(float)nlevels;
+	for(int ky=0;ky<h;++ky)
+	{
+		HPoint2D p={mx, ky};
+		
+		screen2image(&p);
+		int ix=(int)floor(p.x);
+		int iy=(int)floor(p.y);
+		int pixel=0;
+		if((uint32_t)ix<(uint32_t)g_iw&&(uint32_t)iy<(uint32_t)g_ih)
+		{
+			if(frompreview)
+				pixel=impreview->data[4*(g_iw*iy+ix)+comp];
+			else
+			{
+				switch(imagetype)
+				{
+				case IM_GRAYSCALEv2:
+					pixel=image->data[image->iw*iy+ix];
+					break;
+				case IM_RGBA:
+					pixel=image->data[4*(image->iw*iy+ix)+comp];
+					break;
+				case IM_BAYERv2:
+					pixel=image->data[image->iw*((iy&~1)|comp>>1)+2*ix+(comp&1)];
+					break;
+				}
+			}
+		}
+		draw_curve_enqueue(&vertices_2d, (float)pixel*scale, (float)ky);
+	}
+	draw_2d_flush(vertices_2d, color, GL_LINE_STRIP);
+#if 0
 	int ix=screen2image_x_int(mx);
 	if((unsigned)ix<(unsigned)image->iw)
 	{
@@ -1556,6 +1797,7 @@ static void draw_profile_y(int comp, int color)//vertical cross-section profile
 		}
 		draw_2d_flush(vertices_2d, color, GL_LINE_STRIP);
 	}
+#endif
 }
 static void draw_profile_x_preview(int comp, int color)//horizontal cross-section profile		to see the color/spatial correlation
 {
@@ -1606,6 +1848,7 @@ static void draw_profile_y_preview(int comp, int color)//vertical cross-section 
 		draw_2d_flush(vertices_2d, color, GL_LINE_STRIP);
 	}
 }
+#endif
 static void print_time(float x, float y, float zoom, double t)
 {
 	if(t<60)
@@ -1642,7 +1885,22 @@ static void print_duration(float x, float y, float zoom, double t)
 void io_render()
 {
 	Slider slider={0};
-
+//#ifdef PROFILE_FPS
+//	static double trender=0;
+//	double trender_current=0;
+//#endif
+		//static float rads=0;
+		//rads+=0.001f;
+		//g_rotationmatrix[0]=cosf(rads);
+		//g_rotationmatrix[1]=-sinf(rads);
+		//g_rotationmatrix[2]=-g_rotationmatrix[1];
+		//g_rotationmatrix[3]=g_rotationmatrix[0];
+#ifdef PROFILE_FPS
+	recordevent(EVNT_RENDER, 1);
+	//fps_checkpoints[fps_start].t=time_sec();
+	//fps_start=(fps_start+1)
+	//trender_current=time_sec();
+#endif
 	if(h<=0)
 		return;
 	if(animated&&!playing)
@@ -1659,11 +1917,19 @@ void io_render()
 		slider_get(&slider);
 		if(slider.playing)
 		{
+//#ifdef PROFILE_FPS
+//			tsend2gpu=time_sec();
+//#endif
 			if(!frame_dequeue())
 			{
 				if(impreview&&hist_on)
 					calc_hist();
 			}
+			//else if(has_video)
+			//	return;
+//#ifdef PROFILE_FPS
+//			tsend2gpu=time_sec()-tsend2gpu;
+//#endif
 		}
 	}
 	if(!background[3])
@@ -1679,13 +1945,84 @@ void io_render()
 
 		if(impreview)
 		{
-			int
-				sx1=image2screen_x_int(0), sx2=image2screen_x_int(impreview->iw),
-				sy1=image2screen_y_int(0), sy2=image2screen_y_int(impreview->ih);
-			
-			imx=screen2image_x_int(mx);
-			imy=screen2image_y_int(my);
-			display_texture(sx1, sx2, sy1, sy2, image_txid, 1, 0, 1, 0, 1);
+			HPoint2D sp1={0, 0};
+			HPoint2D sp2={0, impreview->ih};
+			HPoint2D sp3={impreview->iw, impreview->ih};
+			HPoint2D sp4={impreview->iw, 0};
+			HPoint2D ipm={mx, my};
+
+			image2screen(&sp1);
+			image2screen(&sp2);
+			image2screen(&sp3);
+			image2screen(&sp4);
+			screen2image(&ipm);
+			int sx1=(int)floor(sp1.x);
+			int sy1=(int)floor(sp1.y);
+			int sx2=(int)floor(sp2.x);
+			int sy2=(int)floor(sp2.y);
+			imx=(int)floor(ipm.x);
+			imy=(int)floor(ipm.y);
+			//int
+			//	sx1=image2screen_x_int(0), sx2=image2screen_x_int(impreview->iw),
+			//	sy1=image2screen_y_int(0), sy2=image2screen_y_int(impreview->ih);
+			//
+			//imx=screen2image_x_int(mx);
+			//imy=screen2image_y_int(my);
+			{
+				static float ndc[16];
+				int j;
+				
+				j=0;
+				ndc[j++]=(float)sp1.x; ndc[j++]=(float)sp1.y; ndc[j++]=0; ndc[j++]=0;//top left
+				ndc[j++]=(float)sp2.x; ndc[j++]=(float)sp2.y; ndc[j++]=0; ndc[j++]=1;//bottom left
+				ndc[j++]=(float)sp3.x; ndc[j++]=(float)sp3.y; ndc[j++]=1; ndc[j++]=1;//bottom right
+				ndc[j++]=(float)sp4.x; ndc[j++]=(float)sp4.y; ndc[j++]=1; ndc[j++]=0;//top right
+				//{
+				//	HPoint2D c={g_iw*0.5, g_ih*0.5};
+				//
+				//	image2screen(&c);
+				//	for(int k=0;k<4;++k)
+				//	{
+				//		float x=ndc[4*k+0]-(float)c.x, y=ndc[4*k+1]-(float)c.y;
+				//		ndc[4*k+0]=(float)(g_rotationmatrix[0]*x+g_rotationmatrix[1]*y+c.x);
+				//		ndc[4*k+1]=(float)(g_rotationmatrix[2]*x+g_rotationmatrix[3]*y+c.y);
+				//	}
+				//}
+#if 0
+				if(g_rotation!=ROTATE_NORMAL)
+				{
+					float cx=(float)image2screen_x(impreview->iw*0.5);
+					float cy=(float)image2screen_y(impreview->ih*0.5);
+					float matrix[4]={1, 0, 0, 1};
+
+					for(int k=0;k<4;++k)
+					{
+						float x=ndc[4*k+0]-cx, y=ndc[4*k+1]-cy;
+						ndc[4*k+0]=matrix[0]*x+matrix[1]*y+cx;
+						ndc[4*k+1]=matrix[2]*x+matrix[3]*y+cy;
+					}
+				}
+#endif
+				{
+					float xscale=2.f/(float)w;
+					float yscale=2.f/(float)h;
+					for(int k=0;k<4;++k)
+					{
+						ndc[4*k+0]=ndc[4*k+0]*xscale-1;
+						ndc[4*k+1]=1-ndc[4*k+1]*yscale;
+					}
+				}
+				display_texture_ndc(ndc, image_txid, 1);
+			}
+			//display_texture(sx1, sx2, sy1, sy2
+			//	, image_txid, 1
+			//	, 0, 1, 0, 1
+			//	, ROTATE_ARBITRARY
+			//	, (float)image2screen_x(impreview->iw*0.5)
+			//	, (float)image2screen_y(impreview->ih*0.5)
+			//	, (float)time_sec()
+			//);
+		//	display_texture(sx1, sx2, sy1, sy2, image_txid, 1, 0, 1, 0, 1, g_rotation);
 		//	display_texture_i(sx1, sx2, sy1, sy2, (int*)impreview->data, impreview->iw, impreview->ih, 0, 1, 0, 1, 1, 0, 1);
 			if(zoom>=ZOOM_LIMIT_LABEL)
 			{
@@ -1696,8 +2033,16 @@ void io_render()
 				CLAMP2(csx2, 0, w);
 				CLAMP2(csy1, 0, h);
 				CLAMP2(csy2, 0, h);
-				int ix1=screen2image_x_int(csx1), ix2=screen2image_x_int(csx2);
-				int iy1=screen2image_y_int(csy1), iy2=screen2image_y_int(csy2);
+				HPoint2D ip1={csx1, csy1}, ip2={csx2, csy2};
+
+				screen2image(&ip1);
+				screen2image(&ip2);
+				int ix1=(int)floor(ip1.x);
+				int iy1=(int)floor(ip1.y);
+				int ix2=(int)floor(ip2.x);
+				int iy2=(int)floor(ip2.y);
+			//	int ix1=screen2image_x_int(csx1), ix2=screen2image_x_int(csx2);
+			//	int iy1=screen2image_y_int(csy1), iy2=screen2image_y_int(csy2);
 				const char labels[]="rgb";
 				uint64_t theme[]=
 				{
@@ -1753,7 +2098,7 @@ void io_render()
 				}
 			}
 		}
-		if(animated&&!slider_hide)
+		if(animated&&anim_uitype!=ANIMUI_CLEAN)
 		{
 			enum
 			{
@@ -1832,9 +2177,364 @@ void io_render()
 			}
 #endif
 			set_bk_color(bk0);
+#if defined PROFILE_FPS
+			if(anim_uitype==ANIMUI_STATS)
+			{
+				double graphwidth=1;//sec
+				float xscale, yscale=(float)h*(0.125f/EVNT_COUNT);
+				double now, t, toldest;
+				int k;
+				
+				toldest=HUGE_VALF;
+				for(k=0;k<FPS_QUEUEMASK;++k)
+				{
+					ProfileEvent *e;
+
+					e=fps_checkpoints+k;
+					if(toldest>e->t)
+						toldest=e->t;
+				}
+				now=time_sec();
+				t=now-toldest;
+				if(t>graphwidth)
+					t=graphwidth;
+				xscale=(float)(w/t);
+				t=now;
+			//	for(double t2=floor(10*now)*0.1;t2>now-5;t2-=0.1)
+				for(double t2=now;t2>now-graphwidth;t2-=slider.framedelta)
+				{
+					draw_line((float)(now-t2)*xscale
+						, (float)h*0.125f
+						, (float)(now-t2)*xscale
+						, (float)h*0.25f
+						, 0xFF000000
+					);
+					GUIPrint(0, (float)(now-t2)*xscale, (float)h*0.25f, 1, "%12.6lf", t2);
+				}
+				for(k=fps_start;;)//scan forward in time
+				{
+					ProfileEvent *e, *e2;
+					double t1, t2;
+					int k2;
+
+					e=fps_checkpoints+(k&FPS_QUEUEMASK);
+					if(e->start)
+					{
+						t2=e->t;
+						k2=(k+1)&FPS_QUEUEMASK;
+						while(k2!=fps_start)//search future for event end
+						{
+							e2=fps_checkpoints+(k2&FPS_QUEUEMASK);
+							if(e2->event==e->event)
+								break;
+							k2=(k2+1)&FPS_QUEUEMASK;
+						}
+						if(k2==fps_start)//didn't finish yet
+							t1=now;
+						else
+							t1=e2->t;
+						draw_line((float)(now-t1)*xscale
+							, (float)(e->event+0)*yscale
+							, (float)(now-t2)*xscale
+							, (float)(e->event+1)*yscale
+							, fpsprof_colors[e->event]
+						);
+						draw_line((float)(now-t1)*xscale
+							, (float)(e->event+1)*yscale
+							, (float)(now-t2)*xscale
+							, (float)(e->event+0)*yscale
+							, fpsprof_colors[e->event]
+						);
+						//draw_rect((float)(now-t1)*xscale
+						//	, (float)(now-t2)*xscale
+						//	, (float)(e->event+0)*yscale
+						//	, (float)(e->event+1)*yscale
+						//	, fpsprof_colors[e->event]
+						//);
+					}
+					k=(k+1)&FPS_QUEUEMASK;
+					if(k==fps_start)//finished all events
+						break;
+				}
+#if 0
+				float graphstart=0.9f*(float)h;
+				float graphscale=10.f*(float)h;
+				double prev=0;
+				double dsum=0;
+				int dcount=0;
+
+				prev=fps_checkpoints[fps_start&(FPS_QUEUESIZE-1)][0]=time_sec();
+				fps_checkpoints[fps_start&(FPS_QUEUESIZE-1)][1]=trender;
+				fps_checkpoints[fps_start&(FPS_QUEUESIZE-1)][2]=tdec;
+				fps_checkpoints[fps_start&(FPS_QUEUESIZE-1)][3]=tsend2gpu;
+				tdec=0;
+				fps_start=(fps_start+1)&(FPS_QUEUESIZE-1);
+			//	draw_curve_enqueue(&vertices_2d, 0, (float)h*0.75f-graphscale*0.1f);
+			//	draw_curve_enqueue(&vertices_2d, (float)w, (float)h*0.75f-graphscale*0.1f);
+			//	GUIPrint((float)w*0.5f, (float)w*0.5f, (float)h*0.75f-graphscale*0.1f, 2, "100 ms (10 FPS)");
+				for(int k=0;k<FPS_QUEUESIZE&&k<w;++k)
+				{
+					double t;
+					float y;
+
+					t=fps_checkpoints[(k+fps_start)&(FPS_QUEUESIZE-1)][0];
+					y=graphscale*(float)(t-prev);
+					if(t>prev)
+					{
+						dsum+=y;
+						++dcount;
+					}
+					draw_curve_enqueue(&vertices_2d, 0.5f*(float)(w-2*FPS_QUEUESIZE)+2*(float)(FPS_QUEUESIZE-1-k)+0, graphstart-y);
+					draw_curve_enqueue(&vertices_2d, 0.5f*(float)(w-2*FPS_QUEUESIZE)+2*(float)(FPS_QUEUESIZE-1-k)+0, graphstart);
+					draw_curve_enqueue(&vertices_2d, 0.5f*(float)(w-2*FPS_QUEUESIZE)+2*(float)(FPS_QUEUESIZE-1-k)+1, graphstart-y);
+					draw_curve_enqueue(&vertices_2d, 0.5f*(float)(w-2*FPS_QUEUESIZE)+2*(float)(FPS_QUEUESIZE-1-k)+1, graphstart);
+					prev=t;
+				}
+				draw_2d_flush(vertices_2d, 0xC0FFC080, GL_LINES);
+
+				for(int k=0;k<FPS_QUEUESIZE&&k<w;++k)
+				{
+					double t;
+					float y;
+
+					t=fps_checkpoints[(k+fps_start)&(FPS_QUEUESIZE-1)][1];
+					y=graphscale*(float)t;
+					draw_curve_enqueue(&vertices_2d, 0.5f*(float)(w-2*FPS_QUEUESIZE)+2*(float)(FPS_QUEUESIZE-1-k)+0, graphstart-y);
+					draw_curve_enqueue(&vertices_2d, 0.5f*(float)(w-2*FPS_QUEUESIZE)+2*(float)(FPS_QUEUESIZE-1-k)+0, graphstart);
+					draw_curve_enqueue(&vertices_2d, 0.5f*(float)(w-2*FPS_QUEUESIZE)+2*(float)(FPS_QUEUESIZE-1-k)+1, graphstart-y);
+					draw_curve_enqueue(&vertices_2d, 0.5f*(float)(w-2*FPS_QUEUESIZE)+2*(float)(FPS_QUEUESIZE-1-k)+1, graphstart);
+				}
+				draw_2d_flush(vertices_2d, 0xC080FFC0, GL_LINES);
+
+				for(int k=0;k<FPS_QUEUESIZE&&k<w;++k)
+				{
+					double t;
+					float y;
+
+					t=fps_checkpoints[(k+fps_start)&(FPS_QUEUESIZE-1)][3];
+					y=graphscale*(float)t;
+					draw_curve_enqueue(&vertices_2d, 0.5f*(float)(w-2*FPS_QUEUESIZE)+2*(float)(FPS_QUEUESIZE-1-k)+0, graphstart-y);
+					draw_curve_enqueue(&vertices_2d, 0.5f*(float)(w-2*FPS_QUEUESIZE)+2*(float)(FPS_QUEUESIZE-1-k)+0, graphstart);
+					draw_curve_enqueue(&vertices_2d, 0.5f*(float)(w-2*FPS_QUEUESIZE)+2*(float)(FPS_QUEUESIZE-1-k)+1, graphstart-y);
+					draw_curve_enqueue(&vertices_2d, 0.5f*(float)(w-2*FPS_QUEUESIZE)+2*(float)(FPS_QUEUESIZE-1-k)+1, graphstart);
+					//if(t>100)
+					//	GUIPrint(0
+					//		, 0.5f*(float)(w-2*FPS_QUEUESIZE)+2*(float)(FPS_QUEUESIZE-1-k)+1
+					//		, graphstart
+					//		, 1
+					//		, "%lf"
+					//		, t
+					//	);
+				}
+				draw_2d_flush(vertices_2d, 0xC080C0FF, GL_LINES);
+
+				for(int k=0;k<FPS_QUEUESIZE&&k<w;++k)
+				{
+					double t;
+					float y;
+
+					t=fps_checkpoints[(k+fps_start)&(FPS_QUEUESIZE-1)][2];
+					y=graphscale*(float)t;
+					draw_curve_enqueue(&vertices_2d, 0.5f*(float)(w-2*FPS_QUEUESIZE)+2*(float)(FPS_QUEUESIZE-1-k)+0, graphstart-y);
+					draw_curve_enqueue(&vertices_2d, 0.5f*(float)(w-2*FPS_QUEUESIZE)+2*(float)(FPS_QUEUESIZE-1-k)+0, graphstart);
+					draw_curve_enqueue(&vertices_2d, 0.5f*(float)(w-2*FPS_QUEUESIZE)+2*(float)(FPS_QUEUESIZE-1-k)+1, graphstart-y);
+					draw_curve_enqueue(&vertices_2d, 0.5f*(float)(w-2*FPS_QUEUESIZE)+2*(float)(FPS_QUEUESIZE-1-k)+1, graphstart);
+					//if(t>100)
+					//	GUIPrint(0
+					//		, 0.5f*(float)(w-2*FPS_QUEUESIZE)+2*(float)(FPS_QUEUESIZE-1-k)+1
+					//		, graphstart
+					//		, 1
+					//		, "%lf"
+					//		, t
+					//	);
+				}
+				draw_2d_flush(vertices_2d, 0xC0000000, GL_LINES);
+				if(dcount)
+					dsum/=dcount;
+			//	draw_line(0.25f*(float)w, graphstart-graphscale*trender, 0.75f*(float)w, graphstart-graphscale*trender, 0xC0FF00FF);
+				draw_line(0.25f*(float)w, graphstart-graphscale/100, 0.75f*(float)w, graphstart-graphscale/100, 0xC080C0FF);
+				draw_line(0.25f*(float)w, graphstart-graphscale/ 50, 0.75f*(float)w, graphstart-graphscale/ 50, 0xC080C0FF);
+				draw_line(0.25f*(float)w, graphstart-graphscale/ 20, 0.75f*(float)w, graphstart-graphscale/ 20, 0xC080C0FF);
+			//	draw_line(0.25f*(float)w, graphstart-graphscale/ 10, 0.75f*(float)w, graphstart-graphscale/ 10, 0xC080C0FF);//10 fps = 100 ms
+				GUIPrint(0, 0.75f*(float)w, graphstart-graphscale/(float)100, 1, "%12.3lf ms", 1000/(float)100);
+				GUIPrint(0, 0.75f*(float)w, graphstart-graphscale/(float) 50, 1, "%12.3lf ms", 1000/(float) 50);
+				GUIPrint(0, 0.75f*(float)w, graphstart-graphscale/(float) 20, 1, "%12.3lf ms", 1000/(float) 20);
+			//	GUIPrint(0, 0.75f*(float)w, graphstart-graphscale/(float) 10, 1, "%12.3lf ms", 1000/(float) 10);//10 fps = 100 ms
+				static int prevdrop=0;
+				GUIPrint(0, 0, graphstart-(float)dsum, 1, "%12.3lf ms  %d/%10d/%10d", 1000*(dsum/graphscale), g_droppedframes-prevdrop, g_droppedframes, framenumber);
+				prevdrop=g_droppedframes;
+#endif
+			}
+#endif
+#if defined PROFILE_FPS &&0
+			if(anim_uitype==ANIMUI_STATS)
+			{
+				float graphstart=0.9f*(float)h;
+				float graphscale=10.f*(float)h;
+				double prev=0;
+				double dsum=0;
+				int dcount=0;
+
+				prev=fps_checkpoints[fps_start&(FPS_QUEUESIZE-1)][0]=time_sec();
+				fps_checkpoints[fps_start&(FPS_QUEUESIZE-1)][1]=trender;
+				fps_checkpoints[fps_start&(FPS_QUEUESIZE-1)][2]=tdec;
+				fps_checkpoints[fps_start&(FPS_QUEUESIZE-1)][3]=tsend2gpu;
+				tdec=0;
+				fps_start=(fps_start+1)&(FPS_QUEUESIZE-1);
+			//	draw_curve_enqueue(&vertices_2d, 0, (float)h*0.75f-graphscale*0.1f);
+			//	draw_curve_enqueue(&vertices_2d, (float)w, (float)h*0.75f-graphscale*0.1f);
+			//	GUIPrint((float)w*0.5f, (float)w*0.5f, (float)h*0.75f-graphscale*0.1f, 2, "100 ms (10 FPS)");
+				for(int k=0;k<FPS_QUEUESIZE&&k<w;++k)
+				{
+					double t;
+					float y;
+
+					t=fps_checkpoints[(k+fps_start)&(FPS_QUEUESIZE-1)][0];
+					y=graphscale*(float)(t-prev);
+					if(t>prev)
+					{
+						dsum+=y;
+						++dcount;
+					}
+					draw_curve_enqueue(&vertices_2d, 0.5f*(float)(w-2*FPS_QUEUESIZE)+2*(float)(FPS_QUEUESIZE-1-k)+0, graphstart-y);
+					draw_curve_enqueue(&vertices_2d, 0.5f*(float)(w-2*FPS_QUEUESIZE)+2*(float)(FPS_QUEUESIZE-1-k)+0, graphstart);
+					draw_curve_enqueue(&vertices_2d, 0.5f*(float)(w-2*FPS_QUEUESIZE)+2*(float)(FPS_QUEUESIZE-1-k)+1, graphstart-y);
+					draw_curve_enqueue(&vertices_2d, 0.5f*(float)(w-2*FPS_QUEUESIZE)+2*(float)(FPS_QUEUESIZE-1-k)+1, graphstart);
+					prev=t;
+				}
+				draw_2d_flush(vertices_2d, 0xC0FFC080, GL_LINES);
+
+				for(int k=0;k<FPS_QUEUESIZE&&k<w;++k)
+				{
+					double t;
+					float y;
+
+					t=fps_checkpoints[(k+fps_start)&(FPS_QUEUESIZE-1)][1];
+					y=graphscale*(float)t;
+					draw_curve_enqueue(&vertices_2d, 0.5f*(float)(w-2*FPS_QUEUESIZE)+2*(float)(FPS_QUEUESIZE-1-k)+0, graphstart-y);
+					draw_curve_enqueue(&vertices_2d, 0.5f*(float)(w-2*FPS_QUEUESIZE)+2*(float)(FPS_QUEUESIZE-1-k)+0, graphstart);
+					draw_curve_enqueue(&vertices_2d, 0.5f*(float)(w-2*FPS_QUEUESIZE)+2*(float)(FPS_QUEUESIZE-1-k)+1, graphstart-y);
+					draw_curve_enqueue(&vertices_2d, 0.5f*(float)(w-2*FPS_QUEUESIZE)+2*(float)(FPS_QUEUESIZE-1-k)+1, graphstart);
+				}
+				draw_2d_flush(vertices_2d, 0xC080FFC0, GL_LINES);
+
+				for(int k=0;k<FPS_QUEUESIZE&&k<w;++k)
+				{
+					double t;
+					float y;
+
+					t=fps_checkpoints[(k+fps_start)&(FPS_QUEUESIZE-1)][3];
+					y=graphscale*(float)t;
+					draw_curve_enqueue(&vertices_2d, 0.5f*(float)(w-2*FPS_QUEUESIZE)+2*(float)(FPS_QUEUESIZE-1-k)+0, graphstart-y);
+					draw_curve_enqueue(&vertices_2d, 0.5f*(float)(w-2*FPS_QUEUESIZE)+2*(float)(FPS_QUEUESIZE-1-k)+0, graphstart);
+					draw_curve_enqueue(&vertices_2d, 0.5f*(float)(w-2*FPS_QUEUESIZE)+2*(float)(FPS_QUEUESIZE-1-k)+1, graphstart-y);
+					draw_curve_enqueue(&vertices_2d, 0.5f*(float)(w-2*FPS_QUEUESIZE)+2*(float)(FPS_QUEUESIZE-1-k)+1, graphstart);
+					//if(t>100)
+					//	GUIPrint(0
+					//		, 0.5f*(float)(w-2*FPS_QUEUESIZE)+2*(float)(FPS_QUEUESIZE-1-k)+1
+					//		, graphstart
+					//		, 1
+					//		, "%lf"
+					//		, t
+					//	);
+				}
+				draw_2d_flush(vertices_2d, 0xC080C0FF, GL_LINES);
+
+				for(int k=0;k<FPS_QUEUESIZE&&k<w;++k)
+				{
+					double t;
+					float y;
+
+					t=fps_checkpoints[(k+fps_start)&(FPS_QUEUESIZE-1)][2];
+					y=graphscale*(float)t;
+					draw_curve_enqueue(&vertices_2d, 0.5f*(float)(w-2*FPS_QUEUESIZE)+2*(float)(FPS_QUEUESIZE-1-k)+0, graphstart-y);
+					draw_curve_enqueue(&vertices_2d, 0.5f*(float)(w-2*FPS_QUEUESIZE)+2*(float)(FPS_QUEUESIZE-1-k)+0, graphstart);
+					draw_curve_enqueue(&vertices_2d, 0.5f*(float)(w-2*FPS_QUEUESIZE)+2*(float)(FPS_QUEUESIZE-1-k)+1, graphstart-y);
+					draw_curve_enqueue(&vertices_2d, 0.5f*(float)(w-2*FPS_QUEUESIZE)+2*(float)(FPS_QUEUESIZE-1-k)+1, graphstart);
+					//if(t>100)
+					//	GUIPrint(0
+					//		, 0.5f*(float)(w-2*FPS_QUEUESIZE)+2*(float)(FPS_QUEUESIZE-1-k)+1
+					//		, graphstart
+					//		, 1
+					//		, "%lf"
+					//		, t
+					//	);
+				}
+				draw_2d_flush(vertices_2d, 0xC0000000, GL_LINES);
+				if(dcount)
+					dsum/=dcount;
+			//	draw_line(0.25f*(float)w, graphstart-graphscale*trender, 0.75f*(float)w, graphstart-graphscale*trender, 0xC0FF00FF);
+				draw_line(0.25f*(float)w, graphstart-graphscale/100, 0.75f*(float)w, graphstart-graphscale/100, 0xC080C0FF);
+				draw_line(0.25f*(float)w, graphstart-graphscale/ 50, 0.75f*(float)w, graphstart-graphscale/ 50, 0xC080C0FF);
+				draw_line(0.25f*(float)w, graphstart-graphscale/ 20, 0.75f*(float)w, graphstart-graphscale/ 20, 0xC080C0FF);
+			//	draw_line(0.25f*(float)w, graphstart-graphscale/ 10, 0.75f*(float)w, graphstart-graphscale/ 10, 0xC080C0FF);//10 fps = 100 ms
+				GUIPrint(0, 0.75f*(float)w, graphstart-graphscale/(float)100, 1, "%12.3lf ms", 1000/(float)100);
+				GUIPrint(0, 0.75f*(float)w, graphstart-graphscale/(float) 50, 1, "%12.3lf ms", 1000/(float) 50);
+				GUIPrint(0, 0.75f*(float)w, graphstart-graphscale/(float) 20, 1, "%12.3lf ms", 1000/(float) 20);
+			//	GUIPrint(0, 0.75f*(float)w, graphstart-graphscale/(float) 10, 1, "%12.3lf ms", 1000/(float) 10);//10 fps = 100 ms
+				static int prevdrop=0;
+				GUIPrint(0, 0, graphstart-(float)dsum, 1, "%12.3lf ms  %d/%10d/%10d", 1000*(dsum/graphscale), g_droppedframes-prevdrop, g_droppedframes, framenumber);
+				prevdrop=g_droppedframes;
+			}
+#if 0
+			{
+				double tmin=HUGE_VAL, tmax=0;
+				int nextidx=(fps_start-1)&(FPS_QUEUESIZE-1);
+				fps_checkpoints[nextidx]=time_sec()-fps_checkpoints[fps_start];
+				fps_start=nextidx;
+				for(int k=0;k<FPS_QUEUESIZE;++k)
+				{
+					double t=fps_checkpoints[k];
+					if(tmin>t)tmin=t;
+					if(tmax<t)tmax=t;
+				}
+				if(tmax>tmin)
+				{
+					float x=0, y=0;
+					float norm, norm2;
+
+					tmax-=tmin;
+					norm=16*(float)w/(float)tmax;
+					norm2=1.f/(float)w;
+					for(int k=0;k<FPS_QUEUESIZE;++k)
+					{
+						double t=fps_checkpoints[(k+fps_start)&(FPS_QUEUESIZE-1)];
+						float x=((float)t-(float)tmin)*norm;
+						y=floorf(x*norm2)*((float)h*(1.f/16));
+						x=fmodf(x, (float)w);
+						draw_curve_enqueue(&vertices_2d, x, y);
+						draw_curve_enqueue(&vertices_2d, x, y+(float)h*(1.f/16));
+					//	GUIPrint(x, x, (float)h*0.5f+x, 1, "%d", framenumber);
+					}
+					draw_2d_flush(vertices_2d, 0xFFFF00FF, GL_LINES);
+				}
+			}
+#endif
+#endif
 		}
 		if(impreview&&profileplotmode>PROFILE_OFF)
 		{
+			switch(imagetype)
+			{
+			default://make gcc happy
+				break;
+			case IM_GRAYSCALEv2:
+				draw_profile(0, 0xFF000000, profileplotmode==PROFILE_X, pixelpreview);
+				break;
+			case IM_RGBA:
+				draw_profile(0, 0xFF0000FF, profileplotmode==PROFILE_X, pixelpreview);
+				draw_profile(1, 0xFF00FF00, profileplotmode==PROFILE_X, pixelpreview);
+				draw_profile(2, 0xFFFF0000, profileplotmode==PROFILE_X, pixelpreview);
+				draw_profile(3, 0xFF000000, profileplotmode==PROFILE_X, pixelpreview);
+				break;
+			case IM_BAYERv2:
+				draw_profile(0, 0xFF000000|0xFF<<(bayer[0]<<3), profileplotmode==PROFILE_X, pixelpreview);
+				draw_profile(1, 0xFF000000|0xFF<<(bayer[1]<<3), profileplotmode==PROFILE_X, pixelpreview);
+				draw_profile(2, 0xFF000000|0xFF<<(bayer[2]<<3), profileplotmode==PROFILE_X, pixelpreview);
+				draw_profile(3, 0xFF000000|0xFF<<(bayer[3]<<3), profileplotmode==PROFILE_X, pixelpreview);
+				break;
+			}
+#if 0
 			void (*draw_profile)(int comp, int color);
 			if(pixelpreview)
 			{
@@ -1868,6 +2568,7 @@ void io_render()
 					break;
 				}
 			}
+#endif
 		}
 
 		if(impreview&&image)
@@ -1984,6 +2685,11 @@ void io_render()
 	//);
 	t=t2;
 	swapbuffers();
+#ifdef PROFILE_FPS
+	recordevent(EVNT_RENDER, 0);
+	//trender_current=time_sec()-trender_current;
+	//trender=trender_current;
+#endif
 }
 int io_quit_request()//return 1 to exit
 {

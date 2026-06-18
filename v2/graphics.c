@@ -90,7 +90,7 @@ const char
 const char
 	src_vert_texture[]=
 		"#version 120\n"
-		"attribute vec4 a_coords;"			//attributes: a_coords
+		"attribute vec4 a_coords;\n"			//attributes: a_coords
 		"varying vec2 v_texcoord;\n"
 		"void main()\n"
 		"{\n"
@@ -117,7 +117,7 @@ const char
 const char
 	src_vert_text[]=
 		"#version 120\n"
-		"attribute vec4 a_coords;"			//attributes: a_coords
+		"attribute vec4 a_coords;\n"			//attributes: a_coords
 		"varying vec2 v_texcoord;\n"
 		"void main()\n"
 		"{\n"
@@ -144,7 +144,7 @@ const char
 const char
 	src_vert_sdftext[]=
 		"#version 120\n"
-		"attribute vec4 a_coords;"			//attributes: a_coords
+		"attribute vec4 a_coords;\n"			//attributes: a_coords
 		"varying vec2 v_texcoord;\n"
 		"void main()\n"
 		"{\n"
@@ -196,7 +196,7 @@ const char
 		"uniform sampler2D u_texture;\n"//use 1x1 texture for solid color
 		"void main()\n"
 		"{\n"
-		"	 gl_FragColor=texture2D(u_texture, v_texcoord);\n"//alpha is in the texture
+		"    gl_FragColor=texture2D(u_texture, v_texcoord);\n"//alpha is in the texture
 		"    gl_FragDepth=(-(1000.+0.1)*(-v_glposition.w)-2.*1000.*0.1)/((1000.-0.1)*v_glposition.w);\n"//USE mProj.znear=0.1f, mProj.zfar=1000.f
 		"}";
 
@@ -236,7 +236,7 @@ const char
 		"void main()\n"
 		"{\n"
 		"    vec3 lightPos=u_sceneInfo[0], lightColor=u_sceneInfo[1], viewPos=u_sceneInfo[1];\n"
-		"	 vec4 objectColor=texture2D(u_texture, v_texcoord);\n"//alpha is in the texture
+		"    vec4 objectColor=texture2D(u_texture, v_texcoord);\n"//alpha is in the texture
 
 		"    vec3 normal=normalize(v_normal);\n"
 		"    vec3 lightdir=normalize(lightPos-v_fragpos);\n"
@@ -285,31 +285,31 @@ const char
 #endif
 
 //shader declarations
-#define ATTR(NAME, LABEL)	int a_##NAME##_##LABEL=-1;
-#define SHADER(NAME)		ATTR_##NAME
+#define ATTR(NAME, LABEL) int a_##NAME##_##LABEL=-1;
+#define SHADER(NAME) ATTR_##NAME
 SHADER_LIST
 #undef  SHADER
 #undef  ATTR
 
-#define UNIF(NAME, LABEL)	int u_##NAME##_##LABEL=-1;
-#define SHADER(NAME)		UNIF_##NAME
+#define UNIF(NAME, LABEL) int u_##NAME##_##LABEL=-1;
+#define SHADER(NAME) UNIF_##NAME
 SHADER_LIST
 #undef  SHADER
 #undef  UNIF
 
-#define ATTR(NAME, LABEL)	{&a_##NAME##_##LABEL, "a_" #LABEL},
-#define SHADER(NAME)		ShaderVar attr_##NAME[]={ATTR_##NAME};
+#define ATTR(NAME, LABEL) {&a_##NAME##_##LABEL, "a_" #LABEL},
+#define SHADER(NAME) ShaderVar attr_##NAME[]={ATTR_##NAME};
 SHADER_LIST
 #undef  SHADER
 #undef  ATTR
 
-#define UNIF(NAME, LABEL)	{&u_##NAME##_##LABEL, "u_" #LABEL},
-#define SHADER(NAME)		ShaderVar unif_##NAME[]={UNIF_##NAME};
+#define UNIF(NAME, LABEL) {&u_##NAME##_##LABEL, "u_" #LABEL},
+#define SHADER(NAME) ShaderVar unif_##NAME[]={UNIF_##NAME};
 SHADER_LIST
 #undef  SHADER
 #undef  UNIF
 
-#define SHADER(NAME)		ShaderProgram shader_##NAME={"shader_" #NAME, src_vert_##NAME, src_frag_##NAME, attr_##NAME, unif_##NAME, _countof(attr_##NAME), _countof(unif_##NAME), 0};
+#define SHADER(NAME) ShaderProgram shader_##NAME={"shader_" #NAME, src_vert_##NAME, src_frag_##NAME, attr_##NAME, unif_##NAME, _countof(attr_##NAME), _countof(unif_##NAME), 0};
 SHADER_LIST
 #undef  SHADER
 
@@ -397,6 +397,7 @@ unsigned make_gl_program_impl(const char *vertSrc, const char *fragSrc, const ch
 	glDeleteShader(fragShaderID);
 
 	GL_CHECK(error);
+	(void)error;
 	return ProgramID;
 }
 int make_gl_program(ShaderProgram *p)
@@ -511,11 +512,25 @@ static void set_texture_params(int linear, int antialiased)
 }
 void send_texture_pot(unsigned gl_texture, int *rgba, int txw, int txh, int linear, int antialiased)
 {
+	static int prevw=0, prevh=0;
+#ifdef PROFILE_FPS
+	recordevent(EVNT_SEND2GPU, 1);
+	//tsend2gpu=time_sec();
+#endif
 	glBindTexture(GL_TEXTURE_2D, gl_texture);
 	GL_CHECK(error);
-	set_texture_params(linear, antialiased);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, txw, txh, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+	if(txw!=prevw||txh!=prevh)
+	{
+		set_texture_params(linear, antialiased);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, txw, txh, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+	}
+	else
+		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, txw, txh, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
 	GL_CHECK(error);
+#ifdef PROFILE_FPS
+	recordevent(EVNT_SEND2GPU, 0);
+	//tsend2gpu=time_sec()-tsend2gpu;
+#endif
 }
 void send_texture_pot_int16x1(unsigned gl_texture, unsigned *texture, int txw, int txh, int linear, int antialiased)
 {
@@ -553,6 +568,8 @@ void gl_init()
 		0, 0, PFD_MAIN_PLANE, 0, 0, 0, 0
 	};
 	int PixelFormat=ChoosePixelFormat(ghDC, &pfd);
+
+	(void)error;
 	SetPixelFormat(ghDC, PixelFormat, &pfd);
 	hRC=wglCreateContext(ghDC);
 	wglMakeCurrent(ghDC, hRC);
@@ -1251,21 +1268,109 @@ float GUIPrint_append(float tab_origin, float x, float y, float zoom, int show, 
 	return width;
 }
 
+void display_texture_ndc(float *ndc, unsigned txid, float alpha)
+{
+	setGLProgram(shader_texture.program);	GL_CHECK(error);
+	glUniform1f(u_texture_alpha, alpha);	GL_CHECK(error);
+
+	select_texture(txid, u_texture_texture);
+	glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);				GL_CHECK(error);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(float[16]), ndc, GL_STATIC_DRAW);	GL_CHECK(error);//send vertices & texcoords
+
+	glVertexAttribPointer(a_texture_coords, 4, GL_FLOAT, GL_FALSE, 4<<2, (void*)0);	GL_CHECK(error);//select vertices & texcoord
+
+#ifndef NO_3D
+	glDisable(GL_DEPTH_TEST);
+#endif
+	glEnableVertexAttribArray(a_texture_coords);	GL_CHECK(error);
+	glDrawArrays(GL_QUADS, 0, 4);			GL_CHECK(error);//draw the quad
+	glDisableVertexAttribArray(a_texture_coords);	GL_CHECK(error);
+#ifndef NO_3D
+	glEnable(GL_DEPTH_TEST);
+#endif
+}
 void display_texture(int x1, int x2, int y1, int y2, unsigned txid, float alpha, float tx1, float tx2, float ty1, float ty2)
 {
 	float _2_w=2.f/w, _2_h=2.f/h;
 	float rect[]=
 	{
 		x1*_2_w-1, 1-y1*_2_h,
-		x2*_2_w-1, 1-y2*_2_h//y2<y1
+		x2*_2_w-1, 1-y2*_2_h,//y2<y1
 	};
 	float vrtx[]=
 	{
-		rect[0], rect[1],		tx1, ty1,//top left
-		rect[0], rect[3],		tx1, ty2,//bottom left
-		rect[2], rect[3],		tx2, ty2,//bottom right
-		rect[2], rect[1],		tx2, ty1 //top right
+		rect[0], rect[1], tx1, ty1,//top left
+		rect[0], rect[3], tx1, ty2,//bottom left
+		rect[2], rect[3], tx2, ty2,//bottom right
+		rect[2], rect[1], tx2, ty1,//top right
 	};
+#if 0
+	if(rotation!=ROTATE_NORMAL)
+	{
+		float matrix[4]={1, 0, 0, 1};
+
+		if(rotation==ROTATE_ARBITRARY)
+		{
+			matrix[0]=cosf(rads);
+			matrix[1]=-sinf(rads);
+			matrix[2]=-matrix[1];
+			matrix[3]=matrix[0];
+		}
+		else if(rotation==ROTATE_180)
+		{
+			matrix[0]=-1;
+			matrix[1]=0;
+			matrix[2]=0;
+			matrix[3]=-1;
+		}
+		else if(rotation==ROTATE_90CW)
+		{
+			matrix[0]=0;
+			matrix[1]=1;
+			matrix[2]=-1;
+			matrix[3]=0;
+		}
+		else if(rotation==ROTATE_270CW)
+		{
+			matrix[0]=0;
+			matrix[1]=-1;
+			matrix[2]=1;
+			matrix[3]=0;
+		}
+		for(int k=0;k<4;++k)
+		{
+			float x=vrtx[4*k+0], y=vrtx[4*k+1];
+			vrtx[4*k+0]=matrix[0]*x+matrix[1]*y;
+			vrtx[4*k+1]=matrix[2]*x+matrix[3]*y;
+		}
+#if 0
+		float vrtx2[16];
+
+		memcpy(vrtx2, vrtx, sizeof(vrtx));
+		if(rotation==ROTATE_180)
+		{
+			memcpy(vrtx+2*4, vrtx2+0*4, sizeof(float[2]));
+			memcpy(vrtx+3*4, vrtx2+1*4, sizeof(float[2]));
+			memcpy(vrtx+0*4, vrtx2+2*4, sizeof(float[2]));
+			memcpy(vrtx+1*4, vrtx2+3*4, sizeof(float[2]));
+		}
+		else if(rotation==ROTATE_90CW)
+		{
+			memcpy(vrtx+3*4, vrtx2+0*4, sizeof(float[2]));
+			memcpy(vrtx+0*4, vrtx2+1*4, sizeof(float[2]));
+			memcpy(vrtx+1*4, vrtx2+2*4, sizeof(float[2]));
+			memcpy(vrtx+2*4, vrtx2+3*4, sizeof(float[2]));
+		}
+		else if(rotation==ROTATE_270CW)
+		{
+			memcpy(vrtx+1*4, vrtx2+0*4, sizeof(float[2]));
+			memcpy(vrtx+2*4, vrtx2+1*4, sizeof(float[2]));
+			memcpy(vrtx+3*4, vrtx2+2*4, sizeof(float[2]));
+			memcpy(vrtx+0*4, vrtx2+3*4, sizeof(float[2]));
+		}
+#endif
+	}
+#endif
 	setGLProgram(shader_texture.program);	GL_CHECK(error);
 	glUniform1f(u_texture_alpha, alpha);	GL_CHECK(error);
 

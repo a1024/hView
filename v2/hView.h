@@ -252,7 +252,7 @@ int copy_bmp_to_clipboard(const unsigned char *rgba, int iw, int ih);
 
 #define GET_KEY_STATE(KEY) (keyboard[KEY]=(GetAsyncKeyState(KEY)>>15)!=0)
 
-void timer_start(int ms, int id);
+int timer_start(int ms, int id);
 void timer_stop(int id);
 void invalidate(void);
 
@@ -587,7 +587,12 @@ void gl_init();
 extern int error;
 extern const char *gl_error_msg;
 const char* glerr2str(int error);
+//	#define ENABLE_GL_CHECKS
+#ifdef ENABLE_GL_CHECKS
 #define GL_CHECK(E) (void)((E=glGetError())==0||log_error(file, __LINE__, 1, gl_error_msg, E, glerr2str(E)))
+#else
+#define GL_CHECK(...) (void)0
+#endif
 
 void set_region_immediate(int x1, int x2, int y1, int y2);//calls glViewport
 
@@ -622,6 +627,7 @@ float GUIPrint_enqueue(ArrayHandle *vertices, float tab_origin, float x, float y
 float print_line_enqueue(ArrayHandle *vertices, float tab_origin, float x, float y, float zoom, const char *msg, int msg_length, int req_cols, int *ret_idx, int *ret_cols);
 void print_line_flush(ArrayHandle vertices, float zoom);
 
+void display_texture_ndc(float *ndc, unsigned txid, float alpha);
 void display_texture(int x1, int x2, int y1, int y2, unsigned txid, float alpha, float tx1, float tx2, float ty1, float ty2);
 void display_texture_i(int x1, int x2, int y1, int y2, int *rgb, int txw, int txh, float tx1, float tx2, float ty1, float ty2, float alpha, int linear, int antialiased);
 
@@ -676,15 +682,54 @@ int load_media(const wchar_t *filename, Image16 **image, int erroronfail, int fo
 int save_media(const wchar_t *filename, Image8 *image, int erroronfail);
 int save_media_as(Image16 *image, Image8 *impreview, const wchar_t *initialname, int namelen, int erroronfail);
 
-char* get_codecinfo(void);//don't forget to free(mem)
+char* get_libinfo(void);//don't forget to free(mem)
 
 Image8 *paste_bmp_from_clipboard();
 
 
 extern int imagefitted;
+enum
+{
+	ROTATE_NORMAL=1,
+	ROTATE_180=3,
+	ROTATE_90CW=6,
+	ROTATE_270CW=8,
+	ROTATE_ARBITRARY=10,
+};
+extern int g_rotation;//OpenGL must rotate image
+extern int g_iw, g_ih;
 extern double
 	zoom,//image pixel size in screen pixels
 	wpx, wpy;//window position (top-left corner) in image coordinates
+extern double g_rotationmatrix[4];//image2screen convention, unitary
+typedef struct _HPoint2D
+{
+	double x, y;
+} HPoint2D;
+#ifdef EXPOSE_CVT
+static void screen2image(HPoint2D *p)
+{
+	double x=p->x, y=p->y;
+
+	p->x=x/zoom+wpx-g_iw*0.5;
+	p->y=y/zoom+wpy-g_ih*0.5;
+	x=g_rotationmatrix[0]*p->x+g_rotationmatrix[2]*p->y;
+	y=g_rotationmatrix[1]*p->x+g_rotationmatrix[3]*p->y;
+	p->x=x+g_iw*0.5;
+	p->y=y+g_ih*0.5;
+}
+static void image2screen(HPoint2D *p)
+{
+	double x=p->x, y=p->y;
+
+	p->x=x-g_iw*0.5;
+	p->y=y-g_ih*0.5;
+	x=g_rotationmatrix[0]*p->x+g_rotationmatrix[1]*p->y;
+	y=g_rotationmatrix[2]*p->x+g_rotationmatrix[3]*p->y;
+	p->x=(x-wpx+g_iw*0.5)*zoom;
+	p->y=(y-wpy+g_ih*0.5)*zoom;
+}
+#if 0
 #define screen2image_x(SX)             (wpx+(SX)/zoom)
 #define screen2image_y(SY)             (wpy+(SY)/zoom)
 #define screen2image_x_int(SX)         (int)floor(screen2image_x(SX))
@@ -695,6 +740,8 @@ extern double
 #define image2screen_y(IY)             (((IY)-wpy)*zoom)
 #define image2screen_x_int(IX)         (int)floor(image2screen_x(IX))
 #define image2screen_y_int(IY)         (int)floor(image2screen_y(IY))
+#endif
+#endif
 
 typedef enum ImageTypeEnum
 {
@@ -728,8 +775,10 @@ typedef enum ProfilePlotModeEnum
 } ProfilePlotMode;
 extern ProfilePlotMode profileplotmode;
 
+extern uint32_t image_txid;
+//extern uint32_t video_txid;
 void image_fit2screen(int iw, int ih);
-void impreview2gpu(uint8_t *data, int iw, int ih);
+int impreview2gpu(uint8_t *data, int iw, int ih, uint32_t *txid);
 void videoplayback_start(const char *fn, int has_video, int has_audio);
 void videoplayback_pause(int stop);
 int frame_dequeue(void);
@@ -740,7 +789,7 @@ double time_sec_audioclock(void);
 
 typedef struct _Slider
 {
-	double timestamp, duration, timescale;
+	double timestamp, duration, timescale, framedelta;
 	int32_t playing;
 } Slider;
 int slider_get(Slider *slider);
@@ -775,6 +824,28 @@ extern int sub_lines[16];
 extern int sub_nlines;
 extern double sub_tstart, sub_tend;
 #endif
+
+extern int g_droppedframes;
+extern int g_ole32initialized;
+
+int get_metadata(const wchar_t *fn);
+
+	#define PROFILE_FPS	//DEBUG
+#ifdef PROFILE_FPS
+typedef enum _ProfileEventType
+{
+	EVNT_DEC=0,
+	EVNT_SEND2GPU,
+	EVNT_RENDER,
+	EVNT_FRAMEDISPATCH,
+
+	EVNT_COUNT,
+} ProfileEventType;
+void recordevent(int eventtype, int start);
+#endif
+
+//	#define USEQUEUETIMER	//smooth 60Hz playback
+	#define USEHIRESTIMER
 
 
 //tests
