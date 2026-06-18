@@ -2426,6 +2426,13 @@ static void videoplayback_decode(void *p)
 		return;
 	}
 	double tstart=0;
+	args->albumart=0;
+	if(args->audio_stream_index!=-1&&args->video_stream_index!=-1)
+	{
+		AVStream *st=args->formatContext->streams[args->video_stream_index];
+		if(st->disposition&AV_DISPOSITION_ATTACHED_PIC)
+			args->albumart=1;
+	}
 	if(args->has_audio)
 	{
 		args->timebase=args->formatContext->streams[args->audio_stream_index]->time_base;
@@ -2436,7 +2443,7 @@ static void videoplayback_decode(void *p)
 		args->timebase=args->formatContext->streams[args->video_stream_index]->time_base;
 		args->ftimebase=av_q2d(args->timebase);
 	}
-	if(args->has_video)
+	if(args->has_video&&!args->albumart)
 	{
 		args->framedelta=1/av_q2d(args->formatContext->streams[args->video_stream_index]->avg_frame_rate);
 		args->coarsedelta=(int)ROUND64(1000*args->framedelta);
@@ -2464,7 +2471,6 @@ static void videoplayback_decode(void *p)
 #endif
 		timer_start(args->coarsedelta, TIMER_ID_VIDEO);
 
-	args->albumart=0;
 	if(args->audio_stream_index!=-1&&args->video_stream_index!=-1)
 	{
 		AVStream *st=args->formatContext->streams[args->video_stream_index];

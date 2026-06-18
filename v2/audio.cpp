@@ -219,12 +219,15 @@ extern "C" int audioplayback_pause(int stop)
 
 	if(stop==1)//end
 	{
-		ret=audioctx.client->Stop();
-		if(ret!=S_OK)
-			ERROR_A(ret);
-		ret=audioctx.client->Reset();
-		if(ret!=S_OK&&(uint32_t)ret!=0x8889000b)//buffer operation pending
-			ERROR_A(ret);
+		if(audioctx.playing)
+		{
+			ret=audioctx.client->Stop();
+			if(ret!=S_OK)
+				ERROR_A(ret);
+			ret=audioctx.client->Reset();
+			if(ret!=S_OK&&(uint32_t)ret!=0x8889000b)//buffer operation pending
+				ERROR_A(ret);
+		}
 		audioctx.stopflag=1;
 		mt_finish(audioctx.threadctx);
 	//	CoUninitialize();
