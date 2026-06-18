@@ -1747,7 +1747,8 @@ static void videoseek()
 	
 	if(args->has_audio)
 	{
-		ts=(int64_t)(args->seektarget*1000);
+		ts=(int64_t)(args->seektarget/args->ftimebase);
+	//	ts=(int64_t)(args->seektarget*1000);
 	//	ts=(int64_t)(args->seektarget*args->audioCodecContext->sample_rate);
 		streamindex=args->audio_stream_index;
 	}

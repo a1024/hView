@@ -104,7 +104,7 @@ double g_debugts=0;//
 #ifdef PROFILE_FPS
 enum
 {
-	FPS_QUEUESIZE=1024,
+	FPS_QUEUESIZE=4096,
 	FPS_QUEUEMASK=FPS_QUEUESIZE-1,
 };
 typedef struct _ProfileEvent
@@ -2180,7 +2180,7 @@ void io_render()
 #if defined PROFILE_FPS
 			if(anim_uitype==ANIMUI_STATS)
 			{
-				double graphwidth=1;//sec
+				double graphwidth=100;
 				float xscale, yscale=(float)h*(0.125f/EVNT_COUNT);
 				double now, t, toldest;
 				int k;
@@ -2201,16 +2201,16 @@ void io_render()
 				xscale=(float)(w/t);
 				t=now;
 			//	for(double t2=floor(10*now)*0.1;t2>now-5;t2-=0.1)
-				for(double t2=now;t2>now-graphwidth;t2-=slider.framedelta)
-				{
-					draw_line((float)(now-t2)*xscale
-						, (float)h*0.125f
-						, (float)(now-t2)*xscale
-						, (float)h*0.25f
-						, 0xFF000000
-					);
-					GUIPrint(0, (float)(now-t2)*xscale, (float)h*0.25f, 1, "%12.6lf", t2);
-				}
+				//for(double t2=now;t2>now-graphwidth;t2-=slider.framedelta)
+				//{
+				//	draw_line((float)(now-t2)*xscale
+				//		, (float)h*0.125f
+				//		, (float)(now-t2)*xscale
+				//		, (float)h*0.25f
+				//		, 0xFF000000
+				//	);
+				//	GUIPrint(0, (float)(now-t2)*xscale, (float)h*0.25f, 1, "%12.6lf", t2);
+				//}
 				for(k=fps_start;;)//scan forward in time
 				{
 					ProfileEvent *e, *e2;
@@ -2233,12 +2233,12 @@ void io_render()
 							t1=now;
 						else
 							t1=e2->t;
-						draw_line((float)(now-t1)*xscale
-							, (float)(e->event+0)*yscale
-							, (float)(now-t2)*xscale
-							, (float)(e->event+1)*yscale
-							, fpsprof_colors[e->event]
-						);
+						//draw_line((float)(now-t1)*xscale
+						//	, (float)(e->event+0)*yscale
+						//	, (float)(now-t2)*xscale
+						//	, (float)(e->event+1)*yscale
+						//	, fpsprof_colors[e->event]
+						//);
 						draw_line((float)(now-t1)*xscale
 							, (float)(e->event+1)*yscale
 							, (float)(now-t2)*xscale
