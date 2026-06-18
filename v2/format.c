@@ -76,7 +76,6 @@ char ffmpegerror[AV_ERROR_MAX_STRING_SIZE]={0};
 	{\
 		if(E<0&&!g_averror)\
 		{\
-			__debugbreak();\
 			g_averror=E;\
 			g_avline=__LINE__;\
 			avutil.av_strerror(E, ffmpegerror, AV_ERROR_MAX_STRING_SIZE);\
