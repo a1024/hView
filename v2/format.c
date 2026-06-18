@@ -167,7 +167,7 @@ static void update_globals(const wchar_t *fn, Image16 *image)//accesses globals
 			memset(background, 128, sizeof(background));
 		else if(imagetype==IM_RGBA)
 		{
-			long long sum[3]={0}, count=0;//set background as far as possible from averate border color in RGB space
+			int64_t sum[3]={0}, count=0;//set background as far as possible from averate border color in RGB space
 			for(int kx=0;kx<image->iw;++kx)//accumulate top edge
 			{
 				sum[0]+=data[kx<<2|0];
@@ -300,7 +300,7 @@ static int load_heic(const wchar_t *filename, Image16 **image, int erroronfail)
 	struct heif_error error={0};
 	struct heif_context *ctx=libheif.heif_context_alloc();
 #ifdef BENCHMARK
-	long long t1=__rdtsc();
+	int64_t t1=__rdtsc();
 #endif
 	int64_t csize=0;
 	struct _stat64 info={0};
@@ -376,7 +376,7 @@ static int load_heic(const wchar_t *filename, Image16 **image, int erroronfail)
 	imagedepth=libheif.heif_image_handle_get_luma_bits_per_pixel(handle);
 	imagetype=IM_RGBA;
 #ifdef BENCHMARK
-	long long t2=__rdtsc();
+	int64_t t2=__rdtsc();
 	LOG_WARNING("HEIC: %lld cycles", t2-t1);
 #endif
 	*image=image_alloc16(0, iw2, ih2, srcnch, 4, 1<<imagedepth, imagedepth);
@@ -558,7 +558,7 @@ typedef struct _HuffDataHeader//16 bytes
 {
 	char DATA[4];//'D'|'A'<<8|'T'<<16|'A'<<24
 	unsigned uPxCount;//uncompressed pixel count
-	unsigned long long cBitSize;//compressed data size in bits
+	uint64_t cBitSize;//compressed data size in bits
 	unsigned data[];
 } HuffDataHeader;
 typedef struct _HuffNode
@@ -862,7 +862,7 @@ static int huf_load(const wchar_t *filename, Image16 **image, int erroronfail)
 					++bitidx;
 				}
 				dstptr[kd++]=tree[node].value;
-			//	dstptr[kd++]=0xFFFF000000000000|(unsigned long long)tree[node].value<<bayer_sh2[(ky&1)<<1|kx&1];
+			//	dstptr[kd++]=0xFFFF000000000000|(uint64_t)tree[node].value<<bayer_sh2[(ky&1)<<1|kx&1];
 				++kx;
 				if((unsigned)kx>=header->width)
 					++ky, kx=0;
@@ -881,7 +881,7 @@ static int huf_load(const wchar_t *filename, Image16 **image, int erroronfail)
 		}
 #if 0
 		unsigned state=*bitstream;
-		unsigned long long *dstptr=(unsigned long long*)image[0]->data;
+		uint64_t *dstptr=(uint64_t*)image[0]->data;
 		int srcbitidx=32;
 		int dstidx=0, kx=0, ky=0;
 		for(;dstidx<res;)
@@ -917,14 +917,14 @@ static int huf_load(const wchar_t *filename, Image16 **image, int erroronfail)
 			}
 			switch(bytenode->nsyms)
 			{
-			case 8:dstptr[dstidx++]=0xFFFF000000000000|(unsigned long long)bytenode->syms[nwritten++]<<bayer_sh2[(ky&1)<<1|kx&1]; ++kx; if(kx>=header->width)++ky, kx=0;
-			case 7:dstptr[dstidx++]=0xFFFF000000000000|(unsigned long long)bytenode->syms[nwritten++]<<bayer_sh2[(ky&1)<<1|kx&1]; ++kx; if(kx>=header->width)++ky, kx=0;
-			case 6:dstptr[dstidx++]=0xFFFF000000000000|(unsigned long long)bytenode->syms[nwritten++]<<bayer_sh2[(ky&1)<<1|kx&1]; ++kx; if(kx>=header->width)++ky, kx=0;
-			case 5:dstptr[dstidx++]=0xFFFF000000000000|(unsigned long long)bytenode->syms[nwritten++]<<bayer_sh2[(ky&1)<<1|kx&1]; ++kx; if(kx>=header->width)++ky, kx=0;
-			case 4:dstptr[dstidx++]=0xFFFF000000000000|(unsigned long long)bytenode->syms[nwritten++]<<bayer_sh2[(ky&1)<<1|kx&1]; ++kx; if(kx>=header->width)++ky, kx=0;
-			case 3:dstptr[dstidx++]=0xFFFF000000000000|(unsigned long long)bytenode->syms[nwritten++]<<bayer_sh2[(ky&1)<<1|kx&1]; ++kx; if(kx>=header->width)++ky, kx=0;
-			case 2:dstptr[dstidx++]=0xFFFF000000000000|(unsigned long long)bytenode->syms[nwritten++]<<bayer_sh2[(ky&1)<<1|kx&1]; ++kx; if(kx>=header->width)++ky, kx=0;
-			case 1:dstptr[dstidx++]=0xFFFF000000000000|(unsigned long long)bytenode->syms[nwritten++]<<bayer_sh2[(ky&1)<<1|kx&1]; ++kx; if(kx>=header->width)++ky, kx=0;
+			case 8:dstptr[dstidx++]=0xFFFF000000000000|(uint64_t)bytenode->syms[nwritten++]<<bayer_sh2[(ky&1)<<1|kx&1]; ++kx; if(kx>=header->width)++ky, kx=0;
+			case 7:dstptr[dstidx++]=0xFFFF000000000000|(uint64_t)bytenode->syms[nwritten++]<<bayer_sh2[(ky&1)<<1|kx&1]; ++kx; if(kx>=header->width)++ky, kx=0;
+			case 6:dstptr[dstidx++]=0xFFFF000000000000|(uint64_t)bytenode->syms[nwritten++]<<bayer_sh2[(ky&1)<<1|kx&1]; ++kx; if(kx>=header->width)++ky, kx=0;
+			case 5:dstptr[dstidx++]=0xFFFF000000000000|(uint64_t)bytenode->syms[nwritten++]<<bayer_sh2[(ky&1)<<1|kx&1]; ++kx; if(kx>=header->width)++ky, kx=0;
+			case 4:dstptr[dstidx++]=0xFFFF000000000000|(uint64_t)bytenode->syms[nwritten++]<<bayer_sh2[(ky&1)<<1|kx&1]; ++kx; if(kx>=header->width)++ky, kx=0;
+			case 3:dstptr[dstidx++]=0xFFFF000000000000|(uint64_t)bytenode->syms[nwritten++]<<bayer_sh2[(ky&1)<<1|kx&1]; ++kx; if(kx>=header->width)++ky, kx=0;
+			case 2:dstptr[dstidx++]=0xFFFF000000000000|(uint64_t)bytenode->syms[nwritten++]<<bayer_sh2[(ky&1)<<1|kx&1]; ++kx; if(kx>=header->width)++ky, kx=0;
+			case 1:dstptr[dstidx++]=0xFFFF000000000000|(uint64_t)bytenode->syms[nwritten++]<<bayer_sh2[(ky&1)<<1|kx&1]; ++kx; if(kx>=header->width)++ky, kx=0;
 			}
 			for(int k=0;k<bytenode->bitsconsumed;++k)
 			{
@@ -1014,7 +1014,7 @@ static int huf_load(const wchar_t *filename, Image16 **image, int erroronfail)
 				symbol=symbol>>1^-(symbol&1);
 				prev+=symbol;
 
-				drow[kx0]=0xFFFF000000000000|(unsigned long long)prev<<bayer_sh2[(ky0&1)<<1|kx0&1];
+				drow[kx0]=0xFFFF000000000000|(uint64_t)prev<<bayer_sh2[(ky0&1)<<1|kx0&1];
 			}
 #endif
 		}
@@ -1038,7 +1038,7 @@ static int gr_save(const wchar_t *dstfn, const short *image, int iw, int ih, int
 	int psize=(iw+16)*(int)sizeof(short[2*2]);//2 padded rows * 1 channel * {pixels, errors}
 	short *pixels=(short*)malloc(psize);
 	int dstcap=iw*ih<<1;
-	unsigned long long *dstbuf=(unsigned long long*)malloc(dstcap), *dstptr=dstbuf;
+	uint64_t *dstbuf=(uint64_t*)malloc(dstcap), *dstptr=dstbuf;
 	if(!pixels||!dstbuf)
 	{
 		LOG_ERROR("Alloc error");
@@ -1049,7 +1049,7 @@ static int gr_save(const wchar_t *dstfn, const short *image, int iw, int ih, int
 	const int half=0;
 //	int half=nlevels>>1;
 
-	unsigned long long cache=0;
+	uint64_t cache=0;
 	int nbits=(int)sizeof(cache)<<3;
 	for(int ky=0, idx=0;ky<ih;++ky)
 	{
@@ -1109,7 +1109,7 @@ static int gr_save(const wchar_t *dstfn, const short *image, int iw, int ih, int
 				if(nbypass>=nbits)//not enough free bits in cache:  fill cache, write to list, and repeat
 				{
 					nbypass-=nbits;
-					cache|=(unsigned long long)bypass>>nbypass;
+					cache|=(uint64_t)bypass>>nbypass;
 					bypass&=(1<<nbypass)-1;
 					*dstptr++=cache;
 					cache=0;
@@ -1117,7 +1117,7 @@ static int gr_save(const wchar_t *dstfn, const short *image, int iw, int ih, int
 				}
 				//now there is room for bypass:  0 <= nbypass < nbits <= 64
 				nbits-=nbypass;//emit remaining bypass to cache
-				cache|=(unsigned long long)bypass<<nbits;
+				cache|=(uint64_t)bypass<<nbits;
 			}
 
 			rows[0]+=2;
@@ -1141,7 +1141,7 @@ static int gr_save(const wchar_t *dstfn, const short *image, int iw, int ih, int
 			bayermatrix[2],
 			bayermatrix[3]
 		);
-		fwrite(dstbuf, 1, streamsize*sizeof(long long), fdst);
+		fwrite(dstbuf, 1, streamsize*sizeof(int64_t), fdst);
 		fclose(fdst);
 	}
 	free(dstbuf);
@@ -1230,7 +1230,7 @@ static short* gr_load(const wchar_t *srcfn, int *ret_iw, int *ret_ih, int *ret_n
 	const int half=0;
 //	int half=nlevels>>1;
 
-	unsigned long long *streamptr=(unsigned long long*)srcptr, cache=0;
+	uint64_t *streamptr=(uint64_t*)srcptr, cache=0;
 	int nbits=0;
 	for(int ky=0, idx=0;ky<ih;++ky)
 	{
@@ -3053,7 +3053,7 @@ int load_media(const wchar_t *filename, Image16 **image, int erroronfail, int ne
 			(bayer[2]<<4)+16-imagedepth,
 			(bayer[3]<<4)+16-imagedepth,
 		};
-		unsigned long long *dstptr=(unsigned long long*)image[0]->data;
+		uint64_t *dstptr=(uint64_t*)image[0]->data;
 		for(int ky=0, idx=0;ky<ih;++ky)
 		{
 			for(int kx=0;kx<iw;++kx, ++idx)
@@ -3062,7 +3062,7 @@ int load_media(const wchar_t *filename, Image16 **image, int erroronfail, int ne
 				//	printf("");
 
 				int kc=(ky&1)<<1|(kx&1);
-				dstptr[idx]=0xFFFF000000000000|(unsigned long long)comp[kc][iw2*(ky>>1)+(kx>>1)]<<sh[kc];
+				dstptr[idx]=0xFFFF000000000000|(uint64_t)comp[kc][iw2*(ky>>1)+(kx>>1)]<<sh[kc];
 			}
 		}
 #endif

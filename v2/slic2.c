@@ -10,6 +10,7 @@
 #ifdef _MSC_VER
 #define _CRT_SECURE_NO_WARNINGS
 #endif
+#include<stdint.h>
 #include<wchar.h>
 #ifdef __cplusplus
 extern "C"
@@ -24,8 +25,8 @@ extern "C"
 //	A 14-bit subpixel must be stored like this: 0bXXXX_XXXX_XXXX_XX00
 //ret_dummy_alpha:  Tells if image has redundant alpha channel
 //Don't forget to free returned buffers
-unsigned char* slic2_encode(int iw, int ih, int nch, int depth, const void *src, long long *ret_size);
-void*          slic2_decode(const unsigned char *data, long long len, int *ret_iw, int *ret_ih, int *ret_nch, int *ret_depth, int *ret_dummy_alpha, int force_alpha);
+uint8_t* slic2_encode(int iw, int ih, int nch, int depth, const void *src, int64_t *ret_size);
+void* slic2_decode(const uint8_t *data, int64_t len, int *ret_iw, int *ret_ih, int *ret_nch, int *ret_depth, int *ret_dummy_alpha, int force_alpha);
 
 //I/O wrappers, return FALSE on error
 int   slic2_save(const wchar_t *filename, int iw, int ih, int nch, int depth, const void *src);
@@ -168,7 +169,7 @@ static int slic2_error(int line, const char *msg, ...)
 typedef struct C2DNodeStruct
 {
 	struct C2DNodeStruct *prev, *next;
-	unsigned char data[];
+	uint8_t data[];
 } C2DNodeHeader, *C2DNodeHandle;
 typedef struct C2DListStruct
 {
@@ -201,10 +202,10 @@ static void slic2_dlist_clear(C2DListHandle list)
 		list->nbytes=list->nnodes=0;
 	}
 }
-static unsigned char* slic2_dlist_toarray(C2DListHandle list, size_t *ret_size)
+static uint8_t* slic2_dlist_toarray(C2DListHandle list, size_t *ret_size)
 {
 	C2DNodeHandle it;
-	unsigned char *dst=(unsigned char*)malloc(list->nnodes*list->nodebytes);
+	uint8_t *dst=(uint8_t*)malloc(list->nnodes*list->nodebytes);
 	if(!dst)
 	{
 		ERROR("Allocation error");
@@ -296,7 +297,7 @@ void* slic2_dlist_push_back(C2DListHandle list, const void *data, size_t count)
 typedef struct C2SNodeStruct
 {
 	struct C2SNodeStruct *prev;
-	unsigned char data[];//4-byte aligned on 32-bit, not suitable for double on 32-bit
+	uint8_t data[];//4-byte aligned on 32-bit, not suitable for double on 32-bit
 } C2SNode, *C2SNodeHandle;
 typedef struct C2SListStruct
 {
@@ -432,12 +433,12 @@ static void c2_slist_print(C2SListHandle list, void (*printer)(const void*))
 typedef struct DebugANSInfoStruct
 {
 	unsigned s0, state, cdf, freq, id, kx, ky;
-	unsigned char kq, kc;
+	uint8_t kq, kc;
 	unsigned short sym;
 } DebugANSInfo;
 //extern C2SList states;
-static void debug_enc_update(unsigned state, unsigned cdf, unsigned freq, int kx, int ky, int kq, int kc, unsigned char sym);
-static void debug_dec_update(unsigned state, unsigned cdf, unsigned freq, int kx, int ky, int kq, int kc, unsigned char sym);
+static void debug_enc_update(unsigned state, unsigned cdf, unsigned freq, int kx, int ky, int kq, int kc, uint8_t sym);
+static void debug_dec_update(unsigned state, unsigned cdf, unsigned freq, int kx, int ky, int kq, int kc, uint8_t sym);
 
 static C2SList states={0};
 static int debug_channel=0;
@@ -456,7 +457,7 @@ static void debug_enc_dump(DebugANSInfo *i2)
 		C2_STACK_POP(&states);
 	}
 }
-static void debug_enc_update(unsigned state, unsigned cdf, unsigned freq, int kx, int ky, int kq, int kc, unsigned char sym)
+static void debug_enc_update(unsigned state, unsigned cdf, unsigned freq, int kx, int ky, int kq, int kc, uint8_t sym)
 {
 	if(kc==debug_channel)
 	{
@@ -471,7 +472,7 @@ static void debug_enc_update(unsigned state, unsigned cdf, unsigned freq, int kx
 		C2_STACK_PUSH(&states, &info);
 	}
 }
-static void debug_dec_update(unsigned state, unsigned cdf, unsigned freq, int kx, int ky, int kq, int kc, unsigned char sym)
+static void debug_dec_update(unsigned state, unsigned cdf, unsigned freq, int kx, int ky, int kq, int kc, uint8_t sym)
 {
 	if(kc==debug_channel)
 	{
@@ -532,9 +533,9 @@ static void slic2_ans_enc_flush(ANSEncoder *ec)
 typedef struct ANSDecoderStruct
 {
 	unsigned state;
-	const unsigned char *srcptr, *srcstart;
+	const uint8_t *srcptr, *srcstart;
 } ANSDecoder;
-static void slic2_ans_dec_init(ANSDecoder *ec, const unsigned char *start, const unsigned char *end)
+static void slic2_ans_dec_init(ANSDecoder *ec, const uint8_t *start, const uint8_t *end)
 {
 	ec->srcptr=end;
 	ec->srcstart=start;
@@ -607,7 +608,7 @@ typedef struct SLI2HeaderStruct
 	char tag[4];//"SLI2"
 	int iw, ih;
 
-	unsigned char nch, depth;//nch: 1, 2, 3 or 4, depth: [1~16]
+	uint8_t nch, depth;//nch: 1, 2, 3 or 4, depth: [1~16]
 	short alpha;		//TODO (generalize) if palette is degenerate, skip encoding channel
 
 	unsigned short palettesizes[4];//per channel, nonzero means enabled (depth must be > 8)
@@ -620,7 +621,7 @@ static SLI2Header slic2_header;
 	SH=(TEMP>=1<<4)<<2,	LOGN+=SH, TEMP>>=SH,\
 	SH=(TEMP>=1<<2)<<1,	LOGN+=SH, TEMP>>=SH,\
 	SH= TEMP>=1<<1,		LOGN+=SH;
-unsigned char* slic2_encode(int iw, int ih, int nch, int depth, const void *src, long long *ret_size)
+uint8_t* slic2_encode(int iw, int ih, int nch, int depth, const void *src, int64_t *ret_size)
 {
 	if(iw<1||ih<1 || nch<1||nch>4 || depth<1||depth>16 || !src)
 		return 0;
@@ -640,7 +641,7 @@ unsigned char* slic2_encode(int iw, int ih, int nch, int depth, const void *src,
 	uint8_t truedepth[]={(uint8_t)depth, (uint8_t)depth, (uint8_t)depth, (uint8_t)depth};
 	if(depth<=8)
 	{
-		const unsigned char *src0=(const unsigned char*)src;
+		const uint8_t *src0=(const uint8_t*)src;
 		memset(slic2_header.palettesizes, 0, sizeof(slic2_header.palettesizes));
 		for(int kc=0;kc<nch;++kc)
 		{
@@ -818,7 +819,7 @@ unsigned char* slic2_encode(int iw, int ih, int nch, int depth, const void *src,
 		for(int kt=0, sum=0;kt<SLIC2_HISTLEN;++kt)
 		{
 			unsigned freq=CDF2[kt];
-			CDF2[kt]=(unsigned)((unsigned long long)sum*(0x10000LL-SLIC2_HISTLEN)/res)+kt;
+			CDF2[kt]=(unsigned)((uint64_t)sum*(0x10000LL-SLIC2_HISTLEN)/res)+kt;
 			sum+=freq;
 
 			slic2_header.hist[kc][kt]=(unsigned short)CDF2[kt];
@@ -834,7 +835,7 @@ unsigned char* slic2_encode(int iw, int ih, int nch, int depth, const void *src,
 		}
 	}//channel-loop
 	SLIC2_ENC_FLUSH(&ec);
-	unsigned char *ret=slic2_dlist_toarray(&list, (size_t*)ret_size);
+	uint8_t *ret=slic2_dlist_toarray(&list, (size_t*)ret_size);
 	slic2_dlist_clear(&list);
 	free(buf);
 	for(int kc=0;kc<4;++kc)
@@ -846,7 +847,7 @@ unsigned char* slic2_encode(int iw, int ih, int nch, int depth, const void *src,
 	memcpy(header2->hist, slic2_header.hist, sizeof(header2->hist));
 	return ret;
 }
-void* slic2_decode(const unsigned char *src, long long len, int *ret_iw, int *ret_ih, int *ret_nch, int *ret_depth, int *ret_dummy_alpha, int force_alpha)
+void* slic2_decode(const uint8_t *src, int64_t len, int *ret_iw, int *ret_ih, int *ret_nch, int *ret_depth, int *ret_dummy_alpha, int force_alpha)
 {
 	if(!src||(int64_t)len<(int64_t)sizeof(SLI2Header)||!ret_iw||!ret_ih||!ret_nch||!ret_depth)
 	{
@@ -860,8 +861,8 @@ void* slic2_decode(const unsigned char *src, long long len, int *ret_iw, int *re
 	//	ERROR("Invalid file");
 		return 0;
 	}
-	unsigned char truedepth[4];
-	const unsigned char *srcstart=src+sizeof(slic2_header);
+	uint8_t truedepth[4];
+	const uint8_t *srcstart=src+sizeof(slic2_header);
 	unsigned short *palettes[4]={0};
 	for(int kc=0;kc<4;++kc)
 	{
@@ -990,7 +991,7 @@ void* slic2_decode(const unsigned char *src, long long len, int *ret_iw, int *re
 	//pack pixels, interleave channels, and add half
 	if(depth<=8)
 	{
-		unsigned char *dst2=(unsigned char*)ret;
+		uint8_t *dst2=(uint8_t*)ret;
 		if(add_alpha)
 		{
 			int black=0xFF000000;
@@ -1007,7 +1008,7 @@ void* slic2_decode(const unsigned char *src, long long len, int *ret_iw, int *re
 		unsigned short *dst2=(unsigned short*)ret;
 		if(add_alpha)
 		{
-			long long black=0xFFFF000000000000;
+			uint64_t black=0xFFFF000000000000;
 			slic2_memfill(dst2, &black, (size_t)res*4*sizeof(short), sizeof(black));
 		}
 		for(int kc=0;kc<nch;++kc)
@@ -1037,8 +1038,8 @@ static ptrdiff_t get_filesizew(const wchar_t *filename)//-1 not found,  0: not a
 }
 int slic2_save(const wchar_t *filename, int iw, int ih, int nch, int depth, const void *src)
 {
-	long long ret_size=0;
-	unsigned char *ret=slic2_encode(iw, ih, 4, depth, src, &ret_size);
+	int64_t ret_size=0;
+	uint8_t *ret=slic2_encode(iw, ih, 4, depth, src, &ret_size);
 	if(!ret)
 		return 0;
 	FILE *f=_wfopen(filename, L"wb");
@@ -1057,7 +1058,7 @@ void* slic2_load(const wchar_t *filename, int *ret_iw, int *ret_ih, int *ret_nch
 	FILE *f=_wfopen(filename, L"rb");
 	if(!f)
 		return 0;
-	unsigned char *cdata=(unsigned char*)malloc(size);
+	uint8_t *cdata=(uint8_t*)malloc(size);
 	if(!cdata)
 	{
 		ERROR("Allocation error");
@@ -1116,14 +1117,14 @@ void* load_image(const char *filename, int *iw, int *ih, int *nch0, int *depth, 
 		return udata;
 	}
 	*depth=8;
-	unsigned char *udata8=(unsigned char*)malloc(npx);
+	uint8_t *udata8=(uint8_t*)malloc(npx);
 	if(!udata8)
 	{
 		ERROR("Allocaiton error");
 		return 0;
 	}
 	for(ptrdiff_t k=0;k<npx;++k)
-		udata8[k]=(unsigned char)udata[k];
+		udata8[k]=(uint8_t)udata[k];
 	free(udata);
 	return udata8;
 }
@@ -1170,7 +1171,7 @@ int main(int argc, char **argv)
 		
 			printf("Saving \'%s\'...\n", fn2);
 			t=clock();
-			long long ret_size=0;
+			int64_t ret_size=0;
 			if(!slic2_save(fn2, iw, ih, 4, depth, udata))
 				printf("ERROR saving \'%s\'\n", fn2);
 			t=clock()-t;
@@ -1223,7 +1224,7 @@ int main(int argc, char **argv)
 				depth=16;
 			else
 				depth=8;
-			int error=lodepng_encode_file(fn2, (unsigned char*)udata, iw, ih, type, depth);
+			int error=lodepng_encode_file(fn2, (uint8_t*)udata, iw, ih, type, depth);
 			t=clock()-t;
 			if(error)
 				printf("ERROR saving \'%s\'\n", fn2);
@@ -1248,15 +1249,15 @@ int main(int argc, char **argv)
 			
 			printf("Test encode...\n");
 			t=clock();
-			long long ret_size=0;
-			unsigned char *cdata=slic2_encode(iw, ih, 4, depth, udata, &ret_size);
+			int64_t ret_size=0;
+			uint8_t *cdata=slic2_encode(iw, ih, 4, depth, udata, &ret_size);
 			t=clock()-t;
 			printf("Took %lf sec\n", (double)t/CLOCKS_PER_SEC);
 			
 			printf("Test decode...\n");
 			t=clock();
 			int iw2=0, ih2=0, nch2=0, depth2=0, dummy_alpha2=0;
-			unsigned char *udata2=slic2_decode(cdata, ret_size, &iw2, &ih2, &nch2, &depth2, &dummy_alpha2, 1);
+			uint8_t *udata2=slic2_decode(cdata, ret_size, &iw2, &ih2, &nch2, &depth2, &dummy_alpha2, 1);
 			t=clock()-t;
 			printf("Took %lf sec\n", (double)t/CLOCKS_PER_SEC);
 
@@ -1274,8 +1275,8 @@ int main(int argc, char **argv)
 			int success=1;
 			for(ptrdiff_t k=0, npx=(ptrdiff_t)nch*iw*ih*depth>>3;k<npx;++k)
 			{
-				unsigned char
-					v1=((unsigned char*)udata)[k],
+				uint8_t
+					v1=((uint8_t*)udata)[k],
 					v2=udata2[k];
 				if(v2!=v1)
 				{

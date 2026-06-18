@@ -2,7 +2,6 @@
 #ifndef INC_PXVIEW3D_H
 #define INC_PXVIEW3D_H
 #include"util.h"
-#include<stdint.h>
 #include<time.h>
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -248,7 +247,7 @@ int copy_to_clipboardw(const wchar_t *a, int size);
 ArrayHandle paste_from_clipboard(int loud);
 ArrayHandle paste_from_clipboardw(int loud);
 
-int copy_bmp_to_clipboard(const unsigned char *rgba, int iw, int ih);
+int copy_bmp_to_clipboard(const uint8_t *rgba, int iw, int ih);
 
 #define GET_KEY_STATE(KEY) (keyboard[KEY]=(GetAsyncKeyState(KEY)>>15)!=0)
 
@@ -597,7 +596,7 @@ const char* glerr2str(int error);
 void set_region_immediate(int x1, int x2, int y1, int y2);//calls glViewport
 
 void send_texture_pot(unsigned gl_texture, int *rgba, int txw, int txh, int linear, int antialiased);
-void send_texture_pot_grey(unsigned gl_texture, unsigned char *bmp, int txw, int txh, int linear, int antialiased);
+void send_texture_pot_grey(unsigned gl_texture, uint8_t *bmp, int txw, int txh, int linear, int antialiased);
 void send_texture_pot_int16x1(unsigned gl_texture, unsigned *texture, int txw, int txh, int linear, int antialiased);
 void select_texture(unsigned tx_id, int u_location);
 
@@ -617,7 +616,7 @@ void draw_2d_flush(ArrayHandle vertices, int color, unsigned primitive);
 int toggle_sdftext();
 int set_text_color(int color_txt);
 int set_bk_color(int color_bk);
-long long set_text_colors(long long colors);//0xBKBKBKBK_TXTXTXTX
+uint64_t set_text_colors(uint64_t colors);//0xBKBKBKBK_TXTXTXTX
 float print_line_immediate(float tab_origin, float x, float y, float zoom, const char *msg, int msg_length, int req_cols, int *ret_idx, int *ret_cols);//returns text width
 float GUIPrint(float tab_origin, float x, float y, float zoom, const char *format, ...);//returns text width
 extern int g_printed;
@@ -658,7 +657,7 @@ void depth_test(int enable);
 typedef struct _Image8
 {
 	int iw, ih, nch, depth, srcdepth;
-	unsigned char data[];
+	uint8_t data[];
 } Image8;
 typedef struct _Image16
 {
@@ -669,7 +668,7 @@ typedef struct _Image16
 		nlevels0;	//original nlevels = vmax+1
 	unsigned short data[];
 } Image16;
-Image8* image_alloc8(const unsigned char *src, int iw, int ih, int nch, int srcdepth);
+Image8* image_alloc8(const uint8_t *src, int iw, int ih, int nch, int srcdepth);
 Image16* image_alloc16(const unsigned short *src, int iw, int ih, int srcnch, int nch, int nlevels0, int depth);
 void image_free(void *pimage);
 void image_export(Image8 *dst, const Image16* src, int imagetype);
@@ -746,7 +745,7 @@ static void image2screen(HPoint2D *p)
 typedef enum ImageTypeEnum
 {
 	IM_UNINITIALIZED,	//unsigned native depth					0xAABBGGRR unsigned 8-bit
-	IM_GRAYSCALEv2,		//unsigned short image[ih][iw];				unsigned char impreview[ih][iw];		GREY+ALPHA?
+	IM_GRAYSCALEv2,		//unsigned short image[ih][iw];				uint8_t impreview[ih][iw];		GREY+ALPHA?
 	IM_RGBA,		//unsigned short image[ih][iw][4];			int impreview[ih][iw];
 	IM_BAYERv2,		//unsigned short image[ih/2][2][iw/2][2]; RGGB		int impreview[ih/2][iw/2];
 	IM_NONE,
@@ -764,7 +763,7 @@ extern ptrdiff_t filesize;
 extern time_t created, lastmodified, lastaccess;
 extern struct tm datelastmodified;
 extern char strlastmodified[128];
-extern unsigned char background[4];
+extern uint8_t background[4];
 extern int brightness;
 
 typedef enum ProfilePlotModeEnum
@@ -852,12 +851,12 @@ void recordevent(int eventtype, int start);
 
 //T48: lossless raw image codec
 //int t48_encode(const unsigned short *src, int iw, int ih, int idepth, char *bayer, ArrayHandle *data, int loud);
-//int t48_decode(const unsigned char *data, size_t srclen, int iw, int ih, int idepth, char *bayer, unsigned short *dst, int loud);
+//int t48_decode(const uint8_t *data, size_t srclen, int iw, int ih, int idepth, char *bayer, unsigned short *dst, int loud);
 //void test48(ImageHandle image, int idepth, char *bayer);
 
 //T49: lossless 16-bit image codec
 //int t49_encode(const unsigned short *src, int iw, int ih, int idepth, ArrayHandle *data, int loud);
-//int t49_decode(const unsigned char *data, size_t srclen, int iw, int ih, int idepth, unsigned short *dst, int loud);
+//int t49_decode(const uint8_t *data, size_t srclen, int iw, int ih, int idepth, unsigned short *dst, int loud);
 //void test49(ImageHandle image, int idepth);
 
 

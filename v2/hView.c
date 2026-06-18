@@ -50,7 +50,7 @@ ptrdiff_t filesize=0;
 time_t created=0, lastmodified=0, lastaccess=0;
 struct tm datelastmodified={0};
 char strlastmodified[128]={0};
-unsigned char background[]={0, 0, 0, 255};
+uint8_t background[]={0, 0, 0, 255};
 
 static ArrayHandle vertices_text=0;
 int pxlabels_hex=1;
@@ -195,20 +195,20 @@ static void calc_hist()
 	memset(histogram, 0, 768*sizeof(int));
 	for(int k=0;k<res;++k)
 	{
-		unsigned char *p=impreview->data+((size_t)k<<2);
+		uint8_t *p=impreview->data+((size_t)k<<2);
 		++histogram[0<<8|p[0]];
 		++histogram[1<<8|p[1]];
 		++histogram[2<<8|p[2]];
 	}
 }
-static void equalize_ch(const unsigned short *src, unsigned char *dst, int iw, int ih, int srcxstride, int srcystride, int *hist, int nlevels, int disableZS)
+static void equalize_ch(const uint16_t *src, uint8_t *dst, int iw, int ih, int srcxstride, int srcystride, int *hist, int nlevels, int disableZS)
 {
 	int mask=nlevels-1;
 	if(!(disableZS&1))
 		memset(hist, 0, nlevels*sizeof(int));
 	for(int ky=0;ky<ih;++ky)
 	{
-		const unsigned short *srcptr=src+srcystride*ky;
+		const uint16_t *srcptr=src+srcystride*ky;
 		for(int kx=0;kx<iw;++kx, srcptr+=srcxstride)
 			++hist[*srcptr&mask];
 	}
@@ -224,10 +224,10 @@ static void equalize_ch(const unsigned short *src, unsigned char *dst, int iw, i
 			hist[ks]=(int)(sum*255LL/total);
 			sum+=freq;
 		}
-		unsigned char *dstptr=dst;
+		uint8_t *dstptr=dst;
 		for(int ky=0;ky<ih;++ky)
 		{
-			const unsigned short *srcptr=src+srcystride*ky;
+			const uint16_t *srcptr=src+srcystride*ky;
 			for(int kx=0;kx<iw;++kx, srcptr+=srcxstride, dstptr+=4)
 				*dstptr=hist[*srcptr&mask];
 		}
@@ -287,10 +287,10 @@ static void equalize(void)
 				);
 			}
 		}
-		//equalize_ch((unsigned short*)image->data+image->iw*0+0, impreview->data+0, image->iw>>1, image->ih>>1, 1, image->iw, hist, nlevels, 0);
-		//equalize_ch((unsigned short*)image->data+image->iw*0+1, impreview->data+1, image->iw>>1, image->ih>>1, 1, image->iw, hist, nlevels, 2);
-		//equalize_ch((unsigned short*)image->data+image->iw*1+0, impreview->data+2, image->iw>>1, image->ih>>1, 1, image->iw, hist, nlevels, 1);
-		//equalize_ch((unsigned short*)image->data+image->iw*1+1, impreview->data+3, image->iw>>1, image->ih>>1, 1, image->iw, hist, nlevels, 0);
+		//equalize_ch((uint16_t*)image->data+image->iw*0+0, impreview->data+0, image->iw>>1, image->ih>>1, 1, image->iw, hist, nlevels, 0);
+		//equalize_ch((uint16_t*)image->data+image->iw*0+1, impreview->data+1, image->iw>>1, image->ih>>1, 1, image->iw, hist, nlevels, 2);
+		//equalize_ch((uint16_t*)image->data+image->iw*1+0, impreview->data+2, image->iw>>1, image->ih>>1, 1, image->iw, hist, nlevels, 1);
+		//equalize_ch((uint16_t*)image->data+image->iw*1+1, impreview->data+3, image->iw>>1, image->ih>>1, 1, image->iw, hist, nlevels, 0);
 		break;
 	}
 	free(hist);
@@ -329,8 +329,8 @@ static void update_image(int settitle, int render)
 	}
 	if(bitmode)
 	{
-		const unsigned short *src=image->data;
-		unsigned char *dst=impreview->data;
+		const uint16_t *src=image->data;
+		uint8_t *dst=impreview->data;
 		int srcidx, dstidx;
 		switch(imagetype)
 		{
@@ -1141,7 +1141,7 @@ int io_keydn(IOKey key, char c)
 				//	ImageHandle crop=image_construct(iw, ih, 8, impreview->data+((impreview->iw*(ptrdiff_t)y1+x1)<<2), iw, ih, impreview->xcap-iw, impreview->depth);
 					for(ptrdiff_t k=0, res=crop->iw*crop->ih;k<res;++k)//swap red & blue (8-bit)
 					{
-						unsigned char temp=crop->data[k<<2|0];
+						uint8_t temp=crop->data[k<<2|0];
 						crop->data[k<<2|0]=crop->data[k<<2|2];
 						crop->data[k<<2|2]=temp;
 					}
@@ -1201,7 +1201,7 @@ int io_keydn(IOKey key, char c)
 				case IM_GRAYSCALEv2:
 					{
 						str_append(&str, "%d bit GRAY:\n", imagedepth);
-						const unsigned short *ptr=(const unsigned short*)image->data;
+						const uint16_t *ptr=(const uint16_t*)image->data;
 						int iy=MAXVAR(iy1, 0), yend=MINVAR(iy2+2, image->ih);
 						for(;iy<yend;++iy)
 						{
@@ -1219,7 +1219,7 @@ int io_keydn(IOKey key, char c)
 				case IM_RGBA:
 					{
 						str_append(&str, "%d bit RGBA:\n", imagedepth);
-						const unsigned short *ptr=(const unsigned short*)image->data;
+						const uint16_t *ptr=(const uint16_t*)image->data;
 						int iy=MAXVAR(iy1, 0), yend=MINVAR(iy2+2, image->ih);
 						for(;iy<yend;++iy)
 						{
@@ -1242,7 +1242,7 @@ int io_keydn(IOKey key, char c)
 				case IM_BAYERv2:
 					{
 						const char labels[]="RGB";
-						const unsigned short *ptr=(const unsigned short*)image->data;
+						const uint16_t *ptr=(const uint16_t*)image->data;
 						str_append(&str, "%d bit %c%c%c%c:\n"
 							, imagedepth
 							, labels[(int)bayer[0]]
@@ -1269,7 +1269,7 @@ int io_keydn(IOKey key, char c)
 					{
 						const char labels[]="RGB";
 						str_append(&str, "%d bit %c%c%c%c:\n", imagedepth, labels[bayer[0]], labels[bayer[1]], labels[bayer[2]], labels[bayer[3]]);
-						unsigned short *ptr=(unsigned short*)image->data;
+						uint16_t *ptr=(uint16_t*)image->data;
 						int iy=MAXVAR(iy1, 0);
 						iy>>=1;
 						iy<<=1;
@@ -1577,7 +1577,7 @@ static void draw_profile(int comp, int color, int profx, int frompreview)//horiz
 	int iy=screen2image_y_int(my);
 	if((unsigned)iy<(unsigned)image->ih)
 	{
-		unsigned short *row=0;
+		uint16_t *row=0;
 		int lgstride=0;
 		switch(imagetype)
 		{
@@ -2108,8 +2108,8 @@ void io_render()
 		{
 			if((unsigned)imx<(unsigned)impreview->iw&&(unsigned)imy<(unsigned)impreview->ih)
 			{
-				unsigned char *p=impreview->data+((ptrdiff_t)impreview->iw*imy+imx)*impreview->nch;
-				unsigned short *p0=(unsigned short*)image->data+((ptrdiff_t)image->iw*imy+imx)*image->nch;
+				uint8_t *p=impreview->data+((ptrdiff_t)impreview->iw*imy+imx)*impreview->nch;
+				uint16_t *p0=(uint16_t*)image->data+((ptrdiff_t)image->iw*imy+imx)*image->nch;
 				switch(imagetype)
 				{
 				default://make gcc happy
@@ -2125,7 +2125,7 @@ void io_render()
 					break;
 				case IM_RGBA:
 					{
-						long long color;
+						uint64_t color;
 						memcpy(&color, p0, sizeof(color));
 						GUIPrint_append(0, 0, h-tdy, 1, 0, "  RGBA(%3d, %3d, %3d, %3d)=0x%016llX",
 							(unsigned)p[0],
@@ -2157,7 +2157,7 @@ void io_render()
 		GUIPrint_append(0, 0, h-tdy, 1, 1, "");
 		//if((unsigned)imx<(unsigned)impreview->iw&&(unsigned)imy<(unsigned)impreview->ih)
 		//{
-		//	unsigned char *p=impreview->data+((impreview->iw*imy+imx)<<2);
+		//	uint8_t *p=impreview->data+((impreview->iw*imy+imx)<<2);
 		//	int color;
 		//	memcpy(&color, p, sizeof(color));
 		//	GUIPrint(0, 0, h-tdy, 1, "XY(%d, %d) / WH %dx%d  x%lf  %s  %d bit  RGBA(%3d, %3d, %3d, %3d)=0x%08X", imx, imy, impreview->iw, impreview->ih, zoom, imtypestr, imagedepth, p[0], p[1], p[2], p[3], color);

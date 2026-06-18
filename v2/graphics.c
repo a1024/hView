@@ -57,7 +57,7 @@ typedef struct SDFTextureHeaderStruct
 		csize_x, csize_y,
 		reserved[2];
 } SDFTextureHeader;
-long long colors_text=0xFFABABABFF000000;//0xBKBKBKBK_TXTXTXTX
+uint64_t colors_text=0xFFABABABFF000000;//0xBKBKBKBK_TXTXTXTX
 
 //shaders
 #define		SHADER_LIST		SHADER(2D) SHADER(texture) SHADER(text) SHADER(sdftext) SHADER(3D) SHADER(L3D) SHADER(contour3D)
@@ -458,7 +458,7 @@ void setGLProgram(unsigned program)
 static const float inv255=1.f/255;
 void send_color(unsigned location, int color)
 {
-	unsigned char *p=(unsigned char*)&color;
+	uint8_t *p=(uint8_t*)&color;
 	__m128 m_255=_mm_set1_ps(inv255);
 
 	__m128 c=_mm_castsi128_ps(_mm_set_epi32(p[3], p[2], p[1], p[0]));
@@ -474,7 +474,7 @@ void send_color(unsigned location, int color)
 }
 void send_color_rgb(unsigned location, int color)
 {
-	unsigned char *p=(unsigned char*)&color;
+	uint8_t *p=(uint8_t*)&color;
 	__m128 m_255=_mm_set1_ps(inv255);
 
 	__m128 c=_mm_castsi128_ps(_mm_set_epi32(p[3], p[2], p[1], p[0]));
@@ -540,7 +540,7 @@ void send_texture_pot_int16x1(unsigned gl_texture, unsigned *texture, int txw, i
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, txw, txh, 0, GL_RED, GL_UNSIGNED_INT, texture);
 	GL_CHECK(error);
 }
-void send_texture_pot_grey(unsigned gl_texture, unsigned char *bmp, int txw, int txh, int linear, int antialiased)
+void send_texture_pot_grey(unsigned gl_texture, uint8_t *bmp, int txw, int txh, int linear, int antialiased)
 {
 	glBindTexture(GL_TEXTURE_2D, gl_texture);
 	GL_CHECK(error);
@@ -623,7 +623,7 @@ void gl_init()
 	stbi_image_free(rgb);
 	
 	snprintf(g_buf, G_BUF_SIZE, "%sfont_sdf.PNG", exedir->data);
-	unsigned char *bmp=(unsigned char*)stbi_load(g_buf, &iw, &ih, &bytespp, 1);
+	uint8_t *bmp=(uint8_t*)stbi_load(g_buf, &iw, &ih, &bytespp, 1);
 	if(bmp)
 	{
 		sdf_available=1;
@@ -957,9 +957,9 @@ int set_bk_color(int color_bk)
 	comp[1]=color_bk;
 	return prev;
 }
-long long set_text_colors(long long colors)//0xBKBKBKBK_TXTXTXTX
+uint64_t set_text_colors(uint64_t colors)//0xBKBKBKBK_TXTXTXTX
 {
-	long long temp;
+	uint64_t temp;
 	SWAPVAR(colors_text, colors, temp);
 
 	int *comp=(int*)&colors_text;
@@ -1595,7 +1595,7 @@ void draw_L3D(Camera const *cam, GPUModel const *model, const float *modelpos, c
 	mat4_normalmat3(mNormal, mModel);
 	mat4_mul_mat4(mMVP, mVP, mModel, temp1);
 
-	unsigned char *p=(unsigned char*)&lightcolor;
+	uint8_t *p=(uint8_t*)&lightcolor;
 	memcpy(sceneInfo, lightpos, 3*sizeof(float));
 	sceneInfo[3]=p[0]*inv255;
 	sceneInfo[4]=p[1]*inv255;
@@ -1603,25 +1603,25 @@ void draw_L3D(Camera const *cam, GPUModel const *model, const float *modelpos, c
 	memcpy(sceneInfo+6, &cam->x, 3*sizeof(float));
 	
 	glUniformMatrix4fv(u_L3D_matVP_Model, 2, GL_FALSE, mMVP_Model);	GL_CHECK(error);
-	glUniformMatrix3fv(u_L3D_matNormal, 1, GL_FALSE, mNormal);		GL_CHECK(error);
+	glUniformMatrix3fv(u_L3D_matNormal, 1, GL_FALSE, mNormal);	GL_CHECK(error);
 	glUniform3fv(u_L3D_sceneInfo, 3, sceneInfo);	GL_CHECK(error);
-//	glBindVertexArray(s_VAO);						GL_CHECK(error);
+//	glBindVertexArray(s_VAO);			GL_CHECK(error);
 
 	select_texture(model->txid, u_L3D_texture);
 	
-	glBindBuffer(GL_ARRAY_BUFFER, model->VBO);			GL_CHECK(error);
-	glEnableVertexAttribArray(a_L3D_vertex);			GL_CHECK(error);
-	glVertexAttribPointer(a_L3D_vertex, 3, GL_FLOAT, GL_FALSE, model->stride, (void*)(long long)model->vertices_start);	GL_CHECK(error);
-	glEnableVertexAttribArray(a_L3D_normal);			GL_CHECK(error);
-	glVertexAttribPointer(a_L3D_normal, 3, GL_FLOAT, GL_FALSE, model->stride, (void*)(long long)model->normals_start);	GL_CHECK(error);
-	glEnableVertexAttribArray(a_L3D_texcoord);			GL_CHECK(error);
-	glVertexAttribPointer(a_L3D_texcoord, 2, GL_FLOAT, GL_FALSE, model->stride, (void*)(long long)model->txcoord_start);GL_CHECK(error);
+	glBindBuffer(GL_ARRAY_BUFFER, model->VBO);		GL_CHECK(error);
+	glEnableVertexAttribArray(a_L3D_vertex);		GL_CHECK(error);
+	glVertexAttribPointer(a_L3D_vertex, 3, GL_FLOAT, GL_FALSE, model->stride, (void*)(size_t)model->vertices_start);	GL_CHECK(error);
+	glEnableVertexAttribArray(a_L3D_normal);		GL_CHECK(error);
+	glVertexAttribPointer(a_L3D_normal, 3, GL_FLOAT, GL_FALSE, model->stride, (void*)(size_t)model->normals_start);		GL_CHECK(error);
+	glEnableVertexAttribArray(a_L3D_texcoord);		GL_CHECK(error);
+	glVertexAttribPointer(a_L3D_texcoord, 2, GL_FLOAT, GL_FALSE, model->stride, (void*)(size_t)model->txcoord_start);	GL_CHECK(error);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, model->EBO);	GL_CHECK(error);
 
 	glDrawElements(GL_TRIANGLES, model->n_elements, GL_UNSIGNED_INT, 0);	GL_CHECK(error);
-	glDisableVertexAttribArray(a_L3D_vertex);			GL_CHECK(error);
-	glDisableVertexAttribArray(a_L3D_normal);			GL_CHECK(error);
-	glDisableVertexAttribArray(a_L3D_texcoord);			GL_CHECK(error);
+	glDisableVertexAttribArray(a_L3D_vertex);		GL_CHECK(error);
+	glDisableVertexAttribArray(a_L3D_normal);		GL_CHECK(error);
+	glDisableVertexAttribArray(a_L3D_texcoord);		GL_CHECK(error);
 }
 
 void draw_3d_line(Camera const *cam, const float *w1, const float *w2, int color)

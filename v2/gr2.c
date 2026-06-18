@@ -17,17 +17,17 @@ enum
 	NPREDS=PREDLIST,
 #undef  PRED
 };
-int gr2_save(const wchar_t *dstfn, short *image, int iw, int ih, int nlevels, char *bayermatrix)
+int gr2_save(const wchar_t *dstfn, int16_t *image, int iw, int ih, int nlevels, int8_t *bayermatrix)
 {
 	const int half=0;
 //	int half=nlevels>>1;
 	int64_t weights[NPREDS]={0};
-	unsigned long long cache=0;
+	uint64_t cache=0;
 	int nbits=(int)sizeof(cache)<<3;
-	int psize=(iw+16)*(int)sizeof(short[2*2]);//2 padded rows * 1 channel * {pixels, errors}
-	short *pixels=(short*)malloc(psize);
+	int psize=(iw+16)*(int)sizeof(int16_t[2*2]);//2 padded rows * 1 channel * {pixels, errors}
+	int16_t *pixels=(int16_t*)malloc(psize);
 	int dstcap=iw*ih<<1;
-	unsigned long long *dstbuf=(unsigned long long*)malloc(dstcap), *dstptr=dstbuf;
+	uint64_t *dstbuf=(uint64_t*)malloc(dstcap), *dstptr=dstbuf;
 	if(!pixels||!dstbuf)
 	{
 		LOG_ERROR("Alloc error");
@@ -38,7 +38,7 @@ int gr2_save(const wchar_t *dstfn, short *image, int iw, int ih, int nlevels, ch
 		weights[k]=(1<<SHIFT)/NPREDS;
 	for(int ky=0, idx=0;ky<ih;++ky)
 	{
-		short *rows[]=
+		int16_t *rows[]=
 		{
 			pixels+((iw+16LL)*((ky+0LL)&1)+8)*2,
 			pixels+((iw+16LL)*((ky-1LL)&1)+8)*2,
@@ -111,7 +111,7 @@ int gr2_save(const wchar_t *dstfn, short *image, int iw, int ih, int nlevels, ch
 				if(nbypass>=nbits)//not enough free bits in cache:  fill cache, write to list, and repeat
 				{
 					nbypass-=nbits;
-					cache|=(unsigned long long)bypass>>nbypass;
+					cache|=(uint64_t)bypass>>nbypass;
 					bypass&=(1<<nbypass)-1;
 					*dstptr++=cache;
 					cache=0;
@@ -119,7 +119,7 @@ int gr2_save(const wchar_t *dstfn, short *image, int iw, int ih, int nlevels, ch
 				}
 				//now there is room for bypass:  0 <= nbypass < nbits <= 64
 				nbits-=nbypass;//emit remaining bypass to cache
-				cache|=(unsigned long long)bypass<<nbits;
+				cache|=(uint64_t)bypass<<nbits;
 			}
 
 			rows[0]+=2;
@@ -143,15 +143,15 @@ int gr2_save(const wchar_t *dstfn, short *image, int iw, int ih, int nlevels, ch
 			bayermatrix[2],
 			bayermatrix[3]
 		);
-		fwrite(dstbuf, 1, streamsize*sizeof(long long), fdst);
+		fwrite(dstbuf, 1, streamsize*sizeof(int64_t), fdst);
 		fclose(fdst);
 	}
 	free(dstbuf);
 	return 0;
 }
-short* gr2_load(const wchar_t *srcfn, int *ret_iw, int *ret_ih, int *ret_nlevels, char *ret_bayermatrix)
+int16_t* gr2_load(const wchar_t *srcfn, int *ret_iw, int *ret_ih, int *ret_nlevels, int8_t *ret_bayermatrix)
 {
-	unsigned char *srcbuf=0;
+	uint8_t *srcbuf=0;
 	ptrdiff_t srcsize=get_filesizew(srcfn);
 	if(srcsize<1)
 	{
@@ -165,7 +165,7 @@ short* gr2_load(const wchar_t *srcfn, int *ret_iw, int *ret_ih, int *ret_nlevels
 			//LOG_WARNING("Cannot open \"%s\"", srcfn);
 			return 0;
 		}
-		srcbuf=(unsigned char*)malloc(srcsize+16);
+		srcbuf=(uint8_t*)malloc(srcsize+16);
 		if(!srcbuf)
 		{
 			LOG_ERROR("Alloc error");
@@ -174,7 +174,7 @@ short* gr2_load(const wchar_t *srcfn, int *ret_iw, int *ret_ih, int *ret_nlevels
 		fread(srcbuf, 1, srcsize, fsrc);
 		fclose(fsrc);
 	}
-	unsigned char *srcptr=srcbuf;
+	uint8_t *srcptr=srcbuf;
 	int iw=0, ih=0, nlevels=0;
 	{
 		if(memcmp(srcptr, "GR2 ", 4))
@@ -218,10 +218,10 @@ short* gr2_load(const wchar_t *srcfn, int *ret_iw, int *ret_ih, int *ret_nlevels
 			return 0;
 		}
 	}
-	int psize=(iw+16)*(int)sizeof(short[2*2]);//2 padded rows * 1 channel * {pixels, errors}
-	short *pixels=(short*)malloc(psize);
-	int imsize=iw*ih*(int)sizeof(short);
-	short *image=(short*)malloc(imsize);
+	int psize=(iw+16)*(int)sizeof(int16_t[2*2]);//2 padded rows * 1 channel * {pixels, errors}
+	int16_t *pixels=(int16_t*)malloc(psize);
+	int imsize=iw*ih*(int)sizeof(int16_t);
+	int16_t *image=(int16_t*)malloc(imsize);
 	if(!pixels||!image)
 	{
 		LOG_ERROR("Alloc error");
@@ -233,13 +233,13 @@ short* gr2_load(const wchar_t *srcfn, int *ret_iw, int *ret_ih, int *ret_nlevels
 //	int half=nlevels>>1;
 	
 	int64_t weights[NPREDS]={0};
-	unsigned long long *streamptr=(unsigned long long*)srcptr, cache=0;
+	uint64_t *streamptr=(uint64_t*)srcptr, cache=0;
 	int nbits=0;
 	for(int k=0;k<NPREDS;++k)
 		weights[k]=(1<<SHIFT)/NPREDS;
 	for(int ky=0, idx=0;ky<ih;++ky)
 	{
-		short *rows[]=
+		int16_t *rows[]=
 		{
 			pixels+((iw+16LL)*((ky+0LL)&1)+8)*2,
 			pixels+((iw+16LL)*((ky-1LL)&1)+8)*2,

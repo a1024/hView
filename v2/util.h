@@ -23,6 +23,7 @@
 #define _GNU_SOURCE
 #endif
 #include<stddef.h>//size_t, ptrdiff_t
+#include<stdint.h>
 #ifdef __cplusplus
 extern "C"
 {
@@ -178,15 +179,15 @@ extern "C"
 	do\
 	{\
 		unsigned __int128 _x=(unsigned __int128)(A)*(B);\
-		DST_LO=(unsigned long long)_x;\
-		DST_HI=(unsigned long long)(_x>>64);\
+		DST_LO=(uint64_t)_x;\
+		DST_HI=(uint64_t)(_x>>64);\
 	}while(0)
-#define MULHI64(DST, A, B) DST=(unsigned long long)((unsigned __int128)(A)*(B)>>64)
+#define MULHI64(DST, A, B) DST=(uint64_t)((unsigned __int128)(A)*(B)>>64)
 #define UDIV128(DST_Q, DST_R, NUM_HI, NUM_LO, DEN)\
 	do\
 	{\
 		unsigned __int128 _num=(unsigned __int128)(NUM_HI)<<64|(NUM_LO);\
-		unsigned long long _den=DEN;\
+		uint64_t _den=DEN;\
 		DST_Q=_num/_den;\
 		DST_R=_num%_den;\
 	}while(0)
@@ -204,8 +205,8 @@ extern "C"
 #define UPDATE_MAX(M, X) if(M<X)M=X
 #define THREEWAY(L, R) (((L)>(R))-((L)<(R)))
 #define MIXVAR(V0, V1, X) ((V0)+((V1)-(V0))*(X))
-#define FLOOR_LOG2(X)		(sizeof(X)==8?63-(int)_lzcnt_u64((unsigned long long)(X)):31-(int)_lzcnt_u32((unsigned)(X)))
-#define FLOOR_LOG2_P1(X)	(sizeof(X)==8?64-(int)_lzcnt_u64((unsigned long long)(X)):32-(int)_lzcnt_u32((unsigned)(X)))
+#define FLOOR_LOG2(X)		(sizeof(X)==8?63-(int)_lzcnt_u64((uint64_t)(X)):31-(int)_lzcnt_u32((unsigned)(X)))
+#define FLOOR_LOG2_P1(X)	(sizeof(X)==8?64-(int)_lzcnt_u64((uint64_t)(X)):32-(int)_lzcnt_u32((unsigned)(X)))
 #define FLOOR_LOG2_32x4(X) _mm_sub_epi32(_mm_srli_epi32(_mm_castps_si128(_mm_cvtepi32_ps(X)), 23), _mm_set1_epi32(127))
 #define FLOOR_LOG2_32x8(X) _mm256_sub_epi32(_mm256_srli_epi32(_mm256_castps_si256(_mm256_cvtepi32_ps(X)), 23), _mm256_set1_epi32(127))
 //#define FLOOR_LOG2_64(X)	(63-(int)_lzcnt_u64(X))
@@ -246,28 +247,28 @@ int acme_getopt(int argc, char **argv, int *start, const char **keywords, int kw
 
 int hammingweight16(unsigned short x);
 int hammingweight32(unsigned x);
-int hammingweight64(unsigned long long x);
-//int floor_log2_p1(unsigned long long n);
-//int floor_log2(unsigned long long n);		//use (63-_lzcnt_u64(n)) instead
+int hammingweight64(uint64_t x);
+//int floor_log2_p1(uint64_t n);
+//int floor_log2(uint64_t n);		//use (63-_lzcnt_u64(n)) instead
 //int floor_log2_32(unsigned n);		//use (31-_lzcnt_u32(n)) instead
-int ceil_log2(unsigned long long n);
+int ceil_log2(uint64_t n);
 int ceil_log2_32(unsigned n);
-//int get_lsb_index(unsigned long long n);//returns lsb position + 1,  returns register bit count if n is zero
+//int get_lsb_index(uint64_t n);//returns lsb position + 1,  returns register bit count if n is zero
 //int get_lsb_index32(unsigned n);
 //int get_lsb_index16(unsigned short n);
 int floor_log10(double x);
-unsigned floor_sqrt(unsigned long long x);
+unsigned floor_sqrt(uint64_t x);
 unsigned exp2_fix24_neg(unsigned x);
 unsigned exp2_neg_fix24_avx2(unsigned x);
-unsigned long long exp2_fix24(int x);
-int log2_fix24(unsigned long long x);
-#define POW_FIX24(BASE, EXP) exp2_fix24((int)((long long)(EXP)*log2_fix24(BASE)>>24))
+uint64_t exp2_fix24(int x);
+int log2_fix24(uint64_t x);
+#define POW_FIX24(BASE, EXP) exp2_fix24((int)((int64_t)(EXP)*log2_fix24(BASE)>>24))
 double power(double x, int y);
 double _10pow(int n);
 int acme_isdigit(char c, char base);
 //#ifdef __GNUC__
-//unsigned long long _udiv128(unsigned long long hi, unsigned long long lo, unsigned long long den, unsigned long long *rem);
-//unsigned long long _umul128(unsigned long long a, unsigned long long b, unsigned long long *hi);
+//uint64_t _udiv128(uint64_t hi, uint64_t lo, uint64_t den, uint64_t *rem);
+//uint64_t _umul128(uint64_t a, uint64_t b, uint64_t *hi);
 //#endif
 
 double time_ms(void);
@@ -285,10 +286,10 @@ int print_timestamp(const char *format);//"%Y-%m-%d_%H%M%S"
 
 int print_bin8(int x);
 int print_bin32(unsigned x);
-int print_binn(unsigned long long x, int nbits);
+int print_binn(uint64_t x, int nbits);
 void print_nan(double x, int total, int decimal);
-int print_memsize(char *buf, ptrdiff_t bufsize, long long memsize, int totaldigits);
-int print_memsizew(wchar_t *buf, ptrdiff_t bufsize, long long memsize, int totaldigits);
+int print_memsize(char *buf, ptrdiff_t bufsize, int64_t memsize, int totaldigits);
+int print_memsizew(wchar_t *buf, ptrdiff_t bufsize, int64_t memsize, int totaldigits);
 
 double convert_size(double bytesize, int *log1024);
 int print_size(double bytesize, int ndigits, int pdigits, char *str, int len);
@@ -640,7 +641,7 @@ int print_systemerror(const char *file, int line, const char *funcname, int erro
 
 void file_delete(char *fn);
 void get_tmpfn(char *dst);//dst is MAX_PATH
-void exec_process(char *cmd, const char *currdir, int loud, double *elapsed, long long *maxmem);
+void exec_process(char *cmd, const char *currdir, int loud, double *elapsed, int64_t *maxmem);
 
 
 #ifdef _MSC_VER

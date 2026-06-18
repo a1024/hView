@@ -100,10 +100,10 @@ void memfill(void *dst, const void *src, size_t dstbytes, size_t srcbytes)
 }
 void memswap_slow(void *p1, void *p2, size_t size)
 {
-	unsigned char *s1=(unsigned char*)p1, *s2=(unsigned char*)p2, *end=s1+size;
+	uint8_t *s1=(uint8_t*)p1, *s2=(uint8_t*)p2, *end=s1+size;
 	for(;s1<end;++s1, ++s2)
 	{
-		const unsigned char t=*s1;
+		const uint8_t t=*s1;
 		*s1=*s2;
 		*s2=t;
 	}
@@ -117,7 +117,7 @@ void memswap(void *p1, void *p2, size_t size, void *temp)
 void memreverse(void *p, size_t count, size_t esize)
 {
 	size_t totalsize=count*esize;
-	unsigned char *s1=(unsigned char*)p, *s2=s1+totalsize-esize;
+	uint8_t *s1=(uint8_t*)p, *s2=s1+totalsize-esize;
 	void *temp=malloc(esize);
 	if(!temp)
 	{
@@ -166,7 +166,7 @@ void reverse16(void *start, void *end)
 }
 void memrotate(void *p, size_t byteoffset, size_t bytesize, void *temp)//temp buffer is min(byteoffset, bytesize-byteoffset)
 {
-	unsigned char *buf=(unsigned char*)p;
+	uint8_t *buf=(uint8_t*)p;
 
 	if(byteoffset<bytesize-byteoffset)
 	{
@@ -183,7 +183,7 @@ void memrotate(void *p, size_t byteoffset, size_t bytesize, void *temp)//temp bu
 }
 int binary_search(const void *base, size_t count, size_t esize, int (*threeway)(const void*, const void*), const void *val, size_t *idx)
 {
-	const unsigned char *buf=(const unsigned char*)base;
+	const uint8_t *buf=(const uint8_t*)base;
 #if 1
 	ptrdiff_t low=0, range=count, mid;
 	while(range)//binary search		log2(nlevels) memory accesses per symbol
@@ -222,7 +222,7 @@ int binary_search(const void *base, size_t count, size_t esize, int (*threeway)(
 }
 void isort(void *base, size_t count, size_t esize, int (*threeway)(const void*, const void*))
 {
-	unsigned char *buf=(unsigned char*)base;
+	uint8_t *buf=(uint8_t*)base;
 	size_t k;
 	void *temp;
 
@@ -316,7 +316,7 @@ int hammingweight32(unsigned x)
 	return __builtin_popcount(x);
 #endif
 }
-int hammingweight64(unsigned long long x)
+int hammingweight64(uint64_t x)
 {
 #ifdef _MSC_VER
 	return (int)_mm_popcnt_u64(x);
@@ -325,7 +325,7 @@ int hammingweight64(unsigned long long x)
 #endif
 }
 #if 0
-int floor_log2_p1(unsigned long long n)
+int floor_log2_p1(uint64_t n)
 {
 #ifdef _MSC_VER
 	return (sizeof(n)<<3)-(int)__lzcnt64(n);
@@ -348,7 +348,7 @@ int floor_log2_p1(unsigned long long n)
 	return logn;
 #endif
 }
-int floor_log2(unsigned long long n)
+int floor_log2(uint64_t n)
 {
 #if defined _MSC_VER || defined __GNUC__
 	return (sizeof(n)<<3)-1-(int)_lzcnt_u64(n);//since Haswell
@@ -421,7 +421,7 @@ int floor_log2_32(unsigned n)
 #endif
 }
 #endif
-int ceil_log2(unsigned long long n)
+int ceil_log2(uint64_t n)
 {
 	int lgn=FLOOR_LOG2(n);
 	lgn+=(1ULL<<lgn)<n;
@@ -434,7 +434,7 @@ int ceil_log2_32(unsigned n)
 	return lgn;
 }
 #if 0
-int get_lsb_index(unsigned long long n)
+int get_lsb_index(uint64_t n)
 {
 #ifdef _MSC_VER
 	return (int)_tzcnt_u64(n);//BMI1 (2013)
@@ -557,13 +557,13 @@ int floor_log10(double x)
 	sh= x<nmask[1];      logn-=sh;
 	return logn;
 }
-unsigned floor_sqrt(unsigned long long x)
+unsigned floor_sqrt(uint64_t x)
 {
-	unsigned long long low=0, range=x;
+	uint64_t low=0, range=x;
 	while(range)
 	{
-		unsigned long long floorhalf=range>>1;
-		unsigned long long level=low+floorhalf+1;
+		uint64_t floorhalf=range>>1;
+		uint64_t level=low+floorhalf+1;
 		if(level*level<=x)
 			low+=range-floorhalf;
 		range=floorhalf;
@@ -573,7 +573,7 @@ unsigned floor_sqrt(unsigned long long x)
 	if(x<2)
 		return (unsigned)x;
 	int lg_sqrtx_p1=(floor_log2(x)>>1)+1;
-	unsigned long long
+	uint64_t
 		U=1ULL<<lg_sqrtx_p1,
 		L=U>>1,
 		temp=x>>(lg_sqrtx_p1-1);
@@ -581,7 +581,7 @@ unsigned floor_sqrt(unsigned long long x)
 	U=MINVAR(U, temp);
 	temp>>=1;
 	L=MAXVAR(L, temp);
-	//unsigned long long
+	//uint64_t
 	//	L=(1ULL<<lg_sqrtx_p1)>>1,
 	//	U=(1ULL<<lg_sqrtx_p1)-1,
 	//	L2=x>>lg_sqrtx_p1,	//where is the proof that these are also bounds?
@@ -591,7 +591,7 @@ unsigned floor_sqrt(unsigned long long x)
 	//int nmuls=0;//
 	while(L<=U)//binary search
 	{
-		unsigned long long level=(L+U)>>1, sq=level*level;
+		uint64_t level=(L+U)>>1, sq=level*level;
 		//++nmuls;//
 		if(x>sq)
 			L=level+1;
@@ -614,7 +614,7 @@ unsigned floor_sqrt(unsigned long long x)
 	for(i=0;i<32;++i)
 	{
 		unsigned temp=res|add;
-		if(x>=(unsigned long long)temp*temp)
+		if(x>=(uint64_t)temp*temp)
 			res=temp;
 		add>>=1;
 	}
@@ -653,7 +653,7 @@ unsigned exp2_fix24_neg(unsigned x)
 	2^-0x0.400000 = 0x0.D744FCCB...		0x1.306FE0A3... = 2^0x0.400000
 	2^-0x0.800000 = 0x0.B504F334...		0x1.6A09E667... = 2^0x0.800000
 	*/
-	static const unsigned long long frac_pots[]=
+	static const uint64_t frac_pots[]=
 	{
 		0x100000000,
 		0x0FFFFFF4F,//extra 8 bits of precision
@@ -682,8 +682,8 @@ unsigned exp2_fix24_neg(unsigned x)
 		0x0B504F334,
 	};
 #if 0
-	unsigned long long x2=(unsigned long long)x<<1;
-	unsigned long long r0=0x1000000, r1=0x1000000, r2=0x1000000, r3=0x1000000;
+	uint64_t x2=(uint64_t)x<<1;
+	uint64_t r0=0x1000000, r1=0x1000000, r2=0x1000000, r3=0x1000000;
 	for(int k=1;k<=FRAC_BITS;k+=8)
 	{
 		r0=r0*frac_pots[(k+0)&-(int)(x2>>(k+0)&1)]>>32;
@@ -702,11 +702,11 @@ unsigned exp2_fix24_neg(unsigned x)
 	return (unsigned)r0;
 #endif
 #if 0
-	unsigned long long x2=(unsigned long long)x<<1;
-	unsigned long long r0=0x1000000, r1=0x1000000;
+	uint64_t x2=(uint64_t)x<<1;
+	uint64_t r0=0x1000000, r1=0x1000000;
 	for(int k=1;k<=FRAC_BITS;k+=2)
 	{
-		//unsigned long long t0=r0*frac_pots[k+0], t1=r1*frac_pots[k+1];//continuous access
+		//uint64_t t0=r0*frac_pots[k+0], t1=r1*frac_pots[k+1];//continuous access
 		//t0>>=32;
 		//t1>>=32;
 		//if(x2>>(k+0)&1)
@@ -724,7 +724,7 @@ unsigned exp2_fix24_neg(unsigned x)
 	return (unsigned)r0;
 #endif
 #if 1
-	unsigned long long result=0x1000000;
+	uint64_t result=0x1000000;
 	for(int k=0;k<FRAC_BITS;)//up to 24 muls
 	{
 		int bit=x>>k&1;
@@ -765,7 +765,7 @@ unsigned exp2_neg_fix24_avx2(unsigned x)
 	2^-0x0.400000 = 0x0.D744FCCB...		0x1.306FE0A3... = 2^0x0.400000
 	2^-0x0.800000 = 0x0.B504F334...		0x1.6A09E667... = 2^0x0.800000
 	*/
-	ALIGN(32) static const unsigned long long frac_pots[]=
+	ALIGN(32) static const uint64_t frac_pots[]=
 	{
 		(0xFFFFFF4F+128)>>8,//bit  0
 		(0xFFFFD3A3+128)>>8,//bit  6
@@ -839,10 +839,10 @@ unsigned exp2_neg_fix24_avx2(unsigned x)
 	r0=_mm_mul_epu32(r0, r1);
 	r0=_mm_shuffle_epi8(r0, sr24);
 	unsigned sh=(x>>FRAC_BITS)+24;
-	unsigned res=(unsigned)((unsigned long long)_mm_extract_epi64(r0, 0)*(unsigned long long)_mm_extract_epi64(r0, 1)>>sh);
+	unsigned res=(unsigned)((uint64_t)_mm_extract_epi64(r0, 0)*(uint64_t)_mm_extract_epi64(r0, 1)>>sh);
 	return res;
 }
-unsigned long long exp2_fix24(int x)
+uint64_t exp2_fix24(int x)
 {
 	/*
 	transcendental fractional powers of two
@@ -872,7 +872,7 @@ unsigned long long exp2_fix24(int x)
 	2^-0x0.400000 = 0x0.D744FCCB...		0x1.306FE0A3... = 2^0x0.400000
 	2^-0x0.800000 = 0x0.B504F334...		0x1.6A09E667... = 2^0x0.800000
 	*/
-	static const unsigned long long frac_pots[]=
+	static const uint64_t frac_pots[]=
 	{
 		0x1000000B1,//round(2^(0x000001*2^-24)*2^32)		//extra 8 bits of precision
 		0x100000163,
@@ -903,7 +903,7 @@ unsigned long long exp2_fix24(int x)
 	x=abs(x);
 	if(x>=0x27000000)
 		return neg?0:0xFFFFFFFFFFFFFFFF;
-	unsigned long long result=0x1000000;
+	uint64_t result=0x1000000;
 	for(int k=0;k<FRAC_BITS;++k)//up to 24 muls
 	{
 		if(x&1)
@@ -918,7 +918,7 @@ unsigned long long exp2_fix24(int x)
 		result=0x1000000000000/result;
 	return result;
 }
-int log2_fix24(unsigned long long x)
+int log2_fix24(uint64_t x)
 {
 	//https://stackoverflow.com/questions/4657468/fast-fixed-point-pow-log-exp-and-sqrt
 	//and YouChad
@@ -984,26 +984,26 @@ int acme_isdigit(char c, char base)
 	return 0;
 }
 #ifdef __GNUC__
-unsigned long long _udiv128(unsigned long long hi, unsigned long long lo, unsigned long long den, unsigned long long *rem)
+uint64_t _udiv128(uint64_t hi, uint64_t lo, uint64_t den, uint64_t *rem)
 {
 	//FIXME get rid of __int128
 	//https://stackoverflow.com/questions/1870158/unsigned-128-bit-division-on-64-bit-machine
 	unsigned __int128 num=(unsigned __int128)hi<<64|lo;
-	*rem=(unsigned long long)(num%den);
-	return (unsigned long long)(num/den);
+	*rem=(uint64_t)(num%den);
+	return (uint64_t)(num/den);
 }
-unsigned long long _umul128(unsigned long long a, unsigned long long b, unsigned long long *hi)
+uint64_t _umul128(uint64_t a, uint64_t b, uint64_t *hi)
 {
 	unsigned __int128 num=(unsigned __int128)a*b;
-	*hi=(unsigned long long)(num>>64);
-	return (unsigned long long)num;
+	*hi=(uint64_t)(num>>64);
+	return (uint64_t)num;
 }
 #endif
 
 double time_ms(void)
 {
 #ifdef _WIN32
-	static long long t0=0;
+	static int64_t t0=0;
 	LARGE_INTEGER li;
 	double t;
 	QueryPerformanceCounter(&li);
@@ -1023,7 +1023,7 @@ double time_ms(void)
 double time_sec(void)
 {
 #ifdef _WIN32
-	static long long t0=0;
+	static int64_t t0=0;
 	LARGE_INTEGER li;
 	double t;
 	QueryPerformanceCounter(&li);
@@ -1114,7 +1114,7 @@ int print_bin32(unsigned x)
 	}
 	return 34;
 }
-int print_binn(unsigned long long x, int nbits)
+int print_binn(uint64_t x, int nbits)
 {
 	for(int k=nbits-1;k>=0;--k)
 	{
@@ -1130,9 +1130,9 @@ void print_nan(double x, int total, int decimal)
 	else
 		printf("%*.*lf", total, decimal, x);
 }
-int print_memsize(char *buf, ptrdiff_t bufsize, long long memsize, int totaldigits)
+int print_memsize(char *buf, ptrdiff_t bufsize, int64_t memsize, int totaldigits)
 {
-	long long usize=llabs(memsize);
+	int64_t usize=llabs(memsize);
 	if(usize>1024LL*1024*1024)
 		return snprintf(buf, bufsize, "%*.2lf GB", totaldigits, (double)memsize/(1024*1024*1024));
 	if(usize>1024LL*1024)
@@ -1141,9 +1141,9 @@ int print_memsize(char *buf, ptrdiff_t bufsize, long long memsize, int totaldigi
 		return snprintf(buf, bufsize, "%*.2lf KB", totaldigits, (double)memsize/1024);
 	return snprintf(buf, bufsize, "%*td  B", totaldigits, memsize);
 }
-int print_memsizew(wchar_t *buf, ptrdiff_t bufsize, long long memsize, int totaldigits)
+int print_memsizew(wchar_t *buf, ptrdiff_t bufsize, int64_t memsize, int totaldigits)
 {
-	long long usize=llabs(memsize);
+	int64_t usize=llabs(memsize);
 	if(usize>1024LL*1024*1024)
 		return _snwprintf_s(buf, bufsize, bufsize, L"%*.2lf GB", totaldigits, (double)memsize/(1024*1024*1024));
 	if(usize>1024LL*1024)
@@ -1385,7 +1385,7 @@ void* array_erase(ArrayHandle *arr, size_t idx, size_t count)//does not realloca
 
 	if(arr[0]->count<idx+count)
 	{
-		LOG_ERROR("array_erase() out of bounds: idx=%lld count=%lld size=%lld", (long long)idx, (long long)count, (long long)arr[0]->count);
+		LOG_ERROR("array_erase() out of bounds: idx=%lld count=%lld size=%lld", (int64_t)idx, (int64_t)count, (int64_t)arr[0]->count);
 		if(arr[0]->count<idx)
 			return 0;
 		count=arr[0]->count-idx;//erase till end of array if just idx+count is OOB
@@ -1405,7 +1405,7 @@ void* array_replace(ArrayHandle *arr, size_t idx, size_t rem_count, const void *
 
 	if(arr[0]->count<idx+rem_count)
 	{
-		LOG_ERROR("array_replace() out of bounds: idx=%lld rem_count=%lld size=%lld ins_count=%lld", (long long)idx, (long long)rem_count, (long long)arr[0]->count, (long long)ins_count);
+		LOG_ERROR("array_replace() out of bounds: idx=%lld rem_count=%lld size=%lld ins_count=%lld", (int64_t)idx, (int64_t)rem_count, (int64_t)arr[0]->count, (int64_t)ins_count);
 		if(arr[0]->count<idx)
 			return 0;
 		rem_count=arr[0]->count-idx;//erase till end of array if just idx+count is OOB
@@ -2408,7 +2408,7 @@ BitstringHandle bitstring_construct(const void *src, size_t bitCount, size_t bit
 	memset(str->data, 0, cap);
 	if(src)
 	{
-		const unsigned char *srcbytes=(const unsigned char*)src;
+		const uint8_t *srcbytes=(const uint8_t*)src;
 		for(size_t b=0;b<bitCount;++b)
 		{
 			int bit=srcbytes[(bitOffset+b)>>3]>>((bitOffset+b)&7)&1;
@@ -2446,7 +2446,7 @@ void bitstring_append(BitstringHandle *str, const void *src, size_t bitCount, si
 	memset(str[0]->data+byteIdx, 0, newcap-byteIdx);
 	if(src)
 	{
-		const unsigned char *srcbytes=(const unsigned char*)src;
+		const uint8_t *srcbytes=(const uint8_t*)src;
 		for(size_t b=0;b<bitCount;++b)
 		{
 			int bit=srcbytes[(bitOffset+b)>>3]>>((bitOffset+b)&7)&1;
@@ -2464,7 +2464,7 @@ int bitstring_get(BitstringHandle *str, size_t bitIdx)
 	}
 	if(bitIdx>=str[0]->bitCount)
 	{
-		LOG_ERROR("bitstring_get OOB: bitCount=%lld, bitIdx=%lld", (long long)str[0]->bitCount, (long long)bitIdx);
+		LOG_ERROR("bitstring_get OOB: bitCount=%lld, bitIdx=%lld", (int64_t)str[0]->bitCount, (int64_t)bitIdx);
 		return 0;
 	}
 	return str[0]->data[bitIdx>>3]>>(bitIdx&7)&1;
@@ -2478,7 +2478,7 @@ void bitstring_set(BitstringHandle *str, size_t bitIdx, int bit)
 	}
 	if(bitIdx>=str[0]->bitCount)
 	{
-		LOG_ERROR("bitstring_get OOB: bitCount=%lld, bitIdx=%lld", (long long)str[0]->bitCount, (long long)bitIdx);
+		LOG_ERROR("bitstring_get OOB: bitCount=%lld, bitIdx=%lld", (int64_t)str[0]->bitCount, (int64_t)bitIdx);
 		return;
 	}
 	if(bit)
@@ -2638,7 +2638,7 @@ void  pqueue_dequeue(PQueueHandle *pq)
 
 	if(!pq[0]->count)
 	{
-		LOG_ERROR("pqueue_erase() out of bounds: size=%lld", (long long)pq[0]->count);
+		LOG_ERROR("pqueue_erase() out of bounds: size=%lld", (int64_t)pq[0]->count);
 		return;
 	}
 
@@ -3088,7 +3088,7 @@ ArrayHandle load_file(const char *filename, int bin, int pad, int erroronfail)
 	memset(str->data+str->count, 0, str->cap-str->count);
 	return str;
 }
-int save_file(const char *filename, const unsigned char *src, size_t srcsize, int is_bin)
+int save_file(const char *filename, const uint8_t *src, size_t srcsize, int is_bin)
 {
 	FILE *f;
 	size_t bytesRead;
@@ -3450,7 +3450,7 @@ static void prof_impl_print_instr(int lineno, size_t runtime_addr, int len, ptrd
 	for(int k=0;k<15;++k)
 	{
 		if(k<len)
-			printf("%02X", *(unsigned char*)(runtime_addr+k));
+			printf("%02X", *(uint8_t*)(runtime_addr+k));
 		else
 			printf("  ");
 	}
@@ -3549,7 +3549,7 @@ void prof_end(void *prof_ctx)
 				hitsum+=ptr[k].count;
 			}
 		}
-		unsigned char *data=(unsigned char*)funcptr;
+		uint8_t *data=(uint8_t*)funcptr;
 		size_t length=maxaddr+15;
 		size_t offset=0;
 		size_t runtime_address=funcptr;
@@ -3702,8 +3702,8 @@ int colorprintf(int textcolor, int bkcolor, const char *format, ...)//0x00BBGGRR
 }
 void colorgen0(int *colors, int count, int maxbrightness)
 {
-	unsigned char *limits=(unsigned char*)&maxbrightness;
-	unsigned char *data=(unsigned char*)colors, *ptr=data;
+	uint8_t *limits=(uint8_t*)&maxbrightness;
+	uint8_t *data=(uint8_t*)colors, *ptr=data;
 	limits[0]+=!limits[0];
 	limits[1]+=!limits[1];
 	limits[2]+=!limits[2];
@@ -3723,7 +3723,7 @@ void colorgen0(int *colors, int count, int maxbrightness)
 			int rem=(r2&127)<<14|(r1&127)<<7|(r0&127);//21 bit
 			int dmin=dmax0;
 			{
-				const unsigned char *p2=(const unsigned char*)data;
+				const uint8_t *p2=(const uint8_t*)data;
 				for(int k2=0;k2<k;++k2)
 				{
 					int dr=p2[0]-ptr[0];
@@ -3740,7 +3740,7 @@ void colorgen0(int *colors, int count, int maxbrightness)
 				bestdist=dmin;
 				bestcolor=data[k];
 			}
-			reject=((unsigned long long)dmin<<21)<(unsigned long long)rem*dmax0;
+			reject=((uint64_t)dmin<<21)<(uint64_t)rem*dmax0;
 			++ntrials;
 		}while(reject&&ntrials<20);
 		data[k]=bestcolor;
@@ -3749,7 +3749,7 @@ void colorgen0(int *colors, int count, int maxbrightness)
 }
 void colorgen(int *colors, int count, int minbrightness, int maxbrightness, int maxtrials)
 {
-	unsigned char *data=(unsigned char*)colors;
+	uint8_t *data=(uint8_t*)colors;
 	CLAMP2(minbrightness, 0, 765-1);
 	if(maxbrightness<minbrightness+1)
 		maxbrightness=minbrightness+1;
@@ -3804,7 +3804,7 @@ void colorgen(int *colors, int count, int minbrightness, int maxbrightness, int 
 			int rem=(r2&127)<<14|(r1&127)<<7|(r0&127);//21 bit
 			int dmin=0xFFFFFF;// > 3*255*255
 			{
-				const unsigned char *p2=(const unsigned char*)data;
+				const uint8_t *p2=(const uint8_t*)data;
 				for(int k2=0;k2<k;++k2)
 				{
 					int dr=p2[0]-r;
@@ -3821,7 +3821,7 @@ void colorgen(int *colors, int count, int minbrightness, int maxbrightness, int 
 				bestdist=dmin;
 				bestcolor=b<<16|g<<8|r;
 			}
-			reject=((unsigned long long)dmin<<21)<(unsigned long long)rem*dmax0;
+			reject=((uint64_t)dmin<<21)<(uint64_t)rem*dmax0;
 			if(ntrials>=maxtrials)
 				bestcolor=0x808080;
 			//	LOG_ERROR("%d trials reached, bestcolor %08X", maxtrials, bestcolor);
@@ -3876,7 +3876,7 @@ void get_tmpfn(char *dst)//dst is MAX_PATH
 #endif
 }
 
-void exec_process(char *cmd, const char *currdir, int loud, double *elapsed, long long *maxmem)
+void exec_process(char *cmd, const char *currdir, int loud, double *elapsed, int64_t *maxmem)
 {
 	int success;
 	STARTUPINFOA si={0};
