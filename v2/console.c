@@ -23,7 +23,7 @@
 #include<Windows.h>
 #include<stdarg.h>
 int consoleactive=0;
-#define G_BUF_SIZE	1024
+#define G_BUF_SIZE 1024
 static char g_buf2[G_BUF_SIZE]={0};
 void console_log(const char *format, ...)
 {
@@ -108,10 +108,9 @@ void console_buffer_size(short x, short y)
 {
 	COORD coord={x, y};
 	SMALL_RECT Rect={0, 0, (short)(x-1), (short)(y-1)};
-
-    HANDLE Handle=GetStdHandle(STD_OUTPUT_HANDLE);
-    SetConsoleScreenBufferSize(Handle, coord);
-    SetConsoleWindowInfo(Handle, TRUE, &Rect);
+	HANDLE Handle=GetStdHandle(STD_OUTPUT_HANDLE);
+	SetConsoleScreenBufferSize(Handle, coord);
+	SetConsoleWindowInfo(Handle, TRUE, &Rect);
 }
 
 int console_scan(char *buf, int len)
