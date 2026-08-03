@@ -1607,7 +1607,6 @@ typedef struct _PlaybackFrame
 	int iw, ih;
 	double pts;
 	uint8_t *data;
-	uint32_t txid;
 } PlaybackFrame;
 typedef struct _PlaybackQueue
 {
@@ -1624,8 +1623,6 @@ static void fq_init(PlaybackQueue *fq)
 	fq->mutex=mutex_init();
 	fq->not_full=cond_init();
 	fq->not_empty=cond_init();
-	for(int k=0;k<FRAMEQUEUE_CAP;++k)
-		glGenTextures(1, &fq->frames[k].txid);
 }
 static void fq_destroy(PlaybackQueue *fq)
 {
@@ -1636,8 +1633,6 @@ static void fq_destroy(PlaybackQueue *fq)
 		f->ih=0;
 		f->pts=0;
 		free(f->data);
-		if(f->txid)
-			glDeleteTextures(1, &f->txid);
 		f->data=0;
 	}
 	mutex_destroy(fq->mutex);
@@ -1954,7 +1949,6 @@ int frame_dequeue(void)
 	frame4=args->fq.frames+args->fq.read_idx;
 	//impreview2gpu(frame4->data, impreview->iw, impreview->ih);
 	memcpy(impreview->data, frame4->data, usize);
-	//video_txid=frame4->txid;
 	vtime=frame4->pts;
 
 	args->fq.read_idx=(args->fq.read_idx+1)%FRAMEQUEUE_CAP;

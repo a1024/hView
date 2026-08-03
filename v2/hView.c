@@ -68,7 +68,6 @@ int brightness=0;//impreview = CLAMP(image<<brightness)
 
 extern uint64_t framenumber;
 uint32_t image_txid=0;//maintained by image viewer
-//uint32_t video_txid=0;//maintained by video playback	X
 uint32_t animated=0;
 enum
 {

@@ -775,7 +775,6 @@ typedef enum ProfilePlotModeEnum
 extern ProfilePlotMode profileplotmode;
 
 extern uint32_t image_txid;
-//extern uint32_t video_txid;
 void image_fit2screen(int iw, int ih);
 int impreview2gpu(uint8_t *data, int iw, int ih, uint32_t *txid);
 void videoplayback_start(const char *fn, int has_video, int has_audio);
