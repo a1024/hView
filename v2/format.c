@@ -2780,7 +2780,7 @@ static void videoplayback_decode(void *p)
 						if(first_part>until_end)
 							first_part=until_end;
 						float gain=mute_audio?0:g_volume;
-						for(int k=0;k<first_part;++k)	//FIXME: memcpy x2
+						for(int k=0;k<first_part;++k)
 						{
 							float valL=args->abuf[(i+k)*2+0]*gain;
 							float valR=args->abuf[(i+k)*2+1]*gain;

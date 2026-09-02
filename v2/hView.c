@@ -2024,7 +2024,7 @@ void io_render()
 					{
 						float left=fftsamples[0][k];
 						float right=fftsamples[1][k];
-						float x=right-left;
+						float x=left-right;
 						float y=left+right;
 						draw_curve_enqueue(&vertices_2d, x0+x*curvescale, y0+y*curvescale);
 					}
