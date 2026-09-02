@@ -3789,11 +3789,11 @@ static void print_version(char **dst, const char *end, const char *libname, int 
 {
 	if(*dst>=end)
 		LOG_WARNING("Buffer overflow");
-	*dst+=snprintf(*dst, end-*dst,
-		"%-10s\t%u.%u.%u .%s\n",
-		libname,
-		major, minor, patch,
-		isdll?"dll":"h"
+	*dst+=snprintf(*dst, end-*dst
+		, "%u.%u.%u .%s\t%-10s\n"
+		, major, minor, patch
+		, isdll?"dll":"h"
+		, libname
 	);
 }
 char* get_libinfo(void)//don't forget to free(mem)
