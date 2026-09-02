@@ -2026,6 +2026,7 @@ void io_render()
 				float visbase=(float)h*0.75f;
 				float visref=(float)h*0.75f;
 				float xstep=(float)w/NBANDS;
+				float yscale=(17.f/1440)*(float)h;
 
 				if(visual_type==VIS_BARS||visual_type==VIS_DFT)
 				{
@@ -2049,7 +2050,7 @@ void io_render()
 					{
 						for(int k=0;k<NBANDS;++k)
 						{
-							float level=visref-15*band_dB[kc][k];
+							float level=visref-yscale*band_dB[kc][k];
 							draw_rect_enqueue(&vertices_2d, ((float)k+offsets[2*kc+0])*xstep, ((float)k+offsets[2*kc+1])*xstep, level, visbase);
 						}
 						draw_2d_flush(vertices_2d, colors[kc], GL_TRIANGLES);
@@ -2058,7 +2059,7 @@ void io_render()
 					{
 						for(int k=0;k<NBANDS;++k)
 						{
-							float level=visref-15*bandpeak_dB[kc][k];
+							float level=visref-yscale*bandpeak_dB[kc][k];
 							draw_rect_enqueue(&vertices_2d, ((float)k+offsets[2*kc+0])*xstep, ((float)k+offsets[2*kc+1])*xstep, level, level-4);
 						}
 						draw_2d_flush(vertices_2d, colors[kc], GL_TRIANGLES);
@@ -2077,7 +2078,7 @@ void io_render()
 							float power=re*re+im*im;
 							float p2=fftpower[kc][k];
 							float dB=(float)(10/M_LN10)*(p2<1?p2:logf(p2)+1);
-							float y=visbase-15*dB;
+							float y=visbase-yscale*dB;
 							draw_curve_enqueue(&vertices_2d, vis_freq2idx(f)*xstep, y);
 							fftpower[kc][k]+=(power-fftpower[kc][k])*0.25f;
 						}
