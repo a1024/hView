@@ -2883,7 +2883,7 @@ static void videoplayback_decode(void *p)
 											bandpeak_dB[kc][band]=band_dB[kc][band];
 											bandpeak_dec[kc][band]=0;
 										}
-										bandpeak_dec[kc][band]+=0.05f;
+										bandpeak_dec[kc][band]+=0.02f;
 									}
 								}
 								fftsamplecount=0;

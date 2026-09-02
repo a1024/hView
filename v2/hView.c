@@ -1992,7 +1992,7 @@ void io_render()
 			};
 			int bk0=set_bk_color(PLAYER_COLOR);
 #ifdef ENABLE_AUDIO_VISUAL
-			if(queryvisualization())
+			if(queryvisualization()&&visual_type!=VIS_NONE)
 			{
 				static const int colors[]=
 				{
@@ -2018,15 +2018,58 @@ void io_render()
 				} Freq_t;
 				static const Freq_t freqstops[]=
 				{
-					{(float)   50, "50"},
+					{(float)  50, 0},
+					{(float)  60, 0},
+					{(float)  70, 0},
+					{(float)  80, 0},
+					{(float)  90, 0},
 					{(float)  100, "100"},
-					{(float)  250, "250"},
+					{(float)  200, "200"},
+					{(float)  300, 0},
+					{(float)  400, 0},
 					{(float)  500, "500"},
-					{(float) 1000, "1K"},
-					{(float) 2000, "2K"},
-					{(float) 4000, "4K"},
-					{(float) 8000, "8K"},
-					{(float)12000, "12K"},
+					{(float)  600, 0},
+					{(float)  700, 0},
+					{(float)  800, 0},
+					{(float)  900, 0},
+					{(float) 1000, "1k"},
+					{(float) 2000, "2k"},
+					{(float) 3000, 0},
+					{(float) 4000, 0},
+					{(float) 5000, "5k"},
+					{(float) 6000, 0},
+					{(float) 7000, 0},
+					{(float) 8000, 0},
+					{(float) 9000, 0},
+					{(float)10000, "10k"},
+					{(float)11000, 0},
+					{(float)12000, 0},
+					{(float)13000, 0},
+					{(float)14000, 0},
+					{(float)15000, "15kHz"},
+					{(float)16000, 0},
+					{(float)17000, 0},
+					{(float)18000, 0},
+					{(float)19000, 0},
+
+					//{(float)  100, "100"},
+					//{(float)  200, "200"},
+					//{(float)  500, "500"},
+					//{(float) 1000, "1k"},
+					//{(float) 2000, "2k"},
+					//{(float) 5000, "5k"},
+					//{(float)10000, "10k"},
+					//{(float)15000, "15kHz"},
+
+					//{(float)   50, "50"},
+					//{(float)  100, "100"},
+					//{(float)  250, "250"},
+					//{(float)  500, "500"},
+					//{(float) 1000, "1K"},
+					//{(float) 2000, "2K"},
+					//{(float) 4000, "4K"},
+					//{(float) 8000, "8K"},
+					//{(float)12000, "12K Hz"},
 				};
 				float drawheight=(float)h-SLIDER_HEIGHT-tdy;
 				float labelheight=(float)drawheight*0.75f;
@@ -2050,6 +2093,13 @@ void io_render()
 						draw_curve_enqueue(&vertices_2d, x0+x*curvescale, y0+y*curvescale);
 					}
 					draw_2d_flush(vertices_2d, 0xFF808080, GL_LINE_STRIP);
+				}
+				for(int k=0;k<_countof(freqstops)-1;k+=2)
+				{
+					float x1=vis_freq2idx(freqstops[k+0].freq)*xstep;
+					float x2=vis_freq2idx(freqstops[k+1].freq)*xstep;
+					draw_rect(x1, x2, 0, labelheight, 0x40C0C0C0);
+				//	draw_line(x, (float)h*0.5f, x, labelheight+2*tdy, PLAYER_COLOR);
 				}
 				if(visual_type==VIS_BARS_NOCURVE||visual_type==VIS_BARS||visual_type==VIS_BARS_DFT)
 				{
@@ -2095,9 +2145,11 @@ void io_render()
 				for(int k=0;k<_countof(freqstops);++k)
 				{
 					const Freq_t *f=freqstops+k;
-					float x=vis_freq2idx(f->freq)*xstep;
-					draw_line(x, (float)h*0.5f, x, labelheight, PLAYER_COLOR);
-					GUIPrint(0, x, labelheight, 1, "%s", f->label);
+					if(f->label)
+					{
+						float x=vis_freq2idx(f->freq)*xstep;
+						GUIPrint(0, x, labelheight, 1, "%s", f->label);
+					}
 				}
 			}
 #endif
