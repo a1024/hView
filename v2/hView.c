@@ -3,6 +3,7 @@
 #include<stdio.h>
 #include<stdlib.h>
 #include<string.h>
+#define _USE_MATH_DEFINES
 #include<math.h>
 #include<sys/stat.h>
 #ifdef _MSC_VER
@@ -127,14 +128,18 @@ void *inst_mutex=0;
 //double fps_checkpoints[FPS_QUEUESIZE][4]={0};
 //double tdec=0, tsend2gpu=0;
 #ifdef ENABLE_AUDIO_VISUAL
-int visual_enabled=0;
+int visual_enabled=0, visual_type=VIS_BARS;
 int fftsamplecount=0;
 float
 	fftsamples[2][FFTSIZE]={0},	//planar
 	fftwindow[FFTSIZE]={0},
 	fftfreq[2][FFTSIZE][2]={0},	//{re, im}
+	fftpower[2][FFTSIZE/2]={0},
 	bandbounds[NBANDS+1]={0},	//wstart->wend in log scale
-	band_dB[2][NBANDS]={0};		//bars
+	band_dB[2][NBANDS]={0},		//bars
+	bandpower[2][NBANDS]={0},
+	bandpeak[2][NBANDS]={0},
+	bandpeak_dB[2][NBANDS]={0};
 int bandindices[NBANDS+1]={0};
 #endif
 void recordevent(int eventtype, int start)
@@ -789,6 +794,7 @@ int io_keydn(IOKey key, char c)
 				"I: Toggle single instance\n"
 #ifdef ENABLE_AUDIO_VISUAL
 				"V: Enforce audio visualization\n"
+				"B: Select visualization\n"
 #endif
 				"X/Y: Toggle horizontal/vertical cross-sections\n"
 				"Quote: Toggle bitplane view\n"
@@ -1366,6 +1372,9 @@ int io_keydn(IOKey key, char c)
 			return 1;
 		}
 		break;
+	case 'B':
+		visual_type=(visual_type+1)%VIS_COUNT;
+		return 1;
 	case 'P':
 		if(animated)
 		{
@@ -1992,8 +2001,8 @@ void io_render()
 				static const float offsets[]=
 				{
 					0.300f,
-					0.400f,
-					0.600f,
+					0.500f,
+					0.500f,
 					0.700f,
 
 				//	0.125f,
@@ -2005,6 +2014,7 @@ void io_render()
 				{
 					(float)   50,
 					(float)  100,
+					(float)  250,
 					(float)  500,
 					(float) 1000,
 					(float) 2000,
@@ -2013,8 +2023,11 @@ void io_render()
 					(float)12000,
 				};
 				float labelheight=(float)h*0.75f;
+				float visbase=(float)h*0.75f;
+				float visref=(float)h*0.75f;
 				float xstep=(float)w/NBANDS;
 
+				if(visual_type==VIS_BARS||visual_type==VIS_DFT)
 				{
 					float curvescale=(float)h*0.5f;
 					float x0=(float)w*0.5f;
@@ -2030,18 +2043,51 @@ void io_render()
 					}
 					draw_2d_flush(vertices_2d, 0xFF808080, GL_LINE_STRIP);
 				}
-				for(int kc=0;kc<2;++kc)
+				switch(visual_type)
 				{
-					float visbase=(float)h*0.75f;
-					float visref=(float)h*0.75f;
-					for(int k=0;k<NBANDS;++k)
+				case VIS_BARS:
+				case VIS_BARS_NOCURVE:
+					for(int kc=0;kc<2;++kc)
 					{
-						float level=visref-4*band_dB[kc][k];
-						if(level>visbase)
-							level=visbase;
-						draw_rect_enqueue(&vertices_2d, ((float)k+offsets[2*kc+0])*xstep, ((float)k+offsets[2*kc+1])*xstep, level, visbase);
+						for(int k=0;k<NBANDS;++k)
+						{
+							float level=visref-10*band_dB[kc][k];
+							draw_rect_enqueue(&vertices_2d, ((float)k+offsets[2*kc+0])*xstep, ((float)k+offsets[2*kc+1])*xstep, level, visbase);
+						}
+						draw_2d_flush(vertices_2d, colors[kc], GL_TRIANGLES);
 					}
-					draw_2d_flush(vertices_2d, colors[kc], GL_TRIANGLES);
+					for(int kc=0;kc<2;++kc)
+					{
+						for(int k=0;k<NBANDS;++k)
+						{
+							float level=visref-10*bandpeak_dB[kc][k];
+							draw_rect_enqueue(&vertices_2d, ((float)k+offsets[2*kc+0])*xstep, ((float)k+offsets[2*kc+1])*xstep, level, level-4);
+						}
+						draw_2d_flush(vertices_2d, colors[kc], GL_TRIANGLES);
+					}
+					break;
+				case VIS_DFT:
+				case VIS_DFT_NOCURVE:
+					{
+						float inc=(float)PLAYBACKSAMPLERATE/FFTSIZE;
+						for(int kc=0;kc<2;++kc)
+						{
+							for(int k=0;k<FFTSIZE/2;++k)
+							{
+								float f=inc*(k+1);
+								float re=fftfreq[kc][k][0];
+								float im=fftfreq[kc][k][1];
+								float power=re*re+im*im;
+								float p2=fftpower[kc][k];
+								float dB=(float)(10/M_LN10)*(p2<1?p2:logf(p2)+1);
+								float y=visbase-10*dB;
+								draw_curve_enqueue(&vertices_2d, vis_freq2idx(f)*xstep, y);
+								fftpower[kc][k]+=(power-fftpower[kc][k])*0.25f;
+							}
+							draw_2d_flush(vertices_2d, colors[kc], GL_LINE_STRIP);
+						}
+					}
+					break;
 				}
 				for(int k=0;k<_countof(freqstops);++k)
 				{
@@ -2301,7 +2347,7 @@ void io_render()
 	}
 	static double t=0;
 	double t2=time_sec();
-	GUIPrint(0, 0, 0, 1, "fps %lf  playing=%d", t2?1/(t2-t):0, playing);
+	GUIPrint(0, 0, 0, 1, "fps %lf", t2?1/(t2-t):0);
 	//GUIPrint(0, 0, 0, 1, "fps %lf  T %lf ms",
 	//	1000./(t2-t), (t2-t)*0.001
 	//);

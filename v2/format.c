@@ -2815,7 +2815,10 @@ static void videoplayback_decode(void *p)
 							fftwindow[FFTSIZE],
 							fftfreq[2][FFTSIZE][2],	//{re, im}
 							bandbounds[NBANDS+1],	//wstart->wend in log scale
-							band_dB[2][NBANDS];	//bars
+							band_dB[2][NBANDS],	//bars
+							bandpower[2][NBANDS],
+							bandpeak[2][NBANDS],
+							bandpeak_dB[2][NBANDS];
 						extern int bandindices[NBANDS+1];
 
 						if(bandbounds[NBANDS]<1000)//init
@@ -2864,7 +2867,7 @@ static void videoplayback_decode(void *p)
 									for(int band=0;band<NBANDS;++band)
 									{
 										int fstart=bandindices[band], fend=bandindices[band+1];
-										float power=0;
+										float power=0, p2=0;
 										for(int f=fstart;f<fend;++f)
 										{
 											float re=fftfreq[kc][f][0], im=fftfreq[kc][f][1];
@@ -2872,10 +2875,13 @@ static void videoplayback_decode(void *p)
 										}
 										fend-=fstart;
 										power/=fend+!fend;
-										if(power<1)
-											band_dB[kc][band]=power;
-										else
-											band_dB[kc][band]=10.f*log10f(power+1e-20f)+1;
+										bandpeak[kc][band]*=0.9f;
+										if(bandpeak[kc][band]<power)
+											bandpeak[kc][band]=power;
+										p2=bandpower[kc][band]+=(power-bandpower[kc][band])*0.5f;
+										band_dB[kc][band]=(float)(10/M_LN10)*(p2<1?p2:logf(p2)+1);
+										p2=bandpeak[kc][band];
+										bandpeak_dB[kc][band]=(float)(10/M_LN10)*(p2<1?p2:logf(p2)+1);
 									}
 								}
 								fftsamplecount=0;

@@ -798,9 +798,15 @@ enum
 {
 	FFTBITS=11,
 	FFTSIZE=1<<FFTBITS,
-	NBANDS=64,
+	NBANDS=32,
+
+	VIS_BARS=0,
+	VIS_DFT,
+	VIS_BARS_NOCURVE,
+	VIS_DFT_NOCURVE,
+	VIS_COUNT,
 };
-extern int visual_enabled;
+extern int visual_enabled, visual_type;
 int queryvisualization(void);
 float vis_freq2idx(float freq);
 #endif
