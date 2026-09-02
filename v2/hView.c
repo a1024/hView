@@ -1988,6 +1988,7 @@ void io_render()
 				SCALE=128,
 
 				PLAYER_COLOR=0xFFFFC080,
+				SLIDER_COLOR=0x804080C0,
 			};
 			int bk0=set_bk_color(PLAYER_COLOR);
 #ifdef ENABLE_AUDIO_VISUAL
@@ -2010,23 +2011,29 @@ void io_render()
 				//	0.625f,
 				//	0.875f,
 				};
-				static const float freqstops[]=
+				typedef struct _Freq_t
 				{
-					(float)   50,
-					(float)  100,
-					(float)  250,
-					(float)  500,
-					(float) 1000,
-					(float) 2000,
-					(float) 4000,
-					(float) 8000,
-					(float)12000,
+					float freq;
+					const char *label;
+				} Freq_t;
+				static const Freq_t freqstops[]=
+				{
+					{(float)   50, "50"},
+					{(float)  100, "100"},
+					{(float)  250, "250"},
+					{(float)  500, "500"},
+					{(float) 1000, "1K"},
+					{(float) 2000, "2K"},
+					{(float) 4000, "4K"},
+					{(float) 8000, "8K"},
+					{(float)12000, "12K"},
 				};
-				float labelheight=(float)h*0.75f;
-				float visbase=(float)h*0.75f;
-				float visref=(float)h*0.75f;
+				float drawheight=(float)h-SLIDER_HEIGHT-tdy;
+				float labelheight=(float)drawheight*0.75f;
+				float visbase=(float)drawheight*0.75f;
+				float visref=(float)drawheight*0.75f;
 				float xstep=(float)w/NBANDS;
-				float yscale=(17.f/1440)*(float)h;
+				float yscale=(17.f/1440)*drawheight;
 
 				if(visual_type==VIS_BARS||visual_type==VIS_DFT)
 				{
@@ -2087,13 +2094,14 @@ void io_render()
 				}
 				for(int k=0;k<_countof(freqstops);++k)
 				{
-					float f=freqstops[k];
-					float x=vis_freq2idx(f);
-					GUIPrint(0, x*xstep, labelheight, 0.7f, "%g", f);
+					const Freq_t *f=freqstops+k;
+					float x=vis_freq2idx(f->freq)*xstep;
+					draw_line(x, (float)h*0.5f, x, labelheight, PLAYER_COLOR);
+					GUIPrint(0, x, labelheight, 1, "%s", f->label);
 				}
 			}
 #endif
-			draw_rect(0, (float)(w*slider.timestamp/slider.duration), (float)(h-tdy-SLIDER_HEIGHT-1), (float)(h-tdy), 0x804080C0);
+			draw_rect(0, (float)(w*slider.timestamp/slider.duration), (float)(h-tdy-SLIDER_HEIGHT-1), (float)(h-tdy), SLIDER_COLOR);
 			double step=SCALE*slider.duration/w;
 			int unit=UNIT_SECONDS;
 			if(step>60)
