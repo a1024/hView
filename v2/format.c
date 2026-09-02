@@ -2508,12 +2508,10 @@ static void videoplayback_decode(void *p)
 			{
 #ifdef PROFILE_FPS
 				recordevent(EVNT_DEC, 1);
-				//double t=time_sec();
 #endif
 				error=avcodec.avcodec_send_packet(args->videoCodecContext, args->packet);
 #ifdef PROFILE_FPS
 				recordevent(EVNT_DEC, 0);
-				//tdec+=time_sec()-t;
 #endif
 				if(args->seekflag&&error<0)
 				{
@@ -2535,9 +2533,11 @@ static void videoplayback_decode(void *p)
 
 					if(args->seekflag)
 					{
+						double t;
+
 						if(!args->albumart&&args->frame->best_effort_timestamp==AV_NOPTS_VALUE)
 							continue;
-						double t=args->frame->best_effort_timestamp*args->ftimebase;
+						t=args->frame->best_effort_timestamp*args->ftimebase;
 						if(t<args->seektarget)
 						{
 							g_buffering=1;
@@ -2587,12 +2587,14 @@ static void videoplayback_decode(void *p)
 					
 					if(args->seekflag)
 					{
+						double t;
+
 						if(args->frame->best_effort_timestamp==AV_NOPTS_VALUE)
 						{
 							avutil.av_frame_unref(args->frame);
 							continue;
 						}
-						double t=args->frame->best_effort_timestamp*args->ftimebase;
+						t=args->frame->best_effort_timestamp*args->ftimebase;
 						if(t<args->seektarget)
 						{
 							avutil.av_frame_unref(args->frame);
@@ -2776,6 +2778,10 @@ static void videoplayback_decode(void *p)
 				args->seekrequest=0;
 			}
 		}
+		if(args->has_video)
+			while(*(volatile int*)&args->fq.count>0);//presentation end signaled by render()
+		else if(args->has_audio)
+			while(*(volatile int*)&args->aq.read_idx!=*(volatile int*)&args->aq.write_idx);//playback end signaled by WASAPI
 		if(args->stopflag||playopt==PLAYOPT_LIST||playopt==PLAYOPT_SHUF)
 			break;
 		if(playopt==PLAYOPT_ONCE)
@@ -3435,6 +3441,7 @@ int load_media(const wchar_t *filename, Image16 **image, int erroronfail, int ne
 	{
 		animated=0;
 		videoplayback_pause(1);
+		playing=0;
 	}
 	background[2]=background[1]=background[0]=255;
 	background[3]=0;

@@ -483,7 +483,7 @@ void playbackendaction(void)
 			{
 				for(int it=0;it<(int)filenames->count;++it)
 				{
-					int idx=rand()<<15^rand();
+					int idx=rand()<<15^rand();//1B files max
 					idx%=(int)filenames->count;
 					fn2=(ArrayHandle*)array_at(&filenames, idx);
 					if(!load_media((wchar_t*)fn2[0]->data, &im2, 0, 1))
@@ -555,7 +555,8 @@ int io_init(int argc, wchar_t **argv)//return false to abort
 //#if 0
 	const wchar_t *filename=
 
-		L"E:/Share Box/UV/20260617_184228.jpg"
+		L"D:/ML/sgra2018.mp4"
+	//	L"E:/Share Box/UV/20260617_184228.jpg"
 	//	L"E:/Share Box/Sound & Music/Party Hard OST - Main Theme.ogg"
 	//	L"C:/Users/Work Pc/Documents/Half-Life_2041_720p120.mkv"
 	//	L"D:/ML/dataset-Internet/os_bleh.gif"
@@ -1306,6 +1307,8 @@ int io_keydn(IOKey key, char c)
 				image_free(&image);
 				image_free(&impreview);
 				image=image_alloc16(0, im2->iw, im2->ih, 4, 4, 256, 8);
+				g_iw=im2->iw;
+				g_ih=im2->ih;
 				for(ptrdiff_t k=0, res=(ptrdiff_t)4*im2->iw*im2->ih;k<res;++k)
 					image->data[k]=im2->data[k];
 			//	image=image_construct(im2->iw, im2->ih, 16, im2->data, im2->iw, im2->ih, im2->xcap-im2->iw, im2->depth);
@@ -1496,12 +1499,12 @@ static void draw_histogram(int *hist, int nlevels, int color, int y1, int y2)
 		draw_rect_enqueue(&vertices_2d, (float)sym*w/nlevels, (float)(sym+1)*w/nlevels, y2-(float)hist[sym]*(y2-y1)/fmax, (float)y2);
 	draw_2d_flush(vertices_2d, color, GL_TRIANGLES);
 }
-static void draw_profile(int comp, int color, int profx, int frompreview)//horizontal cross-section profile		to see the color/spatial correlation
+static void draw_profile(int comp, int color, int profx, int frompreview)//horizontal cross-section profile
 {
 	int nlevels=(1<<imagedepth)-1;
 	if(profx)
 	{
-		float scale=(float)h*0.5f/(float)nlevels;
+		float scale=((float)h-tdy)/(float)nlevels;
 		for(int kx=0;kx<w;++kx)
 		{
 			HPoint2D p={kx, my};
@@ -1532,12 +1535,12 @@ static void draw_profile(int comp, int color, int profx, int frompreview)//horiz
 					}
 				}
 			}
-			draw_curve_enqueue(&vertices_2d, (float)kx, (float)pixel*scale);
+			draw_curve_enqueue(&vertices_2d, (float)kx, (float)h-tdy-(float)pixel*scale);
 		}
 	}
 	else
 	{
-		float scale=(float)w*0.5f/(float)nlevels;
+		float scale=(float)w/(float)nlevels;
 		for(int ky=0;ky<h;++ky)
 		{
 			HPoint2D p={mx, ky};
@@ -2166,7 +2169,7 @@ void io_render()
 	}
 	static double t=0;
 	double t2=time_sec();
-	GUIPrint(0, 0, 0, 1, "fps %lf", t2?1/(t2-t):0);
+	GUIPrint(0, 0, 0, 1, "fps %lf  playing=%d", t2?1/(t2-t):0, playing);
 	//GUIPrint(0, 0, 0, 1, "fps %lf  T %lf ms",
 	//	1000./(t2-t), (t2-t)*0.001
 	//);
