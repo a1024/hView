@@ -33,6 +33,9 @@ extern "C"
 #define TIMER_ID_MONITOR 2
 #define TIMER_MONITOR_MS 100
 
+#define CLASSNAME L"hView"
+#define MUTEXNAME L"hView.SingleInstance"
+
 extern int w, h, mx, my, mouse_bypass;
 extern HWND ghWnd;
 extern HDC ghDC;
@@ -844,19 +847,6 @@ void recordevent(int eventtype, int start);
 
 //	#define USEQUEUETIMER	//smooth 60Hz playback
 	#define USEHIRESTIMER
-
-
-//tests
-
-//T48: lossless raw image codec
-//int t48_encode(const unsigned short *src, int iw, int ih, int idepth, char *bayer, ArrayHandle *data, int loud);
-//int t48_decode(const uint8_t *data, size_t srclen, int iw, int ih, int idepth, char *bayer, unsigned short *dst, int loud);
-//void test48(ImageHandle image, int idepth, char *bayer);
-
-//T49: lossless 16-bit image codec
-//int t49_encode(const unsigned short *src, int iw, int ih, int idepth, ArrayHandle *data, int loud);
-//int t49_decode(const uint8_t *data, size_t srclen, int iw, int ih, int idepth, unsigned short *dst, int loud);
-//void test49(ImageHandle image, int idepth);
 
 
 #ifdef __cplusplus

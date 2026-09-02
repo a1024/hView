@@ -122,6 +122,8 @@ static int fpsprof_colors[EVNT_COUNT]=
 static int fps_start=0;
 static ProfileEvent fps_checkpoints[FPS_QUEUESIZE]={0};
 static void *fps_mutex=0;
+int singleinstance=0;
+void *inst_mutex=0;
 //double fps_checkpoints[FPS_QUEUESIZE][4]={0};
 //double tdec=0, tsend2gpu=0;
 void recordevent(int eventtype, int start)
@@ -551,8 +553,7 @@ void playbackendaction(void)
 }
 int io_init(int argc, wchar_t **argv)//return false to abort
 {
-#if defined _DEBUG ||0
-//#if 0
+#if (defined _DEBUG &&1) ||0
 	const wchar_t *filename=
 
 		L"D:/ML/sgra2018.mp4"
@@ -604,6 +605,29 @@ int io_init(int argc, wchar_t **argv)//return false to abort
 #else
 	if(argc>1)
 	{
+		inst_mutex=OpenMutexW(MUTEX_ALL_ACCESS, FALSE, MUTEXNAME);
+		if(inst_mutex)//single instance
+		{
+			HWND exWnd=FindWindowExW(0, ghWnd, CLASSNAME, 0);//<-  returns self
+			if(exWnd&&argc>1)
+			{
+				COPYDATASTRUCT data={0};
+				intptr_t ret;
+
+				data.dwData=1;
+				data.lpData=argv[1];
+				data.cbData=(DWORD)((wcslen((wchar_t*)data.lpData)+1)*sizeof(wchar_t));
+				ret=SendMessageW(exWnd, WM_COPYDATA, 0, (LPARAM)&data);
+
+				if(ret!=1)
+					messageboxa(MBOX_OK, "Error", "ret=%p", ret);
+
+				//ShowWindow(exWnd, SW_RESTORE);
+				//SetForegroundWindow(exWnd);
+			}
+			CloseHandle(inst_mutex);
+			exit(0);
+		}
 		fn=filter_pathw(argv[1], -1, 0);
 		load_media((wchar_t*)fn->data, &image, 1, 0);
 		if(image||animated)
@@ -751,6 +775,7 @@ int io_keydn(IOKey key, char c)
 				"H: Toggle histogram\n"
 				"Ctrl H: Toggle hex/decimal pixel labels\n"
 				"P: Toggle pixel label source / Playback end action\n"
+				"I: Toggle single instance\n"
 				"X/Y: Toggle horizontal/vertical cross-sections\n"
 				"Quote: Toggle bitplane view\n"
 				"Brackets: Select bitplane\n"
@@ -1331,6 +1356,25 @@ int io_keydn(IOKey key, char c)
 		}
 		else
 			pixelpreview=!pixelpreview;
+		return 1;
+	case 'I':
+		{
+			int e=0;
+
+			singleinstance^=1;
+			if(singleinstance)
+			{
+				if(!inst_mutex)
+				{
+					inst_mutex=CreateMutexW(0, TRUE, MUTEXNAME);
+					e=GetLastError();
+					(void)e;
+				}
+			}
+			else if(inst_mutex)
+				CloseHandle(inst_mutex);
+			animation_ctr=ANIMATION_NFRAMES;
+		}
 		return 1;
 	case 'H':
 		if(GET_KEY_STATE(KEY_CTRL))//toggle pixel label base
@@ -1969,6 +2013,7 @@ void io_render()
 				GUIPrint(0, 0, h/2.f-2*2*tdy, 2, "%c ONCE", playopt==PLAYOPT_ONCE?'>':' ');
 				GUIPrint(0, 0, h/2.f-1*2*tdy, 2, "%c LIST", playopt==PLAYOPT_LIST?'>':' ');
 				GUIPrint(0, 0, h/2.f+0*2*tdy, 2, "%c SHUF", playopt==PLAYOPT_SHUF?'>':' ');
+				GUIPrint(0, 0, h/2.f+2*2*tdy, 2, "%s Instance", singleinstance?"Single":"Multiple");
 				GUIPrint(0, w/2.f, (float)(h-3*tdy-SLIDER_HEIGHT), 2, "%12.3lfx", g_timescale);
 				--animation_ctr;
 			}

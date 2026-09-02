@@ -1111,6 +1111,17 @@ static LRESULT __stdcall WndProc(HWND hWnd, unsigned message, WPARAM wParam, LPA
 			io_dropfile(path);
 		}
 		break;
+	case WM_COPYDATA:
+		{
+			COPYDATASTRUCT *data=(COPYDATASTRUCT*)lParam;
+
+			if(data&&data->dwData==1)
+			{
+				io_dropfile((wchar_t*)data->lpData);
+				return 1;
+			}
+		}
+		break;
 	case WM_SIZE:
 		GetClientRect(ghWnd, &R);
 		w=R.right-R.left, h=R.bottom-R.top;
@@ -1239,7 +1250,7 @@ int __stdcall WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrev, _In_ c
 		0,
 	//	(HBRUSH)(COLOR_WINDOW+1),
 
-		0, L"MainWindowClass", 0
+		0, CLASSNAME, 0
 	};
 	MSG msg;
 
