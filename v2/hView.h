@@ -804,6 +804,7 @@ enum
 	VIS_DFT,
 	VIS_BARS_NOCURVE,
 	VIS_DFT_NOCURVE,
+	VIS_BARS_DFT,
 	VIS_COUNT,
 };
 extern int visual_enabled, visual_type;

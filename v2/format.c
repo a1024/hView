@@ -2817,7 +2817,7 @@ static void videoplayback_decode(void *p)
 							bandbounds[NBANDS+1],	//wstart->wend in log scale
 							band_dB[2][NBANDS],	//bars
 							bandpower[2][NBANDS],
-							bandpeak[2][NBANDS],
+							bandpeak_dec[2][NBANDS],
 							bandpeak_dB[2][NBANDS];
 						extern int bandindices[NBANDS+1];
 
@@ -2875,13 +2875,15 @@ static void videoplayback_decode(void *p)
 										}
 										fend-=fstart;
 										power/=fend+!fend;
-										bandpeak[kc][band]*=0.9f;
-										if(bandpeak[kc][band]<power)
-											bandpeak[kc][band]=power;
 										p2=bandpower[kc][band]+=(power-bandpower[kc][band])*0.5f;
 										band_dB[kc][band]=(float)(10/M_LN10)*(p2<1?p2:logf(p2)+1);
-										p2=bandpeak[kc][band];
-										bandpeak_dB[kc][band]=(float)(10/M_LN10)*(p2<1?p2:logf(p2)+1);
+										bandpeak_dB[kc][band]-=bandpeak_dec[kc][band];
+										if(bandpeak_dB[kc][band]<band_dB[kc][band])
+										{
+											bandpeak_dB[kc][band]=band_dB[kc][band];
+											bandpeak_dec[kc][band]=0;
+										}
+										bandpeak_dec[kc][band]+=0.05f;
 									}
 								}
 								fftsamplecount=0;

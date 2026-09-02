@@ -138,7 +138,7 @@ float
 	bandbounds[NBANDS+1]={0},	//wstart->wend in log scale
 	band_dB[2][NBANDS]={0},		//bars
 	bandpower[2][NBANDS]={0},
-	bandpeak[2][NBANDS]={0},
+	bandpeak_dec[2][NBANDS]={0},
 	bandpeak_dB[2][NBANDS]={0};
 int bandindices[NBANDS+1]={0};
 #endif
@@ -2043,15 +2043,13 @@ void io_render()
 					}
 					draw_2d_flush(vertices_2d, 0xFF808080, GL_LINE_STRIP);
 				}
-				switch(visual_type)
+				if(visual_type==VIS_BARS_NOCURVE||visual_type==VIS_BARS||visual_type==VIS_BARS_DFT)
 				{
-				case VIS_BARS:
-				case VIS_BARS_NOCURVE:
 					for(int kc=0;kc<2;++kc)
 					{
 						for(int k=0;k<NBANDS;++k)
 						{
-							float level=visref-10*band_dB[kc][k];
+							float level=visref-15*band_dB[kc][k];
 							draw_rect_enqueue(&vertices_2d, ((float)k+offsets[2*kc+0])*xstep, ((float)k+offsets[2*kc+1])*xstep, level, visbase);
 						}
 						draw_2d_flush(vertices_2d, colors[kc], GL_TRIANGLES);
@@ -2060,34 +2058,31 @@ void io_render()
 					{
 						for(int k=0;k<NBANDS;++k)
 						{
-							float level=visref-10*bandpeak_dB[kc][k];
+							float level=visref-15*bandpeak_dB[kc][k];
 							draw_rect_enqueue(&vertices_2d, ((float)k+offsets[2*kc+0])*xstep, ((float)k+offsets[2*kc+1])*xstep, level, level-4);
 						}
 						draw_2d_flush(vertices_2d, colors[kc], GL_TRIANGLES);
 					}
-					break;
-				case VIS_DFT:
-				case VIS_DFT_NOCURVE:
+				}
+				if(visual_type==VIS_DFT||visual_type==VIS_DFT_NOCURVE||visual_type==VIS_BARS_DFT)
+				{
+					static const float inc=(float)PLAYBACKSAMPLERATE/FFTSIZE;
+					for(int kc=0;kc<2;++kc)
 					{
-						float inc=(float)PLAYBACKSAMPLERATE/FFTSIZE;
-						for(int kc=0;kc<2;++kc)
+						for(int k=0;k<FFTSIZE/2;++k)
 						{
-							for(int k=0;k<FFTSIZE/2;++k)
-							{
-								float f=inc*(k+1);
-								float re=fftfreq[kc][k][0];
-								float im=fftfreq[kc][k][1];
-								float power=re*re+im*im;
-								float p2=fftpower[kc][k];
-								float dB=(float)(10/M_LN10)*(p2<1?p2:logf(p2)+1);
-								float y=visbase-10*dB;
-								draw_curve_enqueue(&vertices_2d, vis_freq2idx(f)*xstep, y);
-								fftpower[kc][k]+=(power-fftpower[kc][k])*0.25f;
-							}
-							draw_2d_flush(vertices_2d, colors[kc], GL_LINE_STRIP);
+							float f=inc*(k+1);
+							float re=fftfreq[kc][k][0];
+							float im=fftfreq[kc][k][1];
+							float power=re*re+im*im;
+							float p2=fftpower[kc][k];
+							float dB=(float)(10/M_LN10)*(p2<1?p2:logf(p2)+1);
+							float y=visbase-15*dB;
+							draw_curve_enqueue(&vertices_2d, vis_freq2idx(f)*xstep, y);
+							fftpower[kc][k]+=(power-fftpower[kc][k])*0.25f;
 						}
+						draw_2d_flush(vertices_2d, colors[kc], GL_LINE_STRIP);
 					}
-					break;
 				}
 				for(int k=0;k<_countof(freqstops);++k)
 				{
