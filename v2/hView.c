@@ -126,6 +126,16 @@ int singleinstance=0;
 void *inst_mutex=0;
 //double fps_checkpoints[FPS_QUEUESIZE][4]={0};
 //double tdec=0, tsend2gpu=0;
+#ifdef ENABLE_AUDIO_VISUAL
+int fftsamplecount=0;
+float
+	fftsamples[2][FFTSIZE]={0},	//planar
+	fftwindow[FFTSIZE]={0},
+	fftfreq[2][FFTSIZE][2]={0},	//{re, im}
+	bandbounds[NBANDS+1]={0},	//wstart->wend in log scale
+	band_dB[2][NBANDS]={0};		//bars
+int bandindices[NBANDS+1]={0};
+#endif
 void recordevent(int eventtype, int start)
 {
 	ProfileEvent *e;
@@ -556,9 +566,9 @@ int io_init(int argc, wchar_t **argv)//return false to abort
 #if (defined _DEBUG &&1) ||0
 	const wchar_t *filename=
 
-		L"D:/ML/sgra2018.mp4"
+	//	L"D:/ML/sgra2018.mp4"
 	//	L"E:/Share Box/UV/20260617_184228.jpg"
-	//	L"E:/Share Box/Sound & Music/Party Hard OST - Main Theme.ogg"
+		L"E:/Share Box/Sound & Music/Party Hard OST - Main Theme 2025-08-25.ogg"
 	//	L"C:/Users/Work Pc/Documents/Half-Life_2041_720p120.mkv"
 	//	L"D:/ML/dataset-Internet/os_bleh.gif"
 	//	L"E:/Share Box/Sound & Music/20250411 2.mp3"
@@ -1958,7 +1968,80 @@ void io_render()
 				UNIT_HOURS,
 
 				SCALE=128,
+
+				PLAYER_COLOR=0xFFFFC080,
 			};
+			int bk0=set_bk_color(PLAYER_COLOR);
+#ifdef ENABLE_AUDIO_VISUAL
+			if(queryvisualization())
+			{
+				static const int colors[]=
+				{
+					0xFFFF8000,//left blue
+					0xFF0080FF,//right red
+				};
+				static const float offsets[]=
+				{
+					0.300f,
+					0.400f,
+					0.600f,
+					0.700f,
+
+				//	0.125f,
+				//	0.375f,
+				//	0.625f,
+				//	0.875f,
+				};
+				static const float freqstops[]=
+				{
+					(float)   50,
+					(float)  100,
+					(float)  500,
+					(float) 1000,
+					(float) 2000,
+					(float) 4000,
+					(float) 8000,
+					(float)12000,
+				};
+				float labelheight=(float)h*0.75f;
+				float xstep=(float)w/NBANDS;
+
+				{
+					float curvescale=(float)h*0.5f;
+					float x0=(float)w*0.5f;
+					float y0=(float)h*0.5f;
+
+					for(int k=0;k<FFTSIZE;++k)
+					{
+						float left=fftsamples[0][k];
+						float right=fftsamples[1][k];
+						float x=right-left;
+						float y=left+right;
+						draw_curve_enqueue(&vertices_2d, x0+x*curvescale, y0+y*curvescale);
+					}
+					draw_2d_flush(vertices_2d, 0xFF808080, GL_LINE_STRIP);
+				}
+				for(int kc=0;kc<2;++kc)
+				{
+					float visbase=(float)h*0.75f;
+					float visref=(float)h*0.75f;
+					for(int k=0;k<NBANDS;++k)
+					{
+						float level=visref-4*band_dB[kc][k];
+						if(level>visbase)
+							level=visbase;
+						draw_rect_enqueue(&vertices_2d, ((float)k+offsets[2*kc+0])*xstep, ((float)k+offsets[2*kc+1])*xstep, level, visbase);
+					}
+					draw_2d_flush(vertices_2d, colors[kc], GL_TRIANGLES);
+				}
+				for(int k=0;k<_countof(freqstops);++k)
+				{
+					float f=freqstops[k];
+					float x=vis_freq2idx(f);
+					GUIPrint(0, x*xstep, labelheight, 0.7f, "%g", f);
+				}
+			}
+#endif
 			draw_rect(0, (float)(w*slider.timestamp/slider.duration), (float)(h-tdy-SLIDER_HEIGHT-1), (float)(h-tdy), 0x804080C0);
 			double step=SCALE*slider.duration/w;
 			int unit=UNIT_SECONDS;
@@ -1986,11 +2069,6 @@ void io_render()
 			case UNIT_HOURS:step*=60*60;break;
 			}
 			
-			enum
-			{
-				PLAYER_COLOR=0xFFFFC080,
-			};
-			int bk0=set_bk_color(PLAYER_COLOR);
 			for(double tick=step;tick<slider.duration;tick+=step)
 			{
 				float x=(float)(w*tick/slider.duration);

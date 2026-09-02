@@ -27,6 +27,8 @@ extern "C"
 
 	#define HVIEW_INCLUDE_LIBHEIF	//https://github.com/strukturag/libheif
 	#define HVIEW_INCLUDE_LIBRAW	//https://www.libraw.org/download#stable
+	
+	#define ENABLE_AUDIO_VISUAL
 
 
 #define TIMER_ID_KEYBOARD 1
@@ -35,6 +37,8 @@ extern "C"
 
 #define CLASSNAME L"hView"
 #define MUTEXNAME L"hView.SingleInstance"
+
+#define PLAYBACKSAMPLERATE 48000
 
 extern int w, h, mx, my, mouse_bypass;
 extern HWND ghWnd;
@@ -787,6 +791,18 @@ int audioplayback_dequeue(float *out, int nsamples);
 int audioplayback_start(void);
 int audioplayback_pause(int stop);//clear audio circular buffer on stop
 double time_sec_audioclock(void);
+
+#ifdef ENABLE_AUDIO_VISUAL
+#define VIS_SCALEFACTOR 0.7
+enum
+{
+	FFTBITS=11,
+	FFTSIZE=1<<FFTBITS,
+	NBANDS=64,
+};
+int queryvisualization(void);
+float vis_freq2idx(float freq);
+#endif
 
 typedef struct _Slider
 {

@@ -2283,6 +2283,78 @@ static int videotimer_stop()
 	//return success;
 }
 #endif
+#ifdef ENABLE_AUDIO_VISUAL
+int queryvisualization(void)
+{
+	if(!video_decode_args)
+		return 0;
+	return video_decode_args->has_audio&&!video_decode_args->has_video;
+}
+float lfmin=2.99573227f;//ln(20 Hz)
+float lfmax=9.90348755f;//ln(20000 Hz)
+float vis_freq2idx(float freq)
+{
+	float t;
+
+	t=logf(freq);
+	t=(t-lfmin)/(lfmax-lfmin);
+	t=powf(t, 1.f/(float)VIS_SCALEFACTOR);
+	t*=NBANDS;
+	return t;
+}
+static void fft_fwd(float (*data)[2])
+{
+	static int bitreverseperm[FFTSIZE]={0}, init=0;
+	static float pdata[FFTSIZE][2];
+
+	if(!init)
+	{
+		for(int k=0;k<FFTSIZE;++k)
+		{
+			int k2=0;
+
+			for(int kb=FFTBITS-1;kb>=0;--kb)
+				k2|=(k>>kb&1)<<(FFTBITS-1-kb);
+			bitreverseperm[k]=k2;
+		}
+		init=1;
+	}
+	for(int k=0;k<FFTSIZE;++k)
+	{
+		float *src=data[bitreverseperm[k]];
+		pdata[k][0]=src[0];
+		pdata[k][1]=src[1];
+	}
+	for(int len=2;len<=FFTSIZE;len<<=1)
+	{
+		float angle=(float)(-2*M_PI/len);
+		float wRe=cosf(angle);
+		float wIm=sinf(angle);
+		for(int i=0;i<FFTSIZE;i+=len)
+		{
+			float currRe=1, currIm=0;
+			int half=len>>1;
+			for(int j=0;j<half;++j)
+			{
+				int a=i+j, b=a+half;
+				float re=currRe*pdata[b][0]-currIm*pdata[b][1];
+				float im=currRe*pdata[b][1]+currIm*pdata[b][0];
+				pdata[b][0]=pdata[a][0]-re;
+				pdata[b][1]=pdata[a][1]-im;
+				pdata[a][0]+=re;
+				pdata[a][1]+=im;
+				{
+					float nextRe=currRe*wRe-currIm*wIm;
+					float nextIm=currRe*wIm+currIm*wRe;
+					currRe=nextRe;
+					currIm=nextIm;
+				}
+			}
+		}
+	}
+	memcpy(data, pdata, sizeof(float[FFTSIZE][2]));
+}
+#endif
 static void videoplayback_decode(void *p)
 {
 	VideoDecodeArgs *args=(VideoDecodeArgs*)p;
@@ -2446,7 +2518,7 @@ static void videoplayback_decode(void *p)
 	}
 	else if(args->has_audio)
 	{
-		args->framedelta=0.05;
+		args->framedelta=0.02;//20ms = 50fps
 		args->coarsedelta=(int)ROUND64(1000*args->framedelta);
 	}
 	if(args->formatContext->duration>0)
@@ -2657,7 +2729,7 @@ static void videoplayback_decode(void *p)
 					int64_t delay=swresample.swr_get_delay(args->swrctx, args->audioCodecContext->sample_rate);
 					int32_t nsamples=(int32_t)avutil.av_rescale_rnd(
 						delay+args->frame->nb_samples,
-						48000,
+						PLAYBACKSAMPLERATE,
 						args->audioCodecContext->sample_rate,
 						AV_ROUND_UP
 					);
@@ -2680,6 +2752,7 @@ static void videoplayback_decode(void *p)
 						(const uint8_t**)args->frame->data,
 						args->frame->nb_samples
 					);
+					avutil.av_frame_unref(args->frame);
 #ifdef DEBUG_FILE
 					if(!debug_saved)
 						array_append(&debug_data, args->frame->data[0], sizeof(int16_t[1]), args->frame->nb_samples, 1, 8192, 0);
@@ -2733,7 +2806,86 @@ static void videoplayback_decode(void *p)
 						cond_signal(args->aq.not_empty);
 						mutex_unlock(args->aq.mutex);
 					}
-					avutil.av_frame_unref(args->frame);
+#ifdef ENABLE_AUDIO_VISUAL
+					if(!args->has_video)
+					{
+						extern int fftsamplecount;
+						extern float
+							fftsamples[2][FFTSIZE],	//planar
+							fftwindow[FFTSIZE],
+							fftfreq[2][FFTSIZE][2],	//{re, im}
+							bandbounds[NBANDS+1],	//wstart->wend in log scale
+							band_dB[2][NBANDS];	//bars
+						extern int bandindices[NBANDS+1];
+
+						if(bandbounds[NBANDS]<1000)//init
+						{
+							for(int i=0;i<FFTSIZE;++i)//Hann window
+								fftwindow[i]=0.5f*(1.0f-cosf((float)i*(float)(2.f*M_PI/(FFTSIZE-1))));
+#if 0
+							float f=20;
+							for(int k=0;k<=NBANDS;++k)
+							{
+								bandbounds[k]=f;
+								bandindices[k]=(int)(bandbounds[k]*FFTSIZE/PLAYBACKSAMPLERATE);//sample rate here should match playback
+								if(k>0&&bandindices[k]<=bandindices[k-1])
+									bandindices[k]=bandindices[k-1]+1;
+								if(bandindices[k]>FFTSIZE)
+									bandindices[k]=FFTSIZE;
+								f*=1.11397385f;//1000^(1/NBANDS)
+							}
+#else
+							//lfmin=logf(20.f);
+							//lfmax=logf(20000.f);
+							for(int k=0;k<=NBANDS;++k)
+							{
+								bandbounds[k]=expf(lfmin+powf((float)k/NBANDS, (float)VIS_SCALEFACTOR)*(lfmax-lfmin));
+								bandindices[k]=(int)(bandbounds[k]*FFTSIZE/PLAYBACKSAMPLERATE);//sample rate here should match playback
+								if(k>0&&bandindices[k]<=bandindices[k-1])
+									bandindices[k]=bandindices[k-1]+1;
+								if(bandindices[k]>FFTSIZE)
+									bandindices[k]=FFTSIZE;
+							}
+#endif
+							bandindices[NBANDS]=FFTSIZE;
+						}
+						for(int k=0;k<(int)args->nsamples_converted;++k)
+						{
+							if(fftsamplecount>=FFTSIZE)
+							{
+								for(int kc=0;kc<2;++kc)
+								{
+									for(int k2=0;k2<FFTSIZE;++k2)
+									{
+										fftfreq[kc][k2][0]=fftwindow[k2]*fftsamples[kc][k2];
+										fftfreq[kc][k2][1]=0;
+									}
+									fft_fwd(fftfreq[kc]);
+									for(int band=0;band<NBANDS;++band)
+									{
+										int fstart=bandindices[band], fend=bandindices[band+1];
+										float power=0;
+										for(int f=fstart;f<fend;++f)
+										{
+											float re=fftfreq[kc][f][0], im=fftfreq[kc][f][1];
+											power+=re*re+im*im;
+										}
+										fend-=fstart;
+										power/=fend+!fend;
+										if(power<1)
+											band_dB[kc][band]=power;
+										else
+											band_dB[kc][band]=10.f*log10f(power+1e-20f)+1;
+									}
+								}
+								fftsamplecount=0;
+							}
+							fftsamples[0][fftsamplecount]=args->abuf[k*2+0];
+							fftsamples[1][fftsamplecount]=args->abuf[k*2+1];
+							++fftsamplecount;
+						}
+					}
+#endif
 				}
 			}
 #ifdef ENABLE_SUBTITLES
