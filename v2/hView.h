@@ -800,6 +800,7 @@ enum
 	FFTSIZE=1<<FFTBITS,
 	NBANDS=64,
 };
+extern int visual_enabled;
 int queryvisualization(void);
 float vis_freq2idx(float freq);
 #endif

@@ -2288,7 +2288,7 @@ int queryvisualization(void)
 {
 	if(!video_decode_args)
 		return 0;
-	return video_decode_args->has_audio&&!video_decode_args->has_video;
+	return video_decode_args->has_audio&&(!video_decode_args->has_video||visual_enabled);
 }
 float lfmin=2.99573227f;//ln(20 Hz)
 float lfmax=9.90348755f;//ln(20000 Hz)
@@ -2807,7 +2807,7 @@ static void videoplayback_decode(void *p)
 						mutex_unlock(args->aq.mutex);
 					}
 #ifdef ENABLE_AUDIO_VISUAL
-					if(!args->has_video)
+					if(!args->has_video||visual_enabled)
 					{
 						extern int fftsamplecount;
 						extern float

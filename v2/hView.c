@@ -127,6 +127,7 @@ void *inst_mutex=0;
 //double fps_checkpoints[FPS_QUEUESIZE][4]={0};
 //double tdec=0, tsend2gpu=0;
 #ifdef ENABLE_AUDIO_VISUAL
+int visual_enabled=0;
 int fftsamplecount=0;
 float
 	fftsamples[2][FFTSIZE]={0},	//planar
@@ -786,6 +787,9 @@ int io_keydn(IOKey key, char c)
 				"Ctrl H: Toggle hex/decimal pixel labels\n"
 				"P: Toggle pixel label source / Playback end action\n"
 				"I: Toggle single instance\n"
+#ifdef ENABLE_AUDIO_VISUAL
+				"V: Enforce audio visualization\n"
+#endif
 				"X/Y: Toggle horizontal/vertical cross-sections\n"
 				"Quote: Toggle bitplane view\n"
 				"Brackets: Select bitplane\n"
@@ -1355,6 +1359,11 @@ int io_keydn(IOKey key, char c)
 					image_fit2screen(image->iw, image->ih);
 				return 1;
 			}
+		}
+		else if(animated)
+		{
+			visual_enabled^=1;
+			return 1;
 		}
 		break;
 	case 'P':
