@@ -3412,7 +3412,7 @@ int load_media(const wchar_t *filename, Image16 **image, int erroronfail, int ne
 			LOG_WARNING("Cannot open \'%s\'", filename);
 		return -1;
 	}
-	int framecount=0;
+	int framecount=0, attemptcount=0;
 	if(video_stream_index!=-1)
 	{
 		AVCodecContext *codecContext=avcodec.avcodec_alloc_context3(videocodec);
@@ -3449,6 +3449,7 @@ int load_media(const wchar_t *filename, Image16 **image, int erroronfail, int ne
 			if(packet->stream_index==video_stream_index)
 			{
 				//int result=decode_packet(packet, codecContext, frame);
+			finish_decode:
 				error=avcodec.avcodec_send_packet(codecContext, packet);
 				CHECK_AV(error);
 				while(error>=0)
@@ -3547,11 +3548,19 @@ int load_media(const wchar_t *filename, Image16 **image, int erroronfail, int ne
 					avutil.av_frame_free(&frame2);
 				}
 			}
-			avcodec.av_packet_unref(packet);
-			if(framecount>1)
+			if(packet)
+				avcodec.av_packet_unref(packet);
+			if(framecount>=1||!packet)
 				break;
 		}
-		avcodec.av_packet_free(&packet);
+		if(packet)
+			avcodec.av_packet_free(&packet);
+		if(!*image)
+		{
+			++attemptcount;
+			if(attemptcount<=1)
+				goto finish_decode;
+		}
 		avutil.av_frame_free(&frame);
 		avcodec.avcodec_free_context(&codecContext);
 	}

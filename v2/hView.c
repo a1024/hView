@@ -572,9 +572,10 @@ int io_init(int argc, wchar_t **argv)//return false to abort
 #if (defined _DEBUG &&1) ||0
 	const wchar_t *filename=
 
+		L"C:/ShareBox/DSC_0185.JXL"
 	//	L"D:/ML/sgra2018.mp4"
 	//	L"E:/Share Box/UV/20260617_184228.jpg"
-		L"E:/Share Box/Sound & Music/Party Hard OST - Main Theme 2025-08-25.ogg"
+	//	L"E:/Share Box/Sound & Music/Party Hard OST - Main Theme 2025-08-25.ogg"
 	//	L"C:/Users/Work Pc/Documents/Half-Life_2041_720p120.mkv"
 	//	L"D:/ML/dataset-Internet/os_bleh.gif"
 	//	L"E:/Share Box/Sound & Music/20250411 2.mp3"
