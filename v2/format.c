@@ -2939,9 +2939,9 @@ static void videoplayback_decode(void *p)
 			}
 		}
 		if(args->has_video)
-			while(*(volatile int*)&args->fq.count>0);//presentation end signaled by render()
+			while(args->playing&&*(volatile int*)&args->fq.count>0);//presentation end signaled by render()
 		else if(args->has_audio)
-			while(*(volatile int*)&args->aq.read_idx!=*(volatile int*)&args->aq.write_idx);//playback end signaled by WASAPI
+			while(args->playing&&*(volatile int*)&args->aq.read_idx!=*(volatile int*)&args->aq.write_idx);//playback end signaled by WASAPI
 		if(args->stopflag||playopt==PLAYOPT_LIST||playopt==PLAYOPT_SHUF)
 			break;
 		if(playopt==PLAYOPT_ONCE)
@@ -3550,7 +3550,7 @@ int load_media(const wchar_t *filename, Image16 **image, int erroronfail, int ne
 			}
 			if(packet)
 				avcodec.av_packet_unref(packet);
-			if(framecount>=1||!packet)
+			if(framecount>1||!packet)
 				break;
 		}
 		if(packet)
