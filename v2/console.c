@@ -1,19 +1,3 @@
-//h_console.cpp - allocates and controls the console window
-//Copyright (C) 2022  Ayman Wagih Mohsen
-//
-//This program is free software: you can redistribute it and/or modify
-//it under the terms of the GNU General Public License as published by
-//the Free Software Foundation, either version 3 of the License, or
-//(at your option) any later version.
-//
-//This program is distributed in the hope that it will be useful,
-//but WITHOUT ANY WARRANTY; without even the implied warranty of
-//MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-//GNU General Public License for more details.
-//
-//You should have received a copy of the GNU General Public License
-//along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
 #include<io.h>
 #include<stdio.h>
 #include<fcntl.h>
@@ -22,16 +6,21 @@
 #endif
 #include<Windows.h>
 #include<stdarg.h>
-int consoleactive=0;
-#define G_BUF_SIZE 1024
+enum
+{
+	G_BUF_SIZE=1024,
+};
 static char g_buf2[G_BUF_SIZE]={0};
+int consoleactive=0;
 void console_log(const char *format, ...)
 {
 	va_list args;
 	if(format)
 	{
+		unsigned long printed=0;
+
 		va_start(args, format);
-		unsigned long printed=vsprintf_s(g_buf2, G_BUF_SIZE, format, args);
+		printed=vsprintf_s(g_buf2, G_BUF_SIZE-1, format, args);
 		va_end(args);
 		WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), g_buf2, printed, &printed, 0);
 	}
@@ -41,9 +30,11 @@ void console_logw(const wchar_t *format, ...)
 	if(format)
 	{
 		wchar_t wbuf2[4096]={0};
+		unsigned long printed=0;
+
 		va_list args;
 		va_start(args, format);
-		unsigned long printed=vswprintf_s(wbuf2, 4096, format, args);
+		printed=vswprintf_s(wbuf2, _countof(wbuf2)-1, format, args);
 		va_end(args);
 		WriteConsoleW(GetStdHandle(STD_OUTPUT_HANDLE), wbuf2, printed, &printed, 0);
 	}
