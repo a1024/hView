@@ -14,9 +14,9 @@ static char g_buf2[G_BUF_SIZE]={0};
 int consoleactive=0;
 void console_log(const char *format, ...)
 {
-	va_list args;
 	if(format)
 	{
+		va_list args;
 		unsigned long printed=0;
 
 		va_start(args, format);
@@ -29,10 +29,10 @@ void console_logw(const wchar_t *format, ...)
 {
 	if(format)
 	{
+		va_list args;
 		wchar_t wbuf2[4096]={0};
 		unsigned long printed=0;
 
-		va_list args;
 		va_start(args, format);
 		printed=vswprintf_s(wbuf2, _countof(wbuf2)-1, format, args);
 		va_end(args);

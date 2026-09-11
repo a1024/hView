@@ -23,6 +23,7 @@ INCLUDE =\
 
 
 ifeq ($(OS), Windows_NT)
+SHELL = cmd.exe
 DEL = del
 else
 DEL = rm
@@ -30,5 +31,5 @@ endif
 
 hview:
 	g++ -Wall -O3 -c audio.cpp -o audio.o
-	gcc -Wall -O3 -s -mavx2 -mlzcnt -mbmi $(INCLUDE) $(SRC) audio.o -ohview-gcc -lopengl32 -lgdi32 -lole32 -lcomdlg32 -luuid -lwindowscodecs -static
+	gcc -Wall -O3 -static -s -mavx2 -mlzcnt -mbmi -mwindows $(INCLUDE) $(SRC) audio.o -ohview-gcc -lopengl32 -lgdi32 -lole32 -lcomdlg32 -luuid -lwindowscodecs
 	$(DEL) audio.o
