@@ -567,6 +567,7 @@ void playbackendaction(void)
 		}
 	}
 }
+
 int io_init(int argc, wchar_t **argv)//return false to abort
 {
 #if (defined _DEBUG &&1) ||0
@@ -981,6 +982,7 @@ int io_keydn(IOKey key, char c)
 			drag=DRAG_SEEK;
 			slider_set((double)mx/w, 0);
 			mouse_capture();
+			return 1;
 		}
 		else if(drag==DRAG_NONE)//start dragging
 		{

@@ -1726,7 +1726,10 @@ int slider_get(Slider *slider)
 {
 	if(!video_decode_args||!video_decode_args->duration)
 		return -1;
-	slider->timestamp=fmod(video_decode_args->videotimestamp, video_decode_args->duration);
+	if(video_decode_args->seekrequest)
+		slider->timestamp=fmod(video_decode_args->seektarget, video_decode_args->duration);
+	else
+		slider->timestamp=fmod(video_decode_args->videotimestamp, video_decode_args->duration);
 	slider->duration=video_decode_args->duration;
 	slider->timescale=g_timescale;
 	slider->playing=video_decode_args->playing;
