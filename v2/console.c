@@ -29,8 +29,8 @@ void console_logw(const wchar_t *format, ...)
 {
 	if(format)
 	{
+		static wchar_t wbuf2[4096]={0};
 		va_list args;
-		wchar_t wbuf2[4096]={0};
 		unsigned long printed=0;
 
 		va_start(args, format);
