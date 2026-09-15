@@ -2137,6 +2137,7 @@ void io_render()
 							float im=fftfreq[kc][k][1];
 							float power=re*re+im*im;
 							float p2=fftpower[kc][k];
+						//	float p2=power;
 							float dB=(float)(10/M_LN10)*(p2<1?p2:logf(p2)+1);
 							float y=visbase-yscale*dB;
 							draw_curve_enqueue(&vertices_2d, vis_freq2idx(f)*xstep, y);

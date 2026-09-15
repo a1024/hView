@@ -2846,14 +2846,14 @@ static void videoplayback_decode(void *p)
 							for(int k=0;k<=NBANDS;++k)
 							{
 								bandbounds[k]=expf(lfmin+powf((float)k/NBANDS, (float)VIS_SCALEFACTOR)*(lfmax-lfmin));
-								bandindices[k]=(int)(bandbounds[k]*FFTSIZE/2/PLAYBACKSAMPLERATE);//sample rate here should match playback
+								bandindices[k]=(int)(bandbounds[k]*FFTSIZE/PLAYBACKSAMPLERATE);//sample rate here should match playback
 								if(k>0&&bandindices[k]<=bandindices[k-1])
 									bandindices[k]=bandindices[k-1]+1;
-								if(bandindices[k]>FFTSIZE/2)
-									bandindices[k]=FFTSIZE/2;
+								if(bandindices[k]>FFTSIZE)
+									bandindices[k]=FFTSIZE;
 							}
 #endif
-							bandindices[NBANDS]=FFTSIZE/2;
+							bandindices[NBANDS]=FFTSIZE;
 						}
 						for(int k=0;k<(int)args->nsamples_converted;++k)
 						{
