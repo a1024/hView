@@ -14,6 +14,7 @@ GLFUNCLIST
 #undef  GLFUNC
 
 int error=0;
+int tilesize=0, textureSizeMax=0;
 const char *GLversion=0;
 int rx0=0, ry0=0, rdx=0, rdy=0;//current OpenGL region
 float
@@ -63,8 +64,8 @@ uint64_t colors_text=0xFFABABABFF000000;//0xBKBKBKBK_TXTXTXTX
 #define		SHADER_LIST		SHADER(2D) SHADER(texture) SHADER(text) SHADER(sdftext) SHADER(3D) SHADER(L3D) SHADER(contour3D)
 #if 1
 //shader_2D
-#define		ATTR_2D			ATTR(2D, coords)
-#define		UNIF_2D			UNIF(2D, color)
+#define ATTR_2D ATTR(2D, coords)
+#define UNIF_2D UNIF(2D, color)
 const char
 	src_vert_2D[]=
 		"#version 120\n"
@@ -75,7 +76,7 @@ const char
 		"}",
 	src_frag_2D[]=
 		"#version 120\n"
-		"uniform vec4 u_color;\n"			//uniforms: u_color
+		"uniform vec4 u_color;\n"		//uniforms: u_color
 		"void main()\n"
 		"{\n"
 		"    gl_FragColor=u_color;\n"
@@ -85,12 +86,12 @@ const char
 		"}";
 
 //shader_texture
-#define		ATTR_texture	ATTR(texture, coords)
-#define		UNIF_texture	UNIF(texture, texture) UNIF(texture, alpha)
+#define ATTR_texture ATTR(texture, coords)
+#define UNIF_texture UNIF(texture, texture) UNIF(texture, alpha)
 const char
 	src_vert_texture[]=
 		"#version 120\n"
-		"attribute vec4 a_coords;\n"			//attributes: a_coords
+		"attribute vec4 a_coords;\n"		//attributes: a_coords
 		"varying vec2 v_texcoord;\n"
 		"void main()\n"
 		"{\n"
@@ -112,12 +113,12 @@ const char
 		"}";
 
 //shader_text
-#define		ATTR_text		ATTR(text, coords)
-#define		UNIF_text		UNIF(text, atlas) UNIF(text, txtColor) UNIF(text, bkColor)
+#define ATTR_text ATTR(text, coords)
+#define UNIF_text UNIF(text, atlas) UNIF(text, txtColor) UNIF(text, bkColor)
 const char
 	src_vert_text[]=
 		"#version 120\n"
-		"attribute vec4 a_coords;\n"			//attributes: a_coords
+		"attribute vec4 a_coords;\n"		//attributes: a_coords
 		"varying vec2 v_texcoord;\n"
 		"void main()\n"
 		"{\n"
@@ -139,12 +140,12 @@ const char
 		"}";
 
 //shader_sdftext
-#define		ATTR_sdftext	ATTR(sdftext, coords)
-#define		UNIF_sdftext	UNIF(sdftext, atlas) UNIF(sdftext, txtColor) UNIF(sdftext, bkColor) UNIF(sdftext, zoom)
+#define ATTR_sdftext ATTR(sdftext, coords)
+#define UNIF_sdftext UNIF(sdftext, atlas) UNIF(sdftext, txtColor) UNIF(sdftext, bkColor) UNIF(sdftext, zoom)
 const char
 	src_vert_sdftext[]=
 		"#version 120\n"
-		"attribute vec4 a_coords;\n"			//attributes: a_coords
+		"attribute vec4 a_coords;\n"		//attributes: a_coords
 		"varying vec2 v_texcoord;\n"
 		"void main()\n"
 		"{\n"
@@ -172,12 +173,12 @@ const char
 		"}";
 
 //shader_3D
-#define		ATTR_3D			ATTR(3D, vertex) ATTR(3D, texcoord)
-#define		UNIF_3D			UNIF(3D, matrix) UNIF(3D, texture)
+#define ATTR_3D ATTR(3D, vertex) ATTR(3D, texcoord)
+#define UNIF_3D UNIF(3D, matrix) UNIF(3D, texture)
 const char
 	src_vert_3D[]=
 		"#version 120\n"
-		"uniform mat4 u_matrix;\n"			//attributes: a_vertex, a_texcoord
+		"uniform mat4 u_matrix;\n"		//attributes: a_vertex, a_texcoord
 		"attribute vec3 a_vertex;\n"
 		"attribute vec2 a_texcoord;\n"
 		"varying vec2 v_texcoord;\n"
@@ -201,8 +202,8 @@ const char
 		"}";
 
 //shader_L3D
-#define		ATTR_L3D		ATTR(L3D, vertex) ATTR(L3D, normal) ATTR(L3D, texcoord)
-#define		UNIF_L3D		UNIF(L3D, matVP_Model) UNIF(L3D, matNormal) UNIF(L3D, texture) UNIF(L3D, sceneInfo)
+#define ATTR_L3D ATTR(L3D, vertex) ATTR(L3D, normal) ATTR(L3D, texcoord)
+#define UNIF_L3D UNIF(L3D, matVP_Model) UNIF(L3D, matNormal) UNIF(L3D, texture) UNIF(L3D, sceneInfo)
 const char
 	src_vert_L3D[]=
 		"#version 120\n"
@@ -252,12 +253,12 @@ const char
 		"}";
 
 //shader_contour3D
-#define		ATTR_contour3D	ATTR(contour3D, vertex) ATTR(contour3D, texcoord)
-#define		UNIF_contour3D	UNIF(contour3D, matrix) UNIF(contour3D, alpha) UNIF(contour3D, texture)
+#define ATTR_contour3D ATTR(contour3D, vertex) ATTR(contour3D, texcoord)
+#define UNIF_contour3D UNIF(contour3D, matrix) UNIF(contour3D, alpha) UNIF(contour3D, texture)
 const char
 	src_vert_contour3D[]=
 		"#version 120\n"
-		"uniform mat4 u_matrix;\n"			//attributes: a_vertex, a_texcoord
+		"uniform mat4 u_matrix;\n"		//attributes: a_vertex, a_texcoord
 		"attribute vec3 a_vertex;\n"
 		"attribute vec2 a_texcoord;\n"
 		"varying vec2 v_texcoord;\n"
@@ -487,7 +488,7 @@ void send_color_rgb(unsigned location, int color)
 
 	GL_CHECK(error);
 }
-static void set_texture_params(int linear, int antialiased)
+void set_texture_params(int linear, int antialiased)
 {
 	if(linear)
 	{
@@ -582,9 +583,9 @@ void gl_init()
 #undef  GLFUNC
 		
 	glGenBuffers(1, &vertex_buffer);
-	glEnable(GL_BLEND);									GL_CHECK(error);//vast majority of applications need alpha blend
-	glBlendEquation(GL_FUNC_ADD);						GL_CHECK(error);
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);	GL_CHECK(error);
+	glEnable(GL_BLEND);		GL_CHECK(error);//vast majority of applications need alpha blend
+	glBlendEquation(GL_FUNC_ADD);	GL_CHECK(error);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);GL_CHECK(error);
 	//glDisable(GL_BLEND);	GL_CHECK();
 
 	//glDisable(GL_LINE_SMOOTH);	GL_CHECK();//does nothing
@@ -657,6 +658,8 @@ void gl_init()
 	set_text_colors(colors_text);
 	toggle_sdftext();
 #endif
+	glGetIntegerv(GL_MAX_TEXTURE_SIZE, &textureSizeMax);
+	tilesize=textureSizeMax>>1;
 }
 void depth_test(int enable)
 {

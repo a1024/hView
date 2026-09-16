@@ -201,6 +201,10 @@ static void update_globals(const wchar_t *fn, Image16 *image)//accesses globals
 			background[2]=(unsigned char)((sum[2]/count<<8>>image->depth)+128);
 			background[3]=0;
 			//background[3]=255;
+
+			background[0]+=(128-background[0])>>1;
+			background[1]+=(128-background[1])>>1;
+			background[2]+=(128-background[2])>>1;
 		}
 	}
 }
@@ -1960,7 +1964,8 @@ int frame_dequeue(void)
 	mutex_unlock(args->fq.mutex);
 	
 	++framenumber;
-	impreview2gpu(impreview->data, impreview->iw, impreview->ih, &image_txid);
+	tiles_update(impreview->data, impreview->iw, impreview->ih);
+	//impreview2gpu(impreview->data, impreview->iw, impreview->ih, &image_txid);
 	return 0;
 }
 static int frame_enqueue(VideoDecodeArgs *args)
@@ -3365,7 +3370,8 @@ int load_media(const wchar_t *filename, Image16 **image, int erroronfail, int ne
 	
 	char fn_utf8[4096];
 	WideCharToMultiByte(CP_UTF8, 0, filename, -1, fn_utf8, 4096, 0, 0);
-	
+	set_window_titlew(L"%s - Decoding", filename);
+
 	int rotation=get_metadata(filename);
 
 	int error;
@@ -3602,10 +3608,24 @@ int load_media(const wchar_t *filename, Image16 **image, int erroronfail, int ne
 		g_rotationmatrix[2]=-1;
 		g_rotationmatrix[3]=0;
 	}
+	else if(g_rotation==ROTATE_NORMAL)
+	{
+		g_rotationmatrix[0]=1;
+		g_rotationmatrix[1]=0;
+		g_rotationmatrix[2]=0;
+		g_rotationmatrix[3]=1;
+	}
 	if(audio_stream_index!=-1&&video_stream_index==-1)
 		imagetype=IM_NONE;
 	if(framecount>1||audio_stream_index!=-1)
 	{
+		if(video_stream_index==-1)
+		{
+			extern Image8 *impreview;
+
+			free(impreview);
+			impreview=0;
+		}
 		animated=1;
 		videoplayback_start(fn_utf8, video_stream_index!=-1, audio_stream_index!=-1);
 	}

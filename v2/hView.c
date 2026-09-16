@@ -166,7 +166,7 @@ int g_droppedframes=0;
 int g_ole32initialized=0;
 int g_iw=0, g_ih=0;
 
-int impreview2gpu(uint8_t *data, int iw, int ih, uint32_t *txid)
+DEPRECATED int impreview2gpu(uint8_t *data, int iw, int ih, uint32_t *txid)
 {
 	if(!*txid)
 		glGenTextures(1, txid);
@@ -263,8 +263,7 @@ static void equalize(void)
 	}
 	switch(imagetype)
 	{
-	default://make gcc happy
-		break;
+	default:break;
 	case IM_GRAYSCALEv2:
 		equalize_ch(image->data, impreview->data, image->iw, image->ih, 1, image->iw, hist, nlevels, 0);
 		for(ptrdiff_t k=0, res=(ptrdiff_t)4*impreview->iw*impreview->ih;k<res;k+=4)//broadcast channel
@@ -311,7 +310,8 @@ static void equalize(void)
 		break;
 	}
 	free(hist);
-	impreview2gpu(impreview->data, impreview->iw, impreview->ih, &image_txid);
+	tiles_update(impreview->data, impreview->iw, impreview->ih);
+	//impreview2gpu(impreview->data, impreview->iw, impreview->ih, &image_txid);
 }
 static void update_image(int settitle, int render)
 {
@@ -325,8 +325,7 @@ static void update_image(int settitle, int render)
 			image_free(&impreview);
 		switch(imagetype)
 		{
-		default://make gcc happy
-			break;
+		default:break;
 		case IM_GRAYSCALEv2:
 			impreview=image_alloc8(0, image->iw, image->ih, 4, 8);
 			break;
@@ -351,8 +350,7 @@ static void update_image(int settitle, int render)
 		int srcidx, dstidx;
 		switch(imagetype)
 		{
-		default://make gcc happy
-			break;
+		default:break;
 		case IM_GRAYSCALEv2:
 			for(int ky=0;ky<image->ih;++ky)
 			{
@@ -429,7 +427,8 @@ static void update_image(int settitle, int render)
 		calc_hist();
 	if(imagefitted)
 		image_fit2screen(g_iw, g_ih);
-	impreview2gpu(impreview->data, impreview->iw, impreview->ih, &image_txid);
+	tiles_update(impreview->data, impreview->iw, impreview->ih);
+	//impreview2gpu(impreview->data, impreview->iw, impreview->ih, &image_txid);
 	if(render)
 		io_render();
 }
@@ -437,8 +436,7 @@ static int bitplane_mreduce(int bitplane)
 {
 	switch(imagetype)
 	{
-	default://make gcc happy
-		break;
+	default:break;
 	case IM_GRAYSCALEv2:
 		if(bitmode)
 			MODVAR(bitplane, bitplane, imagedepth);
@@ -573,7 +571,10 @@ int io_init(int argc, wchar_t **argv)//return false to abort
 #if (defined _DEBUG &&1) ||0
 	const wchar_t *filename=
 
-		L"C:/ShareBox/DSC_0185.JXL"
+		L"C:/Projects/datasets/Buenos_Aires_Panorama.jpg"
+	//	L"C:/Projects/datasets/20260126_103542.jpg"
+	//	L"C:/Projects/datasets/20240325 buggy.PNG"
+	//	L"C:/ShareBox/DSC_0185.JXL"
 	//	L"D:/ML/sgra2018.mp4"
 	//	L"E:/Share Box/UV/20260617_184228.jpg"
 	//	L"E:/Share Box/Sound & Music/Party Hard OST - Main Theme 2025-08-25.ogg"
@@ -739,8 +740,7 @@ int io_keydn(IOKey key, char c)
 	{
 		switch(key)
 		{
-		default://make gcc happy
-			break;
+		default:break;
 		case 'A'://set alpha to one
 			if(imagetype==IM_RGBA)
 			{
@@ -768,8 +768,7 @@ int io_keydn(IOKey key, char c)
 	}
 	switch(key)
 	{
-	default://make gcc happy
-		break;
+	default:break;
 	case KEY_F1:
 		{
 			char *ver=get_libinfo();
@@ -822,8 +821,7 @@ int io_keydn(IOKey key, char c)
 				time_t created2=0, lastmodified2=0, lastaccess2=0;
 				switch(imagetype)
 				{
-				default://make gcc happy
-					break;
+				default:break;
 				case IM_GRAYSCALEv2:
 				case IM_RGBA:
 					usize=(ptrdiff_t)ceil((double)image->srcnch*image->iw*image->ih*log2(image->nlevels0)/8);
@@ -882,8 +880,7 @@ int io_keydn(IOKey key, char c)
 				nprinted+=_snwprintf_s(buf+nprinted, _countof(buf)-1-nprinted, _countof(buf)-1-nprinted, L"\n");
 				switch(imagetype)
 				{
-				default://make gcc happy
-					break;
+				default:break;
 				case IM_GRAYSCALEv2:
 					nprinted+=_snwprintf_s(buf+nprinted, _countof(buf)-1-nprinted, _countof(buf)-1-nprinted,
 						L"CWH %d*%5d*%5d*log2(%5d) G\n"
@@ -1244,8 +1241,7 @@ int io_keydn(IOKey key, char c)
 					format=" %5d";
 				switch(imagetype)
 				{
-				default://make gcc happy
-					break;
+				default:break;
 				case IM_GRAYSCALEv2:
 					{
 						str_append(&str, "%d bit GRAY:\n", imagedepth);
@@ -1486,8 +1482,7 @@ int io_keydn(IOKey key, char c)
 	case KEY_QUOTE://toggle bitplane view
 		switch(imagetype)
 		{
-		default://make gcc happy
-			break;
+		default:break;
 		case IM_GRAYSCALEv2:
 			bitmode=!bitmode;
 			break;
@@ -1518,8 +1513,7 @@ int io_keyup(IOKey key, char c)
 {
 	switch(key)
 	{
-	default://make gcc happy
-		break;
+	default:break;
 	case KEY_LBUTTON:
 		if(drag==DRAG_SEEK)
 		{
@@ -1658,8 +1652,7 @@ static void draw_profile(int comp, int color, int profx, int frompreview)//horiz
 		int lgstride=0;
 		switch(imagetype)
 		{
-		default://make gcc happy
-			break;
+		default:break;
 		case IM_GRAYSCALEv2:
 			row=image->data+((size_t)image->iw*iy);
 			lgstride=0;
@@ -1783,6 +1776,8 @@ void io_render()
 			screen2image(&ipm);
 			imx=(int)floor(ipm.x);
 			imy=(int)floor(ipm.y);
+			tiles_draw();
+#if 0
 			{
 				static float ndc[16];
 				int j;
@@ -1803,6 +1798,7 @@ void io_render()
 				}
 				display_texture_ndc(ndc, image_txid, 1);
 			}
+#endif
 			if(zoom>=ZOOM_LIMIT_LABEL)
 			{
 				HPoint2D ip1={0, 0};
@@ -1963,8 +1959,7 @@ void io_render()
 			{
 				switch(imagetype)
 				{
-				default://make gcc happy
-					break;
+				default:break;
 				case IM_GRAYSCALEv2:
 					draw_histogram(histogram, 256, 0x80808080, (int)tdy, (int)(h-tdy));
 					break;
@@ -2300,8 +2295,7 @@ void io_render()
 				draw_profile(2, 0xFF000000|0xFF<<(bayer[2]<<3), profileplotmode==PROFILE_X, pixelpreview);
 				draw_profile(3, 0xFF000000|0xFF<<(bayer[3]<<3), profileplotmode==PROFILE_X, pixelpreview);
 				break;
-			default://make gcc happy
-				break;
+			default:break;
 			}
 		}
 
@@ -2310,8 +2304,7 @@ void io_render()
 			const char *imtypestr="?";
 			switch(imagetype)
 			{
-			default://make gcc happy
-				break;
+			default:break;
 			case IM_UNINITIALIZED:	imtypestr="IM_UNINITIALIZED";	break;
 			case IM_GRAYSCALEv2:	imtypestr="IM_GRAYSCALEv2";	break;
 			case IM_RGBA:		imtypestr="IM_RGBA";		break;
@@ -2352,8 +2345,7 @@ void io_render()
 				uint16_t *p0=(uint16_t*)image->data+((ptrdiff_t)image->iw*imy+imx)*image->nch;
 				switch(imagetype)
 				{
-				default://make gcc happy
-					break;
+				default:break;
 				case IM_GRAYSCALEv2:
 					if(has_alpha)
 						GUIPrint_append(0, 0, h-tdy, 1, 0, "  GRAY_ALPHA(%3d, %3d)=0x%04X%04X",

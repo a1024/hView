@@ -1202,10 +1202,7 @@ int log_error(const char *fn, int line, int quit, const char *format, ...)
 	messageboxa(MBOX_OK, "Error", "%s", latest_error_msg);
 
 	if(quit)
-	{
-		pause();
 		exit(0);
-	}
 	return firsttime;
 }
 wchar_t error_msg[G_BUF_SIZE]={0};

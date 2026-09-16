@@ -31,6 +31,7 @@ add_executable(hView2 WIN32
 	image.c
 	metadata.c
 	slic2.c
+	tiles.c
 	util.c
 	window.c
 )

@@ -36,6 +36,7 @@ extern "C"
 //utility
 #ifdef _MSC_VER
 #define	ALIGN(N) __declspec(align(N))
+#define DEPRECATED __declspec(deprecated)
 #define AWM_INLINE __forceinline static
 //#define INLINE static
 //#define sprintf_s snprintf
@@ -43,6 +44,7 @@ extern "C"
 #define	ALIGN(N) __attribute__((aligned(N)))
 #define AWM_INLINE __attribute__((always_inline)) inline static
 //#define INLINE static inline	//plain inline doesn't inline
+#define DEPRECATED __attribute__((deprecated))
 #ifndef _countof
 #define _countof(A) (sizeof(A)/sizeof(*(A)))
 #endif

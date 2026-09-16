@@ -9,6 +9,7 @@ SRC =\
  image.c\
  metadata.c\
  slic2.c\
+ tiles.c\
  window.c\
  util.c\
 

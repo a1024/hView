@@ -396,80 +396,80 @@ GLFUNCLIST
 
 //Macros for 3D		DO NOT NEST THE MACROS LIKE f(g(x), h(y))
 #if 1
-#define		vec2_copy(DST, SRC)		(DST)[0]=(SRC)[0], (DST)[1]=(SRC)[1]
-#define		vec2_add(DST, A, B)		(DST)[0]=(A)[0]+(B)[0], (DST)[1]=(A)[1]+(B)[1]
-#define		vec2_sub(DST, A, B)		(DST)[0]=(A)[0]-(B)[0], (DST)[1]=(A)[1]-(B)[1]
-#define		vec2_add1(DST, V, S)		(DST)[0]=(V)[0]+(S), (DST)[1]=(V)[1]+(S)
-#define		vec2_sub1(DST, V, S)		(DST)[0]=(V)[0]-(S), (DST)[1]=(V)[1]-(S)
-#define		vec2_mul1(DST, V, S)		(DST)[0]=(V)[0]*(S), (DST)[1]=(V)[1]*(S)
-#define		vec2_div1(DST, V, S)		(DST)[0]=(V)[0]/(S), (DST)[1]=(V)[1]/(S)
-#define		vec2_dot(A, B)			((A)[0]*(B)[0]+(A)[1]*(B)[1])
-#define		vec2_cross(DST, A, B)		((A)[0]*(B)[1]-(A)[1]*(B)[0])
-#define		vec2_abs(A)			sqrtf(vec2_dot(A, A))
-#define		vec2_abs2(A)			vec2_dot(A, A)
-#define		vec2_arg(A)			atan((A)[1]/(A)[0])
-#define		vec2_arg2(A)			atan2((A)[1], (A)[0])
-#define		vec2_eq(A, B)			((A)[0]==(B)[0]&&(A)[1]==(B)[1])
-#define		vec2_ne(A, B)			((A)[0]!=(B)[0]||(A)[1]!=(B)[1])
-#define		vec2_neg(DST, A)		(DST)[0]=-(A)[0], (DST)[1]=-(A)[1]
+#define vec2_copy(DST, SRC)	(DST)[0]=(SRC)[0], (DST)[1]=(SRC)[1]
+#define vec2_add(DST, A, B)	(DST)[0]=(A)[0]+(B)[0], (DST)[1]=(A)[1]+(B)[1]
+#define vec2_sub(DST, A, B)	(DST)[0]=(A)[0]-(B)[0], (DST)[1]=(A)[1]-(B)[1]
+#define vec2_add1(DST, V, S)	(DST)[0]=(V)[0]+(S), (DST)[1]=(V)[1]+(S)
+#define vec2_sub1(DST, V, S)	(DST)[0]=(V)[0]-(S), (DST)[1]=(V)[1]-(S)
+#define vec2_mul1(DST, V, S)	(DST)[0]=(V)[0]*(S), (DST)[1]=(V)[1]*(S)
+#define vec2_div1(DST, V, S)	(DST)[0]=(V)[0]/(S), (DST)[1]=(V)[1]/(S)
+#define vec2_dot(A, B)		((A)[0]*(B)[0]+(A)[1]*(B)[1])
+#define vec2_cross(DST, A, B)	((A)[0]*(B)[1]-(A)[1]*(B)[0])
+#define vec2_abs(A)		sqrtf(vec2_dot(A, A))
+#define vec2_abs2(A)		vec2_dot(A, A)
+#define vec2_arg(A)		atan((A)[1]/(A)[0])
+#define vec2_arg2(A)		atan2((A)[1], (A)[0])
+#define vec2_eq(A, B)		((A)[0]==(B)[0]&&(A)[1]==(B)[1])
+#define vec2_ne(A, B)		((A)[0]!=(B)[0]||(A)[1]!=(B)[1])
+#define vec2_neg(DST, A)	(DST)[0]=-(A)[0], (DST)[1]=-(A)[1]
 
-#define		mat2_mul_vec2(DST, M2, V2)	(DST)[0]=(M2)[0]*(V2)[0]+(M2)[1]*(V2)[1], (DST)[1]=(M2)[2]*(V2)[0]+(M2)[3]*(V2)[1]
+#define mat2_mul_vec2(DST, M2, V2)	(DST)[0]=(M2)[0]*(V2)[0]+(M2)[1]*(V2)[1], (DST)[1]=(M2)[2]*(V2)[0]+(M2)[3]*(V2)[1]
 
-#define		vec3_copy(DST, SRC)		(DST)[0]=(SRC)[0], (DST)[1]=(SRC)[1], (DST)[2]=(SRC)[2]
-#define		vec3_set1(V3, GAIN)		(V3)[0]=(V3)[1]=(V3)[2]=GAIN
-#define		vec3_setp(V3, POINTER)		(V3)[0]=(POINTER)[0], (V3)[1]=(POINTER)[1], (V3)[2]=(POINTER)[2]
-#define		vec3_seti(V3, X, Y, Z)		(V3)[0]=X, (V3)[1]=Y, (V3)[2]=Z
-#define		vec3_add(DST, A, B)		(DST)[0]=(A)[0]+(B)[0], (DST)[1]=(A)[1]+(B)[1], (DST)[2]=(A)[2]+(B)[2]
-#define		vec3_sub(DST, A, B)		(DST)[0]=(A)[0]-(B)[0], (DST)[1]=(A)[1]-(B)[1], (DST)[2]=(A)[2]-(B)[2]
-#define		vec3_add1(DST, V, S)		(DST)[0]=(V)[0]+(S), (DST)[1]=(V)[1]+(S), (DST)[2]=(V)[2]+(S)
-#define		vec3_sub1(DST, V, S)		(DST)[0]=(V)[0]-(S), (DST)[1]=(V)[1]-(S), (DST)[2]=(V)[2]-(S)
-#define		vec3_mul1(DST, V, S)		(DST)[0]=(V)[0]*(S), (DST)[1]=(V)[1]*(S), (DST)[2]=(V)[2]*(S)
-#define		vec3_div1(DST, V, S)		(DST)[0]=(V)[0]/(S), (DST)[1]=(V)[1]/(S), (DST)[2]=(V)[2]/(S)
-#define		vec3_dot(A, B)			((A)[0]*(B)[0]+(A)[1]*(B)[1]+(A)[2]*(B)[2])
-#define		vec3_cross(DST, A, B)\
+#define vec3_copy(DST, SRC)	(DST)[0]=(SRC)[0], (DST)[1]=(SRC)[1], (DST)[2]=(SRC)[2]
+#define vec3_set1(V3, GAIN)	(V3)[0]=(V3)[1]=(V3)[2]=GAIN
+#define vec3_setp(V3, POINTER)	(V3)[0]=(POINTER)[0], (V3)[1]=(POINTER)[1], (V3)[2]=(POINTER)[2]
+#define vec3_seti(V3, X, Y, Z)	(V3)[0]=X, (V3)[1]=Y, (V3)[2]=Z
+#define vec3_add(DST, A, B)	(DST)[0]=(A)[0]+(B)[0], (DST)[1]=(A)[1]+(B)[1], (DST)[2]=(A)[2]+(B)[2]
+#define vec3_sub(DST, A, B)	(DST)[0]=(A)[0]-(B)[0], (DST)[1]=(A)[1]-(B)[1], (DST)[2]=(A)[2]-(B)[2]
+#define vec3_add1(DST, V, S)	(DST)[0]=(V)[0]+(S), (DST)[1]=(V)[1]+(S), (DST)[2]=(V)[2]+(S)
+#define vec3_sub1(DST, V, S)	(DST)[0]=(V)[0]-(S), (DST)[1]=(V)[1]-(S), (DST)[2]=(V)[2]-(S)
+#define vec3_mul1(DST, V, S)	(DST)[0]=(V)[0]*(S), (DST)[1]=(V)[1]*(S), (DST)[2]=(V)[2]*(S)
+#define vec3_div1(DST, V, S)	(DST)[0]=(V)[0]/(S), (DST)[1]=(V)[1]/(S), (DST)[2]=(V)[2]/(S)
+#define vec3_dot(A, B)		((A)[0]*(B)[0]+(A)[1]*(B)[1]+(A)[2]*(B)[2])
+#define vec3_cross(DST, A, B)\
 	(DST)[0]=(A)[1]*(B)[2]-(A)[2]*(B)[1],\
 	(DST)[1]=(A)[2]*(B)[0]-(A)[0]*(B)[2],\
 	(DST)[2]=(A)[0]*(B)[1]-(A)[1]*(B)[0]
-#define		vec3_triple_product(DST, A, B, C, TEMP_F1, TEMP_F2)\
+#define vec3_triple_product(DST, A, B, C, TEMP_F1, TEMP_F2)\
 	TEMP_F1=vec3_dot(A, C), TEMP_F2=vec3_dot(B, C), (DST)[0]=TEMP_F1*(B)[0]-TEMP_F2*(C)[0], (DST)[1]=TEMP_F1*(B)[1]-TEMP_F2*(C)[1], (DST)[2]=TEMP_F1*(B)[2]-TEMP_F2*(C)[2]
-#define		vec3_abs(A)			sqrtf(vec3_dot(A, A))
-#define		vec3_abs2(A)			vec3_dot(A, A)
-#define		vec3_theta(A)			atan((A)[2]/sqrtf((A)[0]*(A)[0]+(A)[1]*(A)[1]))
-#define		vec3_phi(A)			atan((A)[1]/(A)[0])
-#define		vec3_phi2(A)			atan2((A)[1], (A)[0])
-#define		vec3_isnan(A)			((A)[0]!=(A)[0]||(A)[1]!=(A)[1]||(A)[2]!=(A)[2])
-#define		vec3_isnan_or_inf(A)	(vec3_isnan(A)||fabsf((A)[0])==infinity||fabsf((A)[1])==infinity||fabsf((A)[2])==infinity)
-#define		vec3_eq(A, B)			((A)[0]==(B)[0]&&(A)[1]==(B)[1]&&(A)[2]==(B)[2])
-#define		vec3_ne(A, B)			((A)[0]!=(B)[0]||(A)[1]!=(B)[1]||(A)[2]!=(B)[2])
-#define		vec3_neg(DST, A)		(DST)[0]=-(A)[0], (DST)[1]=-(A)[1], (DST)[2]=-(A)[2]
-#define		vec3_normalize(DST, A, TEMP_F)	TEMP_F=1/vec3_abs(A), vec3_div1(DST, A, TEMP_F)
-#define		vec3_mix(DST, A, B, X)\
+#define vec3_abs(A)		sqrtf(vec3_dot(A, A))
+#define vec3_abs2(A)		vec3_dot(A, A)
+#define vec3_theta(A)		atan((A)[2]/sqrtf((A)[0]*(A)[0]+(A)[1]*(A)[1]))
+#define vec3_phi(A)		atan((A)[1]/(A)[0])
+#define vec3_phi2(A)		atan2((A)[1], (A)[0])
+#define vec3_isnan(A)		((A)[0]!=(A)[0]||(A)[1]!=(A)[1]||(A)[2]!=(A)[2])
+#define vec3_isnan_or_inf(A)	(vec3_isnan(A)||fabsf((A)[0])==infinity||fabsf((A)[1])==infinity||fabsf((A)[2])==infinity)
+#define vec3_eq(A, B)		((A)[0]==(B)[0]&&(A)[1]==(B)[1]&&(A)[2]==(B)[2])
+#define vec3_ne(A, B)		((A)[0]!=(B)[0]||(A)[1]!=(B)[1]||(A)[2]!=(B)[2])
+#define vec3_neg(DST, A)	(DST)[0]=-(A)[0], (DST)[1]=-(A)[1], (DST)[2]=-(A)[2]
+#define vec3_normalize(DST, A, TEMP_F)	TEMP_F=1/vec3_abs(A), vec3_div1(DST, A, TEMP_F)
+#define vec3_mix(DST, A, B, X)\
 	(DST)[0]=(A)[0]+((B)[0]-(A)[0])*(X),\
 	(DST)[1]=(A)[1]+((B)[1]-(A)[1])*(X),\
 	(DST)[2]=(A)[2]+((B)[2]-(A)[2])*(X)
 
 //column-major
-#define		mat3_diag(MAT3, GAIN)		memset(MAT3, 0, 9*sizeof(float)), (MAT)[0]=(MAT)[1]=(MAT)[2]=GAIN
-//#define	mat3_diag(MAT3, GAIN)		(MAT3)[0]=GAIN, (MAT3)[1]=0, (MAT3)[2]=0, (MAT3)[3]=0, (MAT3)[4]=GAIN, (MAT3)[5]=0, (MAT3)[6]=0, (MAT3)[7]=0, (MAT3)[8]=GAIN
+#define mat3_diag(MAT3, GAIN)	memset(MAT3, 0, 9*sizeof(float)), (MAT)[0]=(MAT)[1]=(MAT)[2]=GAIN
+//#define mat3_diag(MAT3, GAIN)	(MAT3)[0]=GAIN, (MAT3)[1]=0, (MAT3)[2]=0, (MAT3)[3]=0, (MAT3)[4]=GAIN, (MAT3)[5]=0, (MAT3)[6]=0, (MAT3)[7]=0, (MAT3)[8]=GAIN
 
-#define		vec4_copy(DST, SRC)			(DST)[0]=(SRC)[0], (DST)[1]=(SRC)[1], (DST)[2]=(SRC)[2], (DST)[3]=(SRC)[3]
-#define		vec4_dot(DST, A, B, TEMP_V1, TEMP_V2)	TEMP_V1=_mm_loadu_ps(A), TEMP_V1=_mm_mul_ps(TEMP_V1, _mm_loadu_ps(B)), TEMP_V1=_mm_hadd_ps(TEMP_V1, TEMP_V1), TEMP_V1=_mm_hadd_ps(TEMP_V1, TEMP_V1), _mm_store_ss(DST, TEMP_V1)
-#define		vec4_add(DST, A, B)			(DST)[0]=(A)[0]+(B)[0], (DST)[1]=(A)[1]+(B)[1], (DST)[2]=(A)[2]+(B)[2], (DST)[3]=(A)[3]+(B)[3]
-#define		vec4_sub(DST, A, B)			(DST)[0]=(A)[0]-(B)[0], (DST)[1]=(A)[1]-(B)[1], (DST)[2]=(A)[2]-(B)[2], (DST)[3]=(A)[3]-(B)[3]
-#define		vec4_mul1(DST, V, S)			(DST)[0]=(V)[0]*(S), (DST)[1]=(V)[1]*(S), (DST)[2]=(V)[2]*(S), (DST)[3]=(V)[3]*(S)
-//#define	vec4_add(DST, A, B)			{_mm_storeu_ps(DST, _mm_add_ps(_mm_loadu_ps(A), _mm_loadu_ps(B)));}
-//#define	vec4_sub(DST, A, B)			{_mm_storeu_ps(DST, _mm_sub_ps(_mm_loadu_ps(A), _mm_loadu_ps(B)));}
-//#define	vec4_mul1(DST, A, S)			{_mm_storeu_ps(DST, _mm_sub_ps(_mm_loadu_ps(A), _mm_set1_ps(S)));}
+#define vec4_copy(DST, SRC)			(DST)[0]=(SRC)[0], (DST)[1]=(SRC)[1], (DST)[2]=(SRC)[2], (DST)[3]=(SRC)[3]
+#define vec4_dot(DST, A, B, TEMP_V1, TEMP_V2)	TEMP_V1=_mm_loadu_ps(A), TEMP_V1=_mm_mul_ps(TEMP_V1, _mm_loadu_ps(B)), TEMP_V1=_mm_hadd_ps(TEMP_V1, TEMP_V1), TEMP_V1=_mm_hadd_ps(TEMP_V1, TEMP_V1), _mm_store_ss(DST, TEMP_V1)
+#define vec4_add(DST, A, B)			(DST)[0]=(A)[0]+(B)[0], (DST)[1]=(A)[1]+(B)[1], (DST)[2]=(A)[2]+(B)[2], (DST)[3]=(A)[3]+(B)[3]
+#define vec4_sub(DST, A, B)			(DST)[0]=(A)[0]-(B)[0], (DST)[1]=(A)[1]-(B)[1], (DST)[2]=(A)[2]-(B)[2], (DST)[3]=(A)[3]-(B)[3]
+#define vec4_mul1(DST, V, S)			(DST)[0]=(V)[0]*(S), (DST)[1]=(V)[1]*(S), (DST)[2]=(V)[2]*(S), (DST)[3]=(V)[3]*(S)
+//#define vec4_add(DST, A, B)			{_mm_storeu_ps(DST, _mm_add_ps(_mm_loadu_ps(A), _mm_loadu_ps(B)));}
+//#define vec4_sub(DST, A, B)			{_mm_storeu_ps(DST, _mm_sub_ps(_mm_loadu_ps(A), _mm_loadu_ps(B)));}
+//#define vec4_mul1(DST, A, S)			{_mm_storeu_ps(DST, _mm_sub_ps(_mm_loadu_ps(A), _mm_set1_ps(S)));}
 
 //column-major
-#define		mat4_copy(DST, SRC)		memcpy(DST, SRC, 16*sizeof(float));
-#define		mat4_identity(M4, GAIN)		memset(M4, 0, 16*sizeof(float)), (M4)[0]=(M4)[5]=(M4)[10]=(M4)[15]=GAIN
-#define		mat4_data(M4, X, Y)		(M4)[(X)<<2|(Y)]
-#define		mat4_mat3(DST, M4)\
+#define mat4_copy(DST, SRC)	memcpy(DST, SRC, 16*sizeof(float));
+#define mat4_identity(M4, GAIN)	memset(M4, 0, 16*sizeof(float)), (M4)[0]=(M4)[5]=(M4)[10]=(M4)[15]=GAIN
+#define mat4_data(M4, X, Y)	(M4)[(X)<<2|(Y)]
+#define mat4_mat3(DST, M4)\
 	(DST)[0]=(M4)[0], (DST)[1]=(M4)[1], (DST)[2]=(M4)[2],\
 	(DST)[3]=(M4)[4], (DST)[4]=(M4)[5], (DST)[5]=(M4)[6],\
 	(DST)[6]=(M4)[8], (DST)[7]=(M4)[9], (DST)[8]=(M4)[10],
-#define		mat4_transpose(DST, M4, TEMP_8V)\
+#define mat4_transpose(DST, M4, TEMP_8V)\
 	(TEMP_8V)[0]=_mm_loadu_ps(M4),\
 	(TEMP_8V)[1]=_mm_loadu_ps((M4)+4),\
 	(TEMP_8V)[2]=_mm_loadu_ps((M4)+8),\
@@ -482,24 +482,24 @@ GLFUNCLIST
 	_mm_storeu_ps((DST)+4, _mm_movehl_ps((TEMP_8V)[5], (TEMP_8V)[4])),\
 	_mm_storeu_ps((DST)+8, _mm_movelh_ps((TEMP_8V)[6], (TEMP_8V)[7])),\
 	_mm_storeu_ps((DST)+12, _mm_movehl_ps((TEMP_8V)[7], (TEMP_8V)[6]))
-#define		mat4_mul_vec4(DST, M4, V4, TEMP_V)\
+#define mat4_mul_vec4(DST, M4, V4, TEMP_V)\
 	TEMP_V=_mm_mul_ps(_mm_loadu_ps(M4), _mm_set1_ps((V4)[0])),\
 	TEMP_V=_mm_add_ps(TEMP_V, _mm_mul_ps(_mm_loadu_ps(M4+4), _mm_set1_ps((V4)[1]))),\
 	TEMP_V=_mm_add_ps(TEMP_V, _mm_mul_ps(_mm_loadu_ps(M4+8), _mm_set1_ps((V4)[2]))),\
 	TEMP_V=_mm_add_ps(TEMP_V, _mm_mul_ps(_mm_loadu_ps(M4+12), _mm_set1_ps((V4)[3]))),\
 	_mm_storeu_ps(DST, TEMP_V)
-#define		mat4_mul_mat4(DST_NEW, M4A, M4B, TEMP_V)\
+#define mat4_mul_mat4(DST_NEW, M4A, M4B, TEMP_V)\
 	mat4_mul_vec4(DST_NEW,		M4A, M4B,		TEMP_V),\
 	mat4_mul_vec4(DST_NEW+4,	M4A, M4B+4,		TEMP_V),\
 	mat4_mul_vec4(DST_NEW+8,	M4A, M4B+8,		TEMP_V),\
 	mat4_mul_vec4(DST_NEW+12,	M4A, M4B+12,	TEMP_V)
-#define		mat4_translate(M4, V3, TEMP_V)\
+#define mat4_translate(M4, V3, TEMP_V)\
 	TEMP_V=_mm_mul_ps(_mm_loadu_ps(M4), _mm_set1_ps((V3)[0])),\
 	TEMP_V=_mm_add_ps(TEMP_V, _mm_mul_ps(_mm_loadu_ps(M4+4), _mm_set1_ps((V3)[1]))),\
 	TEMP_V=_mm_add_ps(TEMP_V, _mm_mul_ps(_mm_loadu_ps(M4+8), _mm_set1_ps((V3)[2]))),\
 	TEMP_V=_mm_add_ps(TEMP_V, _mm_loadu_ps(M4+12)),\
 	_mm_storeu_ps(M4+12, TEMP_V)
-#define		mat4_rotate(DST_NEW, M4, ANGLE, DIR, TEMP_VEC2, TEMP_VEC3A, TEMP_VEC3B)\
+#define mat4_rotate(DST_NEW, M4, ANGLE, DIR, TEMP_VEC2, TEMP_VEC3A, TEMP_VEC3B)\
 	vec3_normalize(TEMP_VEC3A, DIR, (TEMP_VEC2)[0]),\
 	(TEMP_VEC2)[0]=cosf(ANGLE),\
 	(TEMP_VEC2)[1]=1-(TEMP_VEC2)[0],\
@@ -524,15 +524,15 @@ GLFUNCLIST
 	(DST_NEW)[13]=0,\
 	(DST_NEW)[14]=0,\
 	(DST_NEW)[15]=1
-#define		mat4_scale(M4, AMMOUNT, TEMP_V0)\
-		_mm_storeu_ps(M4, _mm_mul_ps(_mm_loadu_ps(M4), _mm_set1_ps((AMMOUNT)[0]))),\
-		_mm_storeu_ps(M4+4, _mm_mul_ps(_mm_loadu_ps(M4+4), _mm_set1_ps((AMMOUNT)[1]))),\
-		_mm_storeu_ps(M4+8, _mm_mul_ps(_mm_loadu_ps(M4+8), _mm_set1_ps((AMMOUNT)[2]))),\
+#define mat4_scale(M4, AMMOUNT, TEMP_V0)\
+	_mm_storeu_ps(M4, _mm_mul_ps(_mm_loadu_ps(M4), _mm_set1_ps((AMMOUNT)[0]))),\
+	_mm_storeu_ps(M4+4, _mm_mul_ps(_mm_loadu_ps(M4+4), _mm_set1_ps((AMMOUNT)[1]))),\
+	_mm_storeu_ps(M4+8, _mm_mul_ps(_mm_loadu_ps(M4+8), _mm_set1_ps((AMMOUNT)[2]))),\
 
-void	mat4_lookAt(float *dst, const float *cam, const float *center, const float *up);
-void	mat4_FPSView(float *dst, const float *campos, float yaw, float pitch);
-void	mat4_perspective(float *dst, float tanfov, float w_by_h, float znear, float zfar);
-void	mat4_normalmat3(float *dst, float *m4);//inverse transpose of top left 3x3 submatrix
+void mat4_lookAt(float *dst, const float *cam, const float *center, const float *up);
+void mat4_FPSView(float *dst, const float *campos, float yaw, float pitch);
+void mat4_perspective(float *dst, float tanfov, float w_by_h, float znear, float zfar);
+void mat4_normalmat3(float *dst, float *m4);//inverse transpose of top left 3x3 submatrix
 
 typedef struct CameraStruct
 {
@@ -559,19 +559,19 @@ typedef struct CameraStruct
 #define cam_turnMouse(CAM, DX, DY, SENSITIVITY)\
 	(CAM).ax-=(SENSITIVITY)*(CAM).turn_speed*(DX), cam_update_ax(CAM),\
 	(CAM).ay-=(SENSITIVITY)*(CAM).turn_speed*(DY), cam_update_ay(CAM)
-#define		cam_zoomIn(CAM, RATIO)  (CAM).tanfov/=RATIO, (CAM).turn_speed=(CAM).tanfov>1?1:(CAM).tanfov
-#define		cam_zoomOut(CAM, RATIO) (CAM).tanfov*=RATIO, (CAM).turn_speed=(CAM).tanfov>1?1:(CAM).tanfov
-#define		cam_accelerate(GAIN)    (CAM).move_speed*=GAIN
+#define cam_zoomIn(CAM, RATIO)  (CAM).tanfov/=RATIO, (CAM).turn_speed=(CAM).tanfov>1?1:(CAM).tanfov
+#define cam_zoomOut(CAM, RATIO) (CAM).tanfov*=RATIO, (CAM).turn_speed=(CAM).tanfov>1?1:(CAM).tanfov
+#define cam_accelerate(GAIN)    (CAM).move_speed*=GAIN
 
-#define		cam_relworld2cam(CAM, DISP, DST_CP)\
+#define cam_relworld2cam(CAM, DISP, DST_CP)\
 	(DST_CP)[2]=(DISP)[0]*(CAM).cax+(DISP)[1]*(CAM).sax,\
 	(DST_CP)[0]=(DISP)[0]*(CAM).sax-(DISP)[1]*(CAM).cax,\
 	(DST_CP)[1]=(DST_CP)[2]*(CAM).say-(DISP)[2]*(CAM).cay,\
 	(DST_CP)[2]=(DST_CP)[2]*(CAM).cay+(DISP)[2]*(CAM).say
-#define		cam_world2cam(CAM, P, DST_CP, TEMP_3F)\
+#define cam_world2cam(CAM, P, DST_CP, TEMP_3F)\
 	vec3_sub(TEMP_3F, P, &(CAM).x),\
 	cam_relworld2cam(CAM, TEMP_3F, DST_CP)
-#define		cam_cam2screen(CAM, CP, DST_S, X0, Y0)\
+#define cam_cam2screen(CAM, CP, DST_S, X0, Y0)\
 	(DST_S)[1]=(X0)/((CP)[2]*(CAM).tanfov),\
 	(DST_S)[0]=(X0)+(CP)[0]*(DST_S)[1],\
 	(DST_S)[1]=(Y0)+(CP)[1]*(DST_S)[1]
@@ -590,10 +590,10 @@ typedef struct CameraStruct
 //The Graphics API
 void gl_init();
 
-extern int error;
+extern int error, tilesize, textureSizeMax;
 extern const char *gl_error_msg;
 const char* glerr2str(int error);
-//	#define ENABLE_GL_CHECKS
+	#define ENABLE_GL_CHECKS
 #ifdef ENABLE_GL_CHECKS
 #define GL_CHECK(E) (void)((E=glGetError())==0||log_error(file, __LINE__, 1, gl_error_msg, E, glerr2str(E)))
 #else
@@ -602,6 +602,7 @@ const char* glerr2str(int error);
 
 void set_region_immediate(int x1, int x2, int y1, int y2);//calls glViewport
 
+void set_texture_params(int linear, int antialiased);
 void send_texture_pot(unsigned gl_texture, int *rgba, int txw, int txh, int linear, int antialiased);
 void send_texture_pot_grey(unsigned gl_texture, uint8_t *bmp, int txw, int txh, int linear, int antialiased);
 void send_texture_pot_int16x1(unsigned gl_texture, unsigned *texture, int txw, int txh, int linear, int antialiased);
@@ -783,7 +784,7 @@ extern ProfilePlotMode profileplotmode;
 
 extern uint32_t image_txid;
 void image_fit2screen(int iw, int ih);
-int impreview2gpu(uint8_t *data, int iw, int ih, uint32_t *txid);
+DEPRECATED int impreview2gpu(uint8_t *data, int iw, int ih, uint32_t *txid);
 void videoplayback_start(const char *fn, int has_video, int has_audio);
 void videoplayback_pause(int stop);
 int frame_dequeue(void);
@@ -872,6 +873,9 @@ void recordevent(int eventtype, int start);
 
 //	#define USEQUEUETIMER	//smooth 60Hz playback
 	#define USEHIRESTIMER
+
+int tiles_update(const uint8_t *image, int iw, int ih);
+void tiles_draw(void);
 
 
 #ifdef __cplusplus
