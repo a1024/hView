@@ -571,13 +571,13 @@ int io_init(int argc, wchar_t **argv)//return false to abort
 #if (defined _DEBUG &&1) ||0
 	const wchar_t *filename=
 
-		L"C:/Projects/datasets/Buenos_Aires_Panorama.jpg"
+	//	L"C:/Projects/datasets/Buenos_Aires_Panorama.jpg"
 	//	L"C:/Projects/datasets/20260126_103542.jpg"
 	//	L"C:/Projects/datasets/20240325 buggy.PNG"
 	//	L"C:/ShareBox/DSC_0185.JXL"
 	//	L"D:/ML/sgra2018.mp4"
 	//	L"E:/Share Box/UV/20260617_184228.jpg"
-	//	L"E:/Share Box/Sound & Music/Party Hard OST - Main Theme 2025-08-25.ogg"
+		L"E:/Share Box/Sound & Music/Party Hard OST - Main Theme 2025-08-25.ogg"
 	//	L"C:/Users/Work Pc/Documents/Half-Life_2041_720p120.mkv"
 	//	L"D:/ML/dataset-Internet/os_bleh.gif"
 	//	L"E:/Share Box/Sound & Music/20250411 2.mp3"
@@ -1727,15 +1727,15 @@ void io_render()
 #ifdef PROFILE_FPS
 	recordevent(EVNT_RENDER, 1);
 #endif
-	if(h<=0)
-		return;
 	if(animated&&!playing)
 		playbackendaction();
+	if(h<=0)
+		return;
 	if(g_averror)
 	{
 		static uint32_t LOL_1=0;
-		++LOL_1;
-		if(LOL_1<=1)
+
+		if(++LOL_1<=1)
 			messageboxa(MBOX_OK, "Error", "(%d) %d: %s", g_avline, g_averror, ffmpegerror);
 	}
 	if(animated)

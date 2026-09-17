@@ -2946,10 +2946,13 @@ static void videoplayback_decode(void *p)
 				args->seekrequest=0;
 			}
 		}
-		if(args->has_video)
-			while(args->playing&&*(volatile int*)&args->fq.count>0);//presentation end signaled by render()
-		else if(args->has_audio)
-			while(args->playing&&*(volatile int*)&args->aq.read_idx!=*(volatile int*)&args->aq.write_idx);//playback end signaled by WASAPI
+		if(!IsIconic(ghWnd))
+		{
+			if(args->has_video)
+				while(args->playing&&*(volatile int*)&args->fq.count>0);//presentation end signaled by render()
+			else if(args->has_audio)
+				while(args->playing&&*(volatile int*)&args->aq.read_idx!=*(volatile int*)&args->aq.write_idx);//playback end signaled by WASAPI
+		}
 		if(args->stopflag||playopt==PLAYOPT_LIST||playopt==PLAYOPT_SHUF)
 			break;
 		if(playopt==PLAYOPT_ONCE)
