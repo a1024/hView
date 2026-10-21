@@ -23,6 +23,23 @@ INCLUDE =\
  -I "E:/C/a/libheif-1.12.0"\
 
 
+FLAGS =\
+ -mavx2\
+ -mbmi\
+ -mlzcnt\
+ -mwindows\
+ -static\
+
+
+LIB =\
+ -lcomdlg32\
+ -lgdi32\
+ -lole32\
+ -lopengl32\
+ -luuid\
+ -lwindowscodecs\
+
+
 ifeq ($(OS), Windows_NT)
 SHELL = cmd.exe
 DEL = del
@@ -31,6 +48,6 @@ DEL = rm
 endif
 
 hview:
-	g++ -Wall -O3 -c audio.cpp -o audio.o
-	gcc -Wall -O3 -static -s -mavx2 -mlzcnt -mbmi -mwindows $(INCLUDE) $(SRC) audio.o -ohview-gcc -lopengl32 -lgdi32 -lole32 -lcomdlg32 -luuid -lwindowscodecs
+	g++ -Wall -O3 -mavx2 -c audio.cpp -o audio.o
+	gcc -Wall -O3 -s $(FLAGS) $(INCLUDE) $(SRC) audio.o -ohview-gcc $(LIB)
 	$(DEL) audio.o

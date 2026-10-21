@@ -2946,13 +2946,10 @@ static void videoplayback_decode(void *p)
 				args->seekrequest=0;
 			}
 		}
-		if(!IsIconic(ghWnd))
-		{
-			if(args->has_video)
-				while(args->playing&&*(volatile int*)&args->fq.count>0);//presentation end signaled by render()
-			else if(args->has_audio)
-				while(args->playing&&*(volatile int*)&args->aq.read_idx!=*(volatile int*)&args->aq.write_idx);//playback end signaled by WASAPI
-		}
+		if(!IsIconic(ghWnd)&&args->has_video)
+			while(args->playing&&*(volatile int*)&args->fq.count>0);//presentation end signaled by render()
+		else if(args->has_audio)
+			while(args->playing&&*(volatile int*)&args->aq.read_idx!=*(volatile int*)&args->aq.write_idx);//playback end signaled by WASAPI
 		if(args->stopflag||playopt==PLAYOPT_LIST||playopt==PLAYOPT_SHUF)
 			break;
 		if(playopt==PLAYOPT_ONCE)
@@ -3129,10 +3126,11 @@ int load_media(const wchar_t *filename, Image16 **image, int erroronfail, int ne
 		||	!memcmp(buf, "BZh", 3)				//BZip2
 	//	||	!memcmp(buf, "ID3", 3)				//MP3
 		||	!memcmp(buf, "CD001", 5)			//ISO
+		||	!memcmp(buf, "MThd", 4)				//MIDI
 		)
 		{
 			if(erroronfail)
-				LOG_WARNING("\"%s\" is not an image", filename);
+				LOG_WARNING("\"%s\" is not supported", filename);
 			return -1;
 		}
 	}

@@ -471,6 +471,19 @@ static void zoom_at(int xs, int ys, double factor)
 
 	imagefitted=0;
 }
+static uint64_t getrand(void)
+{
+	static uint64_t x=0;
+
+	x^=__rdtsc();
+	x^=x<<13;
+	x^=x>> 7;
+	x^=x<<17;
+	x^=x<<13;
+	x^=x>> 7;
+	x^=x<<17;
+	return x;
+}
 void playbackendaction(void)
 {
 	if(playopt==PLAYOPT_LIST||playopt==PLAYOPT_SHUF)
@@ -478,7 +491,6 @@ void playbackendaction(void)
 		ArrayHandle path=0, filenames=0, *fn2=0;
 
 		videoplayback_pause(1);
-		srand((uint32_t)__rdtsc());
 		WSTR_COPY(path, fn->data, fn->count);
 		wchar_t *str=(wchar_t*)path->data;
 		for(int k=(int)path->count-1;k>=0;--k)
@@ -499,7 +511,7 @@ void playbackendaction(void)
 			{
 				for(int it=0;it<(int)filenames->count;++it)
 				{
-					int idx=rand()<<15^rand();//1B files max
+					size_t idx=getrand();
 					idx%=(int)filenames->count;
 					fn2=(ArrayHandle*)array_at(&filenames, idx);
 					if(!load_media((wchar_t*)fn2[0]->data, &im2, 0, 1))
