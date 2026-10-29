@@ -797,7 +797,7 @@ double time_sec_audioclock(void);
 #define VIS_SCALEFACTOR 0.7
 enum
 {
-	FFTBITS=11,
+	FFTBITS=10,
 	FFTSIZE=1<<FFTBITS,
 	NBANDS=32,
 
@@ -824,10 +824,10 @@ int slider_set(double ratio, int fast);
 int slider_changespeed(double ratio);
 enum
 {
-	PLAYOPT_LOOP,//loop this one (default)
 	PLAYOPT_ONCE,//stop after playback
-	PLAYOPT_LIST,//sequence
+	PLAYOPT_LOOP,//loop this one (default)
 	PLAYOPT_SHUF,//random
+	PLAYOPT_LIST,//sequence
 
 	PLAYOPT_COUNT,
 };

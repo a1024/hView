@@ -507,31 +507,34 @@ void playbackendaction(void)
 		if(filenames&&filenames->count)
 		{
 			Image16 *im2=0;
+			int currentidx=-1;
+			for(int k=0;k<(int)filenames->count;++k)
+			{
+				fn2=(ArrayHandle*)array_at(&filenames, k);
+				if(!wcscmp((wchar_t*)fn2[0]->data, (wchar_t*)fn->data))
+				{
+					currentidx=k;
+					break;
+				}
+			}
 			if(playopt==PLAYOPT_SHUF)
 			{
+			again:
 				for(int it=0;it<(int)filenames->count;++it)
 				{
 					size_t idx=getrand();
 					idx%=(int)filenames->count;
 					fn2=(ArrayHandle*)array_at(&filenames, idx);
-					if(!load_media((wchar_t*)fn2[0]->data, &im2, 0, 1))
+					if((idx!=currentidx||it>=filenames->count>>2)&&!load_media((wchar_t*)fn2[0]->data, &im2, 0, 1))
 						break;
 					if(im2)
 						image_free(&im2);
 				}
+				if(!animated)
+					goto again;
 			}
 			else
 			{
-				int currentidx=-1;
-				for(int k=0;k<(int)filenames->count;++k)
-				{
-					fn2=(ArrayHandle*)array_at(&filenames, k);
-					if(!wcscmp((wchar_t*)fn2[0]->data, (wchar_t*)fn->data))
-					{
-						currentidx=k;
-						break;
-					}
-				}
 				if(currentidx==-1)
 #if defined _DEBUG &&0
 				{
@@ -564,7 +567,7 @@ void playbackendaction(void)
 						image_free(&im2);
 				}
 			}
-			if((im2||animated)&&fn2)//fn2: to please dumb MSVC linter
+			if((im2||animated)&&fn2)
 			{
 				image_free(&image);
 				image_free(&impreview);
@@ -720,10 +723,10 @@ int io_mousewheel(int forward)
 		{
 			mute_audio=0;
 			g_volume*=mw_fwd?2:0.5f;
-			if(mw_fwd&&!g_volume)
-				g_volume=1.f/128;
-			if(g_volume>2)
-				g_volume=2;
+			if(mw_fwd&&g_volume<1.f/256)
+				g_volume=1.f/256;
+			if(g_volume>4)
+				g_volume=4;
 		}
 		animation_ctr=ANIMATION_NFRAMES;
 	}
@@ -1383,6 +1386,10 @@ int io_keydn(IOKey key, char c)
 			return 1;
 		}
 		break;
+	case 'N':
+		if(animated)
+			playbackendaction();
+		return 1;
 	case 'B':
 		visual_type=(visual_type+1)%VIS_COUNT;
 		return 1;
@@ -2004,7 +2011,7 @@ void io_render()
 #ifdef ENABLE_AUDIO_VISUAL
 			if(queryvisualization()&&visual_type!=VIS_NONE)
 			{
-				static const int colors[]=
+				static const uint32_t colors[]=
 				{
 					0xFFFF8000,//left blue
 					0xFF0080FF,//right red
@@ -2087,52 +2094,88 @@ void io_render()
 				float visref=(float)drawheight*0.75f;
 				float xstep=(float)w/NBANDS;
 				float yscale=(17.f/1440)*drawheight;
-
-				if(visual_type==VIS_BARS||visual_type==VIS_DFT)
+				
+				for(int k=0;k<_countof(freqstops)-1;k+=2)//draw scale
 				{
-					float curvescale=(float)h*0.5f;
+					float x1=vis_freq2idx(freqstops[k+0].freq)*xstep;
+					float x2=vis_freq2idx(freqstops[k+1].freq)*xstep;
+				//	draw_rect(x1, x2, 0, labelheight, 0x40C0C0C0);
+					draw_rect(x1, x2, 0, (float)h-SLIDER_HEIGHT-tdy, 0x40C0C0C0);
+				//	draw_line(x, (float)h*0.5f, x, labelheight+2*tdy, PLAYER_COLOR);
+				}
+				if(visual_type==VIS_BARS||visual_type==VIS_DFT)//draw parametric curve
+				{
 					float x0=(float)w*0.5f;
 					float y0=(float)h*0.5f;
-
+#if 1
+					float curvescale=(float)w*0.25f;
+					float xscale=(float)w*0.75f/FFTSIZE;
+					int draw;
+					
+					draw=0;
+					for(int k=1;k<FFTSIZE;++k)
+					{
+						//if(!draw&&(fftsamples[0][k-1]<0)<(fftsamples[0][k]<0))
+						//	draw=1;
+						//if(draw)
+							draw_curve_enqueue(&vertices_2d, x0+(draw++-FFTSIZE/2)*xscale, y0+fftsamples[0][k]*curvescale);
+					}
+					draw_2d_flush(vertices_2d, 0xFFFF8080, GL_LINE_STRIP);
+					draw=0;
+					for(int k=1;k<FFTSIZE;++k)
+					{
+						//if(!draw&&(fftsamples[1][k-1]<0)<(fftsamples[1][k]<0))
+						//	draw=1;
+						//if(draw)
+							draw_curve_enqueue(&vertices_2d, x0+(draw++-FFTSIZE/2)*xscale, y0+fftsamples[1][k]*curvescale);
+					}
+					draw_2d_flush(vertices_2d, 0xFF8080FF, GL_LINE_STRIP);
+#endif
+#if 0
+					float curvescale=(float)h*0.25f;
 					for(int k=0;k<FFTSIZE;++k)
 					{
 						float left=fftsamples[0][k];
 						float right=fftsamples[1][k];
 						float x=left-right;
 						float y=left+right;
-						draw_curve_enqueue(&vertices_2d, x0+x*curvescale, y0+y*curvescale);
+						draw_curve_enqueue(&vertices_2d, x0+x*curvescale+k-FFTSIZE/2, y0+y*curvescale);
 					}
 					draw_2d_flush(vertices_2d, 0xFF808080, GL_LINE_STRIP);
+#endif
 				}
-				for(int k=0;k<_countof(freqstops)-1;k+=2)
-				{
-					float x1=vis_freq2idx(freqstops[k+0].freq)*xstep;
-					float x2=vis_freq2idx(freqstops[k+1].freq)*xstep;
-					draw_rect(x1, x2, 0, labelheight, 0x40C0C0C0);
-				//	draw_line(x, (float)h*0.5f, x, labelheight+2*tdy, PLAYER_COLOR);
-				}
-				if(visual_type==VIS_BARS_NOCURVE||visual_type==VIS_BARS||visual_type==VIS_BARS_DFT)
+				if(visual_type==VIS_BARS_NOCURVE||visual_type==VIS_BARS||visual_type==VIS_BARS_DFT)//draw DFT curves
 				{
 					for(int kc=0;kc<2;++kc)
 					{
-						for(int k=0;k<NBANDS;++k)
+						for(int k=0;k<NBANDS-1;++k)
 						{
 							float level=visref-yscale*band_dB[kc][k];
-							draw_rect_enqueue(&vertices_2d, ((float)k+offsets[2*kc+0])*xstep, ((float)k+offsets[2*kc+1])*xstep, level, visbase);
+							draw_rect_enqueue(&vertices_2d
+								, ((float)k+offsets[2*kc+0])*xstep
+								, ((float)k+offsets[2*kc+1])*xstep
+								, level
+								, visbase
+							);
 						}
 						draw_2d_flush(vertices_2d, colors[kc], GL_TRIANGLES);
 					}
 					for(int kc=0;kc<2;++kc)
 					{
-						for(int k=0;k<NBANDS;++k)
+						for(int k=0;k<NBANDS-1;++k)
 						{
 							float level=visref-yscale*bandpeak_dB[kc][k];
-							draw_rect_enqueue(&vertices_2d, ((float)k+offsets[2*kc+0])*xstep, ((float)k+offsets[2*kc+1])*xstep, level, level-4);
+							draw_rect_enqueue(&vertices_2d
+								, ((float)k+offsets[2*kc+0])*xstep
+								, ((float)k+offsets[2*kc+1])*xstep
+								, level
+								, level-4
+							);
 						}
 						draw_2d_flush(vertices_2d, colors[kc], GL_TRIANGLES);
 					}
 				}
-				if(visual_type==VIS_DFT||visual_type==VIS_DFT_NOCURVE||visual_type==VIS_BARS_DFT)
+				if(visual_type==VIS_DFT||visual_type==VIS_DFT_NOCURVE||visual_type==VIS_BARS_DFT)//draw bars
 				{
 					static const float inc=(float)PLAYBACKSAMPLERATE/FFTSIZE;
 					for(int kc=0;kc<2;++kc)
@@ -2153,14 +2196,19 @@ void io_render()
 						draw_2d_flush(vertices_2d, colors[kc], GL_LINE_STRIP);
 					}
 				}
-				for(int k=0;k<_countof(freqstops);++k)
 				{
-					const Freq_t *f=freqstops+k;
-					if(f->label)
+					/*uint64_t c0=set_text_colors(0x80C0C0C0FFFFFFFF);*/
+					/*uint64_t c0=set_text_colors((uint64_t)colors[0]<<32|colors[1]);*/ /*horrible*/
+					for(int k=0;k<_countof(freqstops);++k)
 					{
-						float x=vis_freq2idx(f->freq)*xstep;
-						GUIPrint(0, x, labelheight, 1, "%s", f->label);
+						const Freq_t *f=freqstops+k;
+						if(f->label)
+						{
+							float x=vis_freq2idx(f->freq)*xstep;
+							GUIPrint(0, x, labelheight, 1, "%s", f->label);
+						}
 					}
+					/*set_text_colors(c0);*/
 				}
 			}
 #endif
@@ -2204,15 +2252,17 @@ void io_render()
 			print_duration((float)(w-200), (float)(h-3*tdy-SLIDER_HEIGHT), 2, slider.duration);
 			if(animation_ctr>0)
 			{
-				draw_rect((float)(w-SLIDER_HEIGHT), (float)w, (float)(h-h/2.f*g_volume), (float)h, 0x80C08040);
+				draw_rect((float)(w-SLIDER_HEIGHT), (float)w, (float)(h-h*g_volume), (float)h, 0x80C08040);
 				if(mute_audio)
 					GUIPrint(0, (float)(w-200), h/2.f, 2, "Muted");
 				else
 					GUIPrint(0, (float)(w-200), h/2.f, 2, "%8.4lf%%", 100.*g_volume);
-				GUIPrint(0, 0, h/2.f-3*2*tdy, 2, "%c LOOP", playopt==PLAYOPT_LOOP?'>':' ');
-				GUIPrint(0, 0, h/2.f-2*2*tdy, 2, "%c ONCE", playopt==PLAYOPT_ONCE?'>':' ');
-				GUIPrint(0, 0, h/2.f-1*2*tdy, 2, "%c LIST", playopt==PLAYOPT_LIST?'>':' ');
-				GUIPrint(0, 0, h/2.f+0*2*tdy, 2, "%c SHUF", playopt==PLAYOPT_SHUF?'>':' ');
+				{
+					GUIPrint(0, 0, h/2.f-3*2*tdy, 2, "%c ONCE", playopt==PLAYOPT_ONCE?'>':' ');
+					GUIPrint(0, 0, h/2.f-2*2*tdy, 2, "%c LOOP", playopt==PLAYOPT_LOOP?'>':' ');
+					GUIPrint(0, 0, h/2.f-1*2*tdy, 2, "%c SHUF", playopt==PLAYOPT_SHUF?'>':' ');
+					GUIPrint(0, 0, h/2.f+0*2*tdy, 2, "%c LIST", playopt==PLAYOPT_LIST?'>':' ');
+				}
 				GUIPrint(0, 0, h/2.f+2*2*tdy, 2, "%s Instance", singleinstance?"Single":"Multiple");
 				GUIPrint(0, w/2.f, (float)(h-3*tdy-SLIDER_HEIGHT), 2, "%12.3lfx", g_timescale);
 				--animation_ctr;
@@ -2323,15 +2373,18 @@ void io_render()
 			case IM_BAYERv2:	imtypestr="IM_BAYERv2";		break;
 			}
 			//g_printed=0;
-			GUIPrint_append(0, 0, h-tdy, 1, 0, "%s  XY(%5d, %5d) / WH%5d x%5d  x%lf bright%d  %s  depth %d  %10td bytes %10.6lf:1",
-				strlastmodified,
-				imx, imy, impreview->iw, impreview->ih,
-				zoom,
-				brightness,
-				imtypestr,
-				imagedepth,
-				filesize,
-				(double)image->nch*image->iw*image->ih*log2(image->nlevels0)/(8*filesize)
+			GUIPrint_append(0, 0, h-tdy, 1, 0, "%s  XY(%5d, %5d) / WH%5d x%5d  x%lf bright%d  %s  depth %d  %10td bytes %10.6lf:1"
+				, strlastmodified
+				, imx
+				, imy
+				, impreview->iw
+				, impreview->ih
+				, zoom
+				, brightness
+				, imtypestr
+				, imagedepth
+				, filesize
+				, (double)image->nch*image->iw*image->ih*log2(image->nlevels0)/(8*filesize)
 			);
 			if(bitmode==2)
 				GUIPrint_append(0, 0, h-tdy, 1, 0, "  Bitplane  %2d", bitplane);
@@ -2360,9 +2413,11 @@ void io_render()
 				default:break;
 				case IM_GRAYSCALEv2:
 					if(has_alpha)
-						GUIPrint_append(0, 0, h-tdy, 1, 0, "  GRAY_ALPHA(%3d, %3d)=0x%04X%04X",
-							(unsigned)p[0], (unsigned)p[3],
-							(unsigned)p0[0], (unsigned)p0[3]
+						GUIPrint_append(0, 0, h-tdy, 1, 0, "  GRAY_ALPHA(%3d, %3d)=0x%04X%04X"
+							, (unsigned)p[0]
+							, (unsigned)p[3]
+							, (unsigned)p0[0]
+							, (unsigned)p0[3]
 						);
 					else
 						GUIPrint_append(0, 0, h-tdy, 1, 0, "  GRAY(%3d)=0x%04X", (unsigned)p[0], (unsigned)p0[0]);
@@ -2371,12 +2426,12 @@ void io_render()
 					{
 						uint64_t color;
 						memcpy(&color, p0, sizeof(color));
-						GUIPrint_append(0, 0, h-tdy, 1, 0, "  RGBA(%3d, %3d, %3d, %3d)=0x%016llX",
-							(unsigned)p[0],
-							(unsigned)p[1],
-							(unsigned)p[2],
-							(unsigned)p[3],
-							color
+						GUIPrint_append(0, 0, h-tdy, 1, 0, "  RGBA(%3d, %3d, %3d, %3d)=0x%016llX"
+							, (unsigned)p[0]
+							, (unsigned)p[1]
+							, (unsigned)p[2]
+							, (unsigned)p[3]
+							, color
 						);
 					}
 					break;
@@ -2384,14 +2439,15 @@ void io_render()
 					{
 						const char labels[]="RGB";
 						int comp=(imy&1)<<1|(imx&1);
-						GUIPrint_append(0, 0, h-tdy, 1, 0, "  %c%c%c%c  %c(%5d/%5d)=0x%04X",
-							labels[(int)bayer[0]],
-							labels[(int)bayer[1]],
-							labels[(int)bayer[2]],
-							labels[(int)bayer[3]],
-							labels[(int)bayer[comp]],
-							(unsigned)p0[(int)bayer[comp]], image->nlevels0,
-							(unsigned)p0[(int)bayer[comp]]
+						GUIPrint_append(0, 0, h-tdy, 1, 0, "  %c%c%c%c  %c(%5d/%5d)=0x%04X"
+							, labels[(int)bayer[0]]
+							, labels[(int)bayer[1]]
+							, labels[(int)bayer[2]]
+							, labels[(int)bayer[3]]
+							, labels[(int)bayer[comp]]
+							, (unsigned)p0[(int)bayer[comp]]
+							, image->nlevels0
+							, (unsigned)p0[(int)bayer[comp]]
 						);
 					}
 					break;

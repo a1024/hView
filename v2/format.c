@@ -1490,7 +1490,7 @@ static void load_ffmpeg()
 {
 	if(ffmpeg_ready)
 		return;
-	api_load(&handle_avformat, "avformat-62"
+	api_load(&handle_avformat, "avformat-63"
 #ifdef _WIN32
 		".dll",
 #elif defined __linux__
@@ -1498,7 +1498,7 @@ static void load_ffmpeg()
 #endif
 		&avformat, symnames_avformat, _countof(symnames_avformat)
 	);
-	api_load(&handle_avcodec, "avcodec-62"
+	api_load(&handle_avcodec, "avcodec-63"
 #ifdef _WIN32
 		".dll",
 #elif defined __linux__
@@ -1506,7 +1506,7 @@ static void load_ffmpeg()
 #endif
 		&avcodec, symnames_avcodec, _countof(symnames_avcodec)
 	);
-	api_load(&handle_avutil, "avutil-60"
+	api_load(&handle_avutil, "avutil-61"
 #ifdef _WIN32
 		".dll",
 #elif defined __linux__
@@ -1514,7 +1514,7 @@ static void load_ffmpeg()
 #endif
 		&avutil, symnames_avutil, _countof(symnames_avutil)
 	);
-	api_load(&handle_swscale, "swscale-9"
+	api_load(&handle_swscale, "swscale-10"
 #ifdef _WIN32
 		".dll",
 #elif defined __linux__
@@ -1523,7 +1523,7 @@ static void load_ffmpeg()
 		&swscale, symnames_swscale, _countof(symnames_swscale)
 	);
 	api_load(&handle_swresample,
-		"swresample-6"
+		"swresample-7"
 #ifdef _WIN32
 		".dll",
 #elif defined __linux__
