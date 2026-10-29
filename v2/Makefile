@@ -15,11 +15,11 @@ SRC =\
 
 
 INCLUDE =\
- -I "C:/Programs/ffmpeg-8.1.1-full_build-shared/include"\
- -I "C:/Projects/a/LibRaw-0.21.4"\
+ -I "C:/Programs/ffmpeg-9.0.2-full_build-shared/include"\
+ -I "C:/Projects/a/LibRaw-0.22.3"\
  -I "C:/Projects/a/libheif"\
- -I "E:/Programs/ffmpeg-8.1.1-full_build-shared/include"\
- -I "E:/C/a/LibRaw-0.21.4"\
+ -I "E:/Programs/ffmpeg-9.0.2-full_build-shared/include"\
+ -I "E:/C/a/LibRaw-0.22.3"\
  -I "E:/C/a/libheif-1.12.0"\
 
 
